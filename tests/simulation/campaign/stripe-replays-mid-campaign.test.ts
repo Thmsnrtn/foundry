@@ -168,11 +168,19 @@ describe('a sale for a test that does not exist', () => {
     expect(await n('SELECT COUNT(*) AS n FROM business_outcome_events')).toBe(before);
     expect(await n('SELECT COUNT(*) AS n FROM experiment_fulfilments WHERE payment_ref = ?', ['pi_c_3'])).toBe(0);
     expect(await n(`SELECT COUNT(*) AS n FROM economic_events WHERE provider_ref = 'ch_c_3'`)).toBe(0);
-    // The event id is claimed as processed even though nothing of ours matched it: a later
-    // delivery of the same event, after the test came to exist, would be ignored.
+    // DECIDED (remediation 1.6): acknowledged, with the reason kept on the
+    // claim — this endpoint hears every event on a shared account, and a
+    // payment tagged for a test is read from Stripe's own list each day
+    // whatever the webhook did, so nothing is lost by not being retried.
     const claimed = await n('SELECT COUNT(*) AS n FROM stripe_webhook_events WHERE event_id = ?', ['evt_c_3']);
     process.stdout.write(`unknown test: answered ${String(r.status)}; event claim kept = ${String(claimed)}\n`);
-    expect(claimed).toBe(r.status === 200 ? 1 : 0);
+    expect(r.status).toBe(200);
+    expect(claimed).toBe(1);
+    const why = (await query('SELECT unmatched_because FROM stripe_webhook_events WHERE event_id = ?', ['evt_c_3'])).rows[0] as Record<string, unknown>;
+    expect(String(why.unmatched_because)).toMatch(/pi_c_3: no purchase of ours matches|the experiment has no exposure/);
+    const { productionFacts, canSellOnItsOwn } = await import('../../../src/services/control/production-facts.js');
+    const said = canSellOnItsOwn(await productionFacts(OWNER));
+    expect(said.costs.join(' ')).toMatch(/payment event in the last thirty days carried Foundry's tag and matched no test/);
   });
 
   it('the per-company door refuses a company that does not exist with 404, before any chain runs', async () => {

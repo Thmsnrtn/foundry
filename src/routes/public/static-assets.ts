@@ -81,3 +81,30 @@ export function staticAssetHandler(dirname: string): (c: Context) => Response | 
     });
   };
 }
+
+/**
+ * THE APP'S MANIFEST AND SERVICE WORKER, served from the root scope they need.
+ *
+ * Mounted by `src/index.ts` and by the owner app the tests and the browser
+ * walk use, from this one place (remediation 1.6). The walk's app served
+ * `/static` but not these, so a phone's first visit fetched `/manifest.json`
+ * and logged a 404 that production never answers — a difference between the
+ * instrument and the product, not a defect of the product, and the only way
+ * to keep it from happening again is for both to mount the same code.
+ */
+export function pwaHandlers(baseDir: string): { manifest: (c: Context) => Response; serviceWorker: (c: Context) => Response } {
+  return {
+    manifest: (c) => {
+      try {
+        const content = readFileSync(resolve(baseDir, 'public', 'manifest.json'), 'utf-8');
+        return c.body(content, 200, { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'public, max-age=3600' });
+      } catch { return c.notFound() as Response; }
+    },
+    serviceWorker: (c) => {
+      try {
+        const content = readFileSync(resolve(baseDir, 'public', 'sw.js'), 'utf-8');
+        return c.body(content, 200, { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-cache' });
+      } catch { return c.notFound() as Response; }
+    },
+  };
+}

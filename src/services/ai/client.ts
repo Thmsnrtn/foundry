@@ -204,6 +204,81 @@ export class ModelDoorError extends Error {
   }
 }
 
+/**
+ * THE DOOR IS DOWN, AND NOT ASKED AGAIN YET (remediation 1.4). A typed refusal
+ * made before any money is reserved or any request sent: a hung or failing
+ * door used to be waited on three times per call, by every call, so one bad
+ * morning could hold the forge for tens of minutes. A `ModelDoorError`, so
+ * every caller that lets the door's failure through lets this through too.
+ */
+export class ModelDoorClosed extends ModelDoorError {
+  readonly until: Date;
+  constructor(failures: number, until: Date) {
+    super(`the model door failed ${String(failures)} times in a row; not asked again until ${until.toISOString().slice(11, 16)} UTC`, 503);
+    this.name = 'ModelDoorClosed';
+    this.until = until;
+  }
+}
+
+// ─── The door breaker (remediation 1.4) ────────────────────────────────────
+//
+// After DOOR_TRIPS_AFTER consecutive failed attempts at the door, each within
+// DOOR_WINDOW_MS of the last, no call is made for DOOR_COOLDOWN_MS. When the
+// cooldown ends ONE call is let through as a probe: an answer closes the
+// breaker, a failure opens it again at once. In memory, on purpose: this is
+// one process's view of a door it shares with nobody, and a restart is a new
+// view that should ask. `productionFacts` reads it through `modelDoorBreaker`.
+export const DOOR_TRIPS_AFTER = 3;
+const DOOR_WINDOW_MS = 10 * 60_000;
+export const DOOR_COOLDOWN_MS = 10 * 60_000;
+const door = { consecutive: 0, lastFailureAt: 0, openUntil: 0, probing: false };
+
+/** What the breaker says now: closed, or open until a moment, after how many failures. */
+export function modelDoorBreaker(now = Date.now()): { open: boolean; until: Date | null; consecutiveFailures: number } {
+  return { open: door.openUntil > now, until: door.openUntil > now ? new Date(door.openUntil) : null, consecutiveFailures: door.consecutive };
+}
+
+/** Test seam: a later morning, after the cooldown. Never called by the application. */
+export function forgetModelDoorFailures(): void {
+  door.consecutive = 0; door.lastFailureAt = 0; door.openUntil = 0; door.probing = false;
+}
+
+function refuseIfDoorClosed(now = Date.now()): void {
+  if (door.openUntil > now) throw new ModelDoorClosed(door.consecutive, new Date(door.openUntil));
+  // The cooldown is over: this call is the probe, and the next failure reopens.
+  if (door.openUntil !== 0) { door.probing = true; door.openUntil = 0; }
+}
+
+function doorAnswered(): void {
+  door.consecutive = 0; door.lastFailureAt = 0; door.openUntil = 0; door.probing = false;
+}
+
+/** One failed attempt at the door. True when the breaker is now open. */
+function doorFailed(now = Date.now()): boolean {
+  door.consecutive = now - door.lastFailureAt <= DOOR_WINDOW_MS ? door.consecutive + 1 : 1;
+  door.lastFailureAt = now;
+  if (door.probing || door.consecutive >= DOOR_TRIPS_AFTER) {
+    door.openUntil = now + DOOR_COOLDOWN_MS;
+    door.probing = false;
+    return true;
+  }
+  return false;
+}
+
+/**
+ * HOW LONG ONE ATTEMPT MAY WAIT, BY TIER (remediation 1.4). One 120 s wait for
+ * every model meant a hung door cost a Haiku call as much as an Opus one. A
+ * deployment's AI_TIMEOUT_MS still overrides every tier.
+ */
+export function attemptTimeoutMs(model: string, env: NodeJS.ProcessEnv = process.env): number {
+  const set = Number.parseInt(env.AI_TIMEOUT_MS ?? '', 10);
+  if (Number.isFinite(set) && set > 0) return set;
+  const m = model.toLowerCase();
+  if (m.includes('haiku')) return 30_000;
+  if (m.includes('sonnet')) return 75_000;
+  return 120_000;
+}
+
 /** A 200 that carries an error, or no completion, is a failure and not an empty answer. */
 function noCompletion(data: OpenRouterResponse): ModelDoorError | null {
   const e = (data as unknown as { error?: { message?: string; code?: number } }).error;
@@ -374,7 +449,7 @@ export async function isCostCeilingReached(productId?: string): Promise<boolean>
 }
 
 // ─── Timeout + Retry ─────────────────────────────────────────────────────────
-const AI_TIMEOUT_MS = parseInt(process.env.AI_TIMEOUT_MS ?? '120000', 10);
+// Each attempt's wait is `attemptTimeoutMs(model)`, read per call.
 const MAX_RETRIES = 2;
 const RETRY_BASE_MS = 1000;
 
@@ -451,6 +526,8 @@ export async function callClaude(
   // full authorized amount.
   await refuseIfNotEntitled(productId);
   refuseIfItChangesNothing(subjectWork(config.subject));
+  // A DOOR KNOWN TO BE DOWN IS NOT ASKED, and nothing is reserved for it.
+  refuseIfDoorClosed();
   const apiKey = getApiKey();
   const baseUrl = getBaseUrl();
   const reservation = await authorizeSpend(
@@ -459,10 +536,11 @@ export async function callClaude(
   );
   const startedAt = Date.now();
   let lastError: Error | null = null;
+  const waitMs = attemptTimeoutMs(config.model);
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), waitMs);
 
     try {
       const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -496,6 +574,7 @@ export async function callClaude(
       const empty = noCompletion(data);
       if (empty) throw empty;
       const textContent = data.choices?.[0]?.message?.content ?? '';
+      doorAnswered();
 
       await settleSpend(reservation, computeCostCents(
         config.model, data.usage?.prompt_tokens ?? 0, data.usage?.completion_tokens ?? 0,
@@ -526,6 +605,7 @@ export async function callClaude(
     } catch (err) {
       clearTimeout(timeout);
       lastError = err instanceof Error ? err : new Error(String(err));
+      const tripped = doorFailed();
 
       const status = (err as unknown as Record<string, unknown>)?.status as number | undefined;
       if (status && status < 500 && status !== 429) {
@@ -538,6 +618,8 @@ export async function callClaude(
         reportError(lastError, { source: 'ai_client', productId, meta: { status } });
         throw asDoorError(lastError, 'the model door refused');
       }
+      // THE BREAKER OPENED ON THIS ATTEMPT: no more waiting on this call either.
+      if (tripped) break;
 
       if (attempt < MAX_RETRIES) {
         const delay = RETRY_BASE_MS * Math.pow(2, attempt) * (0.5 + Math.random() * 0.5);
@@ -615,6 +697,7 @@ export async function callClaudeMultiTurn(
   const apiKey = getApiKey();
   const baseUrl = getBaseUrl();
   const model = useOpus ? MODELS.OPUS : MODELS.SONNET;
+  refuseIfDoorClosed();
   const reservation = await authorizeSpend(
     productId, model, [systemPrompt, ...messages.map((m) => `${m.role}:${m.content}`)].join('\n'), maxTokens,
   );
@@ -622,7 +705,7 @@ export async function callClaudeMultiTurn(
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), attemptTimeoutMs(model));
 
     try {
       const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -656,6 +739,7 @@ export async function callClaudeMultiTurn(
       const empty = noCompletion(data);
       if (empty) throw empty;
       const textContent = data.choices?.[0]?.message?.content ?? '';
+      doorAnswered();
 
       await settleSpend(reservation, computeCostCents(
         model, data.usage?.prompt_tokens ?? 0, data.usage?.completion_tokens ?? 0,
@@ -675,11 +759,13 @@ export async function callClaudeMultiTurn(
     } catch (err) {
       clearTimeout(timeout);
       lastError = err instanceof Error ? err : new Error(String(err));
+      const tripped = doorFailed();
       const status = (err as unknown as Record<string, unknown>)?.status as number | undefined;
       if (status && status < 500 && status !== 429) {
         await finishReservation(reservation, { kind: 'released' });
         throw asDoorError(lastError, 'the model door refused');
       }
+      if (tripped) break;
       if (attempt < MAX_RETRIES) {
         const delay = RETRY_BASE_MS * Math.pow(2, attempt) * (0.5 + Math.random() * 0.5);
         await new Promise((r) => setTimeout(r, delay));

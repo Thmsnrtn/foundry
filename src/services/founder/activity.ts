@@ -97,6 +97,16 @@ const str = (v: unknown): string | null => (v == null ? null : String(v));
 const money = (cents: unknown): string =>
   `$${(Number(cents ?? 0) / 100).toFixed(2)}`;
 
+/** A pause's length in the words an owner would use. */
+export function pausedFor(seconds: number): string {
+  const days = Math.floor(seconds / 86_400);
+  if (days >= 1) return `${String(days)} day${days === 1 ? '' : 's'}`;
+  const hours = Math.floor(seconds / 3600);
+  if (hours >= 1) return `${String(hours)} hour${hours === 1 ? '' : 's'}`;
+  const minutes = Math.max(1, Math.floor(seconds / 60));
+  return `${String(minutes)} minute${minutes === 1 ? '' : 's'}`;
+}
+
 /**
  * The estate's stream, newest first.
  *
@@ -386,6 +396,24 @@ export async function whatHappened(
       ORDER BY given_at DESC LIMIT ?`, [founderId, limit])) {
     out.push({ at: String(g.given_at), kind: 'search', productId: null, companyName: null,
       what: `Steered the search: ${String(g.statement)}`, detail: null, href: '/foundry/searching' });
+  }
+
+  // STOP AND RESUME ARE THE OWNER'S OWN ACTS ON THE WHOLE ESTATE (remediation
+  // 1.3), and a resume used to erase the only trace of the stop. Read from the
+  // rows the acts wrote and nothing changes.
+  for (const e of await rows(
+    `SELECT kind, reason, detail, paused_since, paused_seconds, unwritten, at FROM estate_pause_events
+      WHERE founder_id = ? ORDER BY at DESC LIMIT ?`, [founderId, limit])) {
+    const base = { at: String(e.at), kind: 'authority' as const, productId: null, companyName: null, href: '/foundry/controls' };
+    if (e.kind === 'stopped_everything') {
+      out.push({ ...base, what: `You stopped everything: ${String(e.reason)}`, detail: str(e.detail) });
+    } else if (e.kind === 'paused') {
+      out.push({ ...base, what: `You paused new outreach: ${String(e.reason)}`, detail: null });
+    } else {
+      const n = Number(e.unwritten ?? 0);
+      out.push({ ...base, what: `You resumed new activity after ${pausedFor(Number(e.paused_seconds ?? 0))}`,
+        detail: `Paused since ${String(e.paused_since).slice(0, 16)} UTC; ${n === 0 ? 'no approved business was left unwritten' : `${String(n)} approved business${n === 1 ? ' was' : 'es were'} still unwritten`}.` });
+    }
   }
 
   // Newest first, and only as many as were asked for. Sorted here rather than

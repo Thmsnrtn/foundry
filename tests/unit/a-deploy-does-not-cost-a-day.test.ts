@@ -76,7 +76,8 @@ describe('the catch-up goes through the same door as a tick, after the lock\'s l
     expect(src).toMatch(/jobsThatMissedTheirMinute\(JOB_REGISTRY\)[\s\S]{0,400}await runScheduledJob\(m\.name/);
     const runner = /async function runScheduledJob[\s\S]*?\n\}/.exec(src)?.[0] ?? '';
     expect(runner).toContain('acquireJobLock(name)');
+    // Released by the token this run acquired, never by name alone (remediation 1.1).
     expect(runner).toContain('recordJobSuccess(name)');
-    expect(runner).toContain('releaseJobLock(name)');
+    expect(runner).toContain('releaseJobLock(name, lock)');
   });
 });

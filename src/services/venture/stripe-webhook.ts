@@ -41,7 +41,13 @@ export async function handleWebhook(payload: string, signature: string): Promise
   try {
     const asPayload = event as unknown as { id?: string; type: string; created?: number; data?: { object?: unknown } };
     const { intakeStripeSettlement } = await import('./settlement-intake.js');
-    await intakeStripeSettlement(asPayload);
+    const taken = await intakeStripeSettlement(asPayload);
+    // TAGGED OURS AND MATCHED NOTHING (remediation 1.6): acknowledged, and the
+    // reason kept on the claim, where Controls reads it.
+    if (taken.recorded.length === 0 && taken.refused.length > 0) {
+      await query(`UPDATE stripe_webhook_events SET unmatched_because = ? WHERE event_id = ?`,
+        [taken.refused.map((r) => `${r.providerRef}: ${r.reason}`).join('; ').slice(0, 1000), event.id]);
+    }
     const { intakeStripeEconomics } = await import('../economy/stripe-economics.js');
     await intakeStripeEconomics(asPayload);
   } catch (err) {

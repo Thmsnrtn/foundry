@@ -83,7 +83,8 @@ export async function runUnderLock(job: string): Promise<RunOutcome> {
   const entry = JOB_REGISTRY[job];
   if (!entry) throw new Error(`no such routine: ${job}`);
   const t0 = Date.now();
-  if (!(await acquireJobLock(job))) return { job, state: 'locked', errorName: null, message: null, ms: Date.now() - t0 };
+  const lock = await acquireJobLock(job);
+  if (lock === null) return { job, state: 'locked', errorName: null, message: null, ms: Date.now() - t0 };
   try {
     await entry.fn();
     await recordJobSuccess(job).catch(() => undefined);
@@ -93,7 +94,7 @@ export async function runUnderLock(job: string): Promise<RunOutcome> {
     const c = classifyFailure(err);
     return { job, state: c.state, errorName: c.errorName, message: c.message, ms: Date.now() - t0 };
   } finally {
-    await releaseJobLock(job);
+    await releaseJobLock(job, lock);
   }
 }
 

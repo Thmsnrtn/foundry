@@ -1844,14 +1844,25 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
           `SELECT id, claim, opportunity_id FROM market_claims
             WHERE founder_id = ? AND evidence_mode = 'real' AND settled_as IS NULL
               AND NOT EXISTS (SELECT 1 FROM market_observations o WHERE o.claim_id = market_claims.id)
-            ORDER BY formed_at LIMIT 3`, [founderId]);
+            ORDER BY formed_at LIMIT 20`, [founderId]);
+        // THREE LOOKS A PASS, as before — counted over claims actually looked
+        // at, so a claim that is waiting does not take a readable one's turn.
+        let tried = 0;
         for (const c of claims.rows as unknown as Array<Record<string, unknown>>) {
+          if (tried >= 3) break;
           // The claim's own words are the search. A claim nobody could search
           // for is a claim nobody could check, which is worth knowing.
           const words = String(c.claim).toLowerCase()
             .replace(/[^a-z0-9 ]/g, ' ').split(/\s+/)
             .filter((w) => w.length > 3 && !STOP.has(w)).slice(0, 6).join(' ');
           if (words.length === 0) continue;
+          // ONE CLAIM NO SOURCE CAN ANSWER WAITS (remediation 1.6): it is tried
+          // again after 1, 2, 4 and 8 days and then left, rather than failing
+          // this routine every morning. A failure THIS pass still fails it (G3).
+          const { claimMayBeLookedAt, recordClaimLookFailure } = await import('../services/venture/market-evidence.js');
+          const may = await claimMayBeLookedAt(String(c.id), new Date());
+          if (!may.may) continue;
+          tried += 1;
           try {
             await askWhatAlreadyExists({
               founderId, claimId: String(c.id), query: words,
@@ -1864,6 +1875,8 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
             looked += 1;
           } catch (err) {
             evidenceFailed.push(`${String(c.id)}: ${err instanceof Error ? err.message : String(err)}`);
+            await recordClaimLookFailure(String(c.id), err instanceof Error ? err.message : String(err), new Date())
+              .catch(() => { /* the record is how it waits; the pass still says it failed */ });
             logger.error(
               `real_market_evidence_tick failed for claim ${String(c.id)}: `
               + `${err instanceof Error ? err.message : String(err)}`,

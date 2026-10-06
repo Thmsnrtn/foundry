@@ -90,15 +90,8 @@ const { experimentId: X } = await seedProductionShape({ charter: true, searching
 const app = await ownerApp();
 (app as unknown as { onError: (f: (e: Error, c: { text: (s: string, n: number) => Response }) => Response) => void })
   .onError((err, c) => c.text(`ERR: ${String(err?.stack ?? err).split('\n').slice(0, 4).join(' | ')}`, 500));
-// THE MANIFEST AND THE SERVICE WORKER, as src/index.ts serves them inline. The
-// laboratory's ownerApp leaves them out, and the shell links both from every
-// page, so without this every page logs a 404 that is the harness's, not the product's.
-{
-  const { readFileSync: rf } = await import('node:fs');
-  const a = app as unknown as { get: (p: string, h: (c: { body: (b: string, n: number, h: Record<string, string>) => Response; notFound: () => Response }) => Response) => void };
-  a.get('/manifest.json', (c) => { try { return c.body(rf(resolve(ROOT, 'src/public/manifest.json'), 'utf-8'), 200, { 'Content-Type': 'application/manifest+json' }); } catch { return c.notFound(); } });
-  a.get('/sw.js', (c) => { try { return c.body(rf(resolve(ROOT, 'src/public/sw.js'), 'utf-8'), 200, { 'Content-Type': 'application/javascript' }); } catch { return c.notFound(); } });
-}
+// The manifest and the service worker come with ownerApp() now, from the same
+// handlers src/index.ts mounts (remediation 1.6), so the walk adds nothing here.
 const companyIds = await addCompanies(app, ['Apex Micro Press', 'Northfield Candles', 'Tidewater Templates']);
 
 // Mail, so the Inbox has threads and one of them needs him.
@@ -316,6 +309,14 @@ async function visit(page: Page, day: string, vp: typeof VIEWPORTS[number], spec
   const onResponse = (r: { url: () => string; status: () => number }) => { const u = r.url(); if (u !== BASE + spec.route && r.status() >= 400) failedSubresources.push(`${String(r.status())} ${u.replace(BASE, '')}`); };
   const onFailed = (r: { url: () => string; failure: () => { errorText: string } | null }) => { failedSubresources.push(`failed ${r.url().replace(BASE, '')} ${r.failure()?.errorText ?? ''}`); };
   page.on('console', onConsole); page.on('pageerror', onPageError); page.on('response', onResponse); page.on('requestfailed', onFailed);
+  // EVERY REQUEST THE BROWSER MAKES, not only the page's: a manifest, an icon
+  // or a service worker's fetch fires no page 'response' event, and a 404 among
+  // them showed only as an anonymous console line (remediation 1.6).
+  const cdp = await page.context().newCDPSession(page).catch(() => null);
+  const onNet = (e: { response: { url: string; status: number } }) => {
+    if (e.response.status >= 400 && e.response.url !== BASE + spec.route) failedSubresources.push(`${String(e.response.status)} ${e.response.url.replace(BASE, '')} (browser)`);
+  };
+  if (cdp) { await cdp.send('Network.enable').catch(() => undefined); cdp.on('Network.responseReceived', onNet as never); }
   let status: number | null = null; let contentType = ''; let serverError = '';
   try {
     const res = await page.goto(BASE + spec.route, { waitUntil: 'load', timeout: 45_000 });

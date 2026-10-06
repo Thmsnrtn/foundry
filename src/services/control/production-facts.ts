@@ -14,6 +14,7 @@
 // names what clears it and whose act that is.
 // =============================================================================
 
+import { modelDoorBlocker } from '../ai/model-door.js';
 import { query } from '../../db/client.js';
 
 type Row = Record<string, unknown>;
@@ -46,6 +47,8 @@ export interface ProductionFacts {
   subscriptionsAllowed: boolean;
   /** Whether the model answers, and how long its credit lasts (R33). */
   modelDoor: import('../ai/model-door.js').ModelDoorFacts;
+  /** Payment events in the last thirty days that carried our tag and matched no test of ours (remediation 1.6). */
+  unmatchedPaymentEvents: Array<{ eventId: string; because: string; at: string }>;
 }
 
 export async function productionFacts(founderId: string, env: NodeJS.ProcessEnv = process.env): Promise<ProductionFacts> {
@@ -82,6 +85,11 @@ export async function productionFacts(founderId: string, env: NodeJS.ProcessEnv 
     correspondence: await correspondenceMode(founderId),
     subscriptionsAllowed: (await subscriptionsAllowed(founderId)).allowed,
     modelDoor: await (await import('../ai/model-door.js')).modelDoorFacts(),
+    unmatchedPaymentEvents: ((await query(
+      `SELECT event_id, unmatched_because, processed_at FROM stripe_webhook_events
+        WHERE unmatched_because IS NOT NULL AND datetime(processed_at) >= datetime('now', '-30 days')
+        ORDER BY processed_at DESC LIMIT 10`, [])).rows as unknown as Row[])
+      .map((r) => ({ eventId: String(r.event_id), because: String(r.unmatched_because), at: String(r.processed_at) })),
   };
 }
 
@@ -105,12 +113,15 @@ export function canSellOnItsOwn(f: ProductionFacts): { yes: boolean; blockers: s
   else if (f.inFlight >= f.charter.probesInFlight) blockers.push(`all ${String(f.charter.probesInFlight)} places are taken by tests still running`);
   // THE MODEL DOOR (R33): nothing new is found or designed without it.
   const m = f.modelDoor;
-  if (m.failedToday > 0 && m.answeredToday === 0) {
-    blockers.push(`the model door failed ${String(m.failedToday)} time${m.failedToday === 1 ? '' : 's'} today and answered nothing, so nothing new can be found or designed: check the OpenRouter credit and key`);
-  }
+  const doorDown = modelDoorBlocker(m);
+  if (doorDown) blockers.push(doorDown);
   if (m.daysLeft !== null && m.daysLeft < 3) blockers.push(`about ${String(m.daysLeft)} days of model credit left at the last week's spend: add OpenRouter credit`);
   else if (m.daysLeft !== null && m.daysLeft < 14) costs.push(`about ${String(m.daysLeft)} days of model credit left at the last week's spend; fourteen is the margin`);
   if (m.readOn === null) costs.push(`the model credit has not been read yet${m.lastReadFailed ? `: ${m.lastReadFailed}` : '; it is read once a day'}`);
+  const unmatched = f.unmatchedPaymentEvents ?? [];
+  if (unmatched.length > 0) {
+    costs.push(`${String(unmatched.length)} payment event${unmatched.length === 1 ? '' : 's'} in the last thirty days carried Foundry's tag and matched no test (the latest: ${unmatched[0]!.because}); any payment among them is still read from Stripe's own list each day`);
+  }
   if (f.paymentEvents.status === 'unknown') costs.push(`the payment route is not yet proved live: ${f.paymentEvents.detail}`);
   if (!f.moneySwitchOn) costs.push('every refund and cancellation is yours in Stripe until the money switch is on');
   if (f.correspondence === 'off') costs.push('every buyer email is yours until correspondence is at least "drafts"');

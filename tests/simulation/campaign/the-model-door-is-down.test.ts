@@ -102,6 +102,9 @@ afterAll(async () => {
 
 /** Drive the forge through its routine against a fresh undesigned test and read what the door left behind. */
 async function forgeUnderMode(m: Mode) {
+  // EACH SCENARIO IS A LATER MORNING: the breaker's cooldown has passed.
+  const { forgetModelDoorFailures } = await import('../../../src/services/ai/client.js');
+  forgetModelDoorFailures();
   const experimentId = await anUndesignedTest();
   mode = m; hits = 0;
   const before = await outboundCount();
@@ -136,12 +139,15 @@ describe.each<[Mode, string, string, boolean]>([
 });
 
 describe('twenty failures in a row', () => {
-  it('ambiguous reservations are bounded by the cap the ledger enforces, and the door says how many failed today', async () => {
-    mode = '500';
-    const { callSonnet } = await import('../../../src/services/ai/client.js');
+  it('the breaker stops asking after three failed attempts: one call reaches the door, nineteen are refused before any money is reserved', async () => {
+    mode = '500'; hits = 0;
+    const { callSonnet, forgetModelDoorFailures, modelDoorBreaker, DOOR_TRIPS_AFTER } = await import('../../../src/services/ai/client.js');
+    forgetModelDoorFailures();
     const { institutionSpend } = await import('../../../src/services/ai/what-it-is-for.js');
     const { thinkingCapFor } = await import('../../../src/services/institution/spending.js');
     const cap = await thinkingCapFor(OWNER);
+    const today = new Date().toISOString().slice(0, 10);
+    const ambiguousBefore = Number((await one(`SELECT COUNT(*) AS n FROM ai_spend_reservations WHERE status = 'ambiguous' AND date = ?`, [today])).n);
     const names = new Map<string, number>();
     for (let i = 0; i < 20; i++) {
       try {
@@ -152,19 +158,43 @@ describe('twenty failures in a row', () => {
         names.set(n, (names.get(n) ?? 0) + 1);
       }
     }
-    const today = new Date().toISOString().slice(0, 10);
     const spend = await one(`SELECT reserved_cents, spent_cents FROM ai_daily_spend WHERE scope = 'founder' AND scope_id = ? AND date = ?`, [OWNER, today]);
-    const amb = Number((await one(`SELECT COUNT(*) AS n FROM ai_spend_reservations WHERE status = 'ambiguous' AND date = ?`, [today])).n);
-    process.stdout.write(`twenty failures: thrown ${JSON.stringify([...names])}; ambiguous today ${String(amb)}; founder reserved ${String(spend?.reserved_cents)}c spent ${String(spend?.spent_cents)}c of cap ${String(cap)}c\n`);
-    // Every attempt either reached the door and ended ambiguous, or was refused at the ceiling before reaching it.
-    expect((names.get('ModelDoorError') ?? 0) + (names.get('SpendCeilingError') ?? 0)).toBe(20);
-    // The ambiguous rows hold their reservation until expiry; they are counted against the cap, never above it.
+    const amb = Number((await one(`SELECT COUNT(*) AS n FROM ai_spend_reservations WHERE status = 'ambiguous' AND date = ?`, [today])).n) - ambiguousBefore;
+    process.stdout.write(`twenty calls against a failing door: thrown ${JSON.stringify([...names])}; door hit ${String(hits)} times; new ambiguous ${String(amb)}; founder reserved ${String(spend?.reserved_cents)}c of cap ${String(cap)}c\n`);
+    // ONE CALL REACHED THE DOOR, three attempts, and tripped the breaker.
+    expect(hits).toBe(DOOR_TRIPS_AFTER);
+    expect(names.get('ModelDoorError')).toBe(1);
+    // THE OTHER NINETEEN WERE REFUSED, TYPED, without a request or a reservation.
+    expect(names.get('ModelDoorClosed')).toBe(19);
+    expect(amb, 'only the call that reached the door holds an ambiguous reservation').toBe(1);
     expect(Number(spend?.reserved_cents ?? 0) + Number(spend?.spent_cents ?? 0)).toBeLessThanOrEqual(cap + 1);
+    const b = modelDoorBreaker();
+    expect(b.open).toBe(true);
+    expect(b.until!.getTime()).toBeGreaterThan(Date.now());
     const { modelDoorToday } = await import('../../../src/services/ai/spend-ledger.js');
     const door = await modelDoorToday();
     expect(door.failed).toBeGreaterThanOrEqual(amb);
     expect(door.settled).toBe(0);
   }, 300_000);
+
+  it('when the cooldown is over, one call is let through as a probe; failing, it opens the breaker again at once', async () => {
+    mode = '500';
+    const client = await import('../../../src/services/ai/client.js');
+    const { institutionSpend } = await import('../../../src/services/ai/what-it-is-for.js');
+    expect(client.modelDoorBreaker().open, 'left open by the twenty failures above').toBe(true);
+    const probe = () => client.callSonnet('You are a lens.', 'probe', 100,
+      institutionSpend('a campaign probing a door after its cooldown', 'a lens', { kind: 'experiment', id: X }));
+    // The cooldown, passed, on the clock the breaker reads.
+    const later = Date.now() + client.DOOR_COOLDOWN_MS + 1_000;
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(later);
+    try {
+      hits = 0;
+      await expect(probe()).rejects.toMatchObject({ name: 'ModelDoorError' });
+      expect(hits, 'the probe is one attempt, not three').toBe(1);
+      await expect(probe()).rejects.toMatchObject({ name: 'ModelDoorClosed' });
+      expect(hits, 'and the failed probe closed the door again at once').toBe(1);
+    } finally { clock.mockRestore(); }
+  }, 60_000);
 });
 
 describe('what the owner reads while nothing has answered all day', () => {
@@ -177,10 +207,10 @@ describe('what the owner reads while nothing has answered all day', () => {
     expect(text).toContain('check the OpenRouter credit and key');
   });
 
-  // PINNED DEFECT F-DOOR-2 (it.fails): Home says "a routine failed" but never
-  // names the model door, its credit or its key — productionFacts is read only
-  // by Controls. Flip to it() when Home names the door.
-  it.fails('Home and the absence page render 200 and say the door is down in the words the code uses', async () => {
+  // FIXED F-DOOR-2 (remediation 1.5, 6 October 2026): Home's pulse and the
+  // absence page read the same sentence Controls does, `modelDoorBlocker`, when
+  // the routine's recorded failure is the door's.
+  it('Home and the absence page render 200 and say the door is down in the words the code uses', async () => {
     // The code's phrasing for a failed door is in services/control/production-facts.ts:
     // `the model door failed N times today and answered nothing, so nothing new can be found or designed`.
     const homeR = await app.request('/foundry');
@@ -215,29 +245,69 @@ describe('what the owner reads while nothing has answered all day', () => {
   });
 });
 
-describe('the default timeout', () => {
-  it('a hung door is waited for three times over, measured at 400 ms; at the client\'s 120 s default that is six minutes a call', async () => {
-    // Measured, not read: one direct call through the real client against a
-    // door that never answers, with AI_TIMEOUT_MS = 400 set above. The wall
-    // time is three waits plus backoff. The 120 000 ms the client falls back
-    // to when the variable is unset is the production shape of the same wait.
+describe('a hung door is bounded', () => {
+  it('each tier waits its own time, and AI_TIMEOUT_MS still overrides every tier', async () => {
+    const { attemptTimeoutMs } = await import('../../../src/services/ai/client.js');
+    const none = {} as NodeJS.ProcessEnv;
+    expect(attemptTimeoutMs('anthropic/claude-haiku-4.5', none)).toBe(30_000);
+    expect(attemptTimeoutMs('anthropic/claude-sonnet-5', none)).toBe(75_000);
+    expect(attemptTimeoutMs('anthropic/claude-opus-4.8', none)).toBe(120_000);
+    expect(attemptTimeoutMs('anthropic/claude-opus-4.8', { AI_TIMEOUT_MS: '400' } as NodeJS.ProcessEnv)).toBe(400);
+  });
+
+  it('a hung door is waited for once per attempt and then not at all: the next call is refused in no time', async () => {
+    // Measured, not read: through the real client against a door that never
+    // answers, with AI_TIMEOUT_MS = 400 set above.
     mode = 'hang'; hits = 0;
-    const { callSonnet } = await import('../../../src/services/ai/client.js');
+    const { callSonnet, forgetModelDoorFailures } = await import('../../../src/services/ai/client.js');
+    forgetModelDoorFailures();
     const { institutionSpend } = await import('../../../src/services/ai/what-it-is-for.js');
-    const t0 = Date.now();
-    let name = '';
-    try {
-      await callSonnet('You are a lens.', 'Read this and reply with JSON.', 100,
-        institutionSpend('a campaign timing a hung door', 'a lens', { kind: 'experiment', id: X }));
-    } catch (e) { name = e instanceof Error ? e.name : 'Error'; }
-    const ms = Date.now() - t0;
-    expect(name).toBe('ModelDoorError');
+    const call = async () => {
+      const t0 = Date.now();
+      let name = '';
+      try {
+        await callSonnet('You are a lens.', 'Read this and reply with JSON.', 100,
+          institutionSpend('a campaign timing a hung door', 'a lens', { kind: 'experiment', id: X }));
+      } catch (e) { name = e instanceof Error ? e.name : 'Error'; }
+      return { name, ms: Date.now() - t0 };
+    };
+    const first = await call();
+    expect(first.name).toBe('ModelDoorError');
     expect(hits).toBe(3);
-    expect(ms).toBeGreaterThanOrEqual(3 * 400);
-    const atDefault = Math.round((ms - 3 * 400 + 3 * 120_000) / 1000);
-    recordFinding({ id: 'F-DOOR-1', sev: 'P2', area: 'ai/client',
-      title: 'a hung model door costs the institution 6+ minutes per call with no owner-visible signal until the routine ends',
-      evidence: `measured: ${String(hits)} attempts, ${String(ms)} ms wall time with AI_TIMEOUT_MS=400; the client's fallback when the variable is unset is 120 000 ms per attempt, so the same call takes ~${String(atDefault)} s in production before ModelDoorError; the forge reads up to five lenses and composes, so one hung morning can hold forge_tick for tens of minutes, and nothing the owner opens says so until the routine's failure is recorded at the end` });
+    expect(first.ms).toBeGreaterThanOrEqual(3 * 400);
+    const second = await call();
+    expect(second.name).toBe('ModelDoorClosed');
+    expect(hits, 'the second call did not reach the door').toBe(3);
+    expect(second.ms).toBeLessThan(400);
+    process.stdout.write(`hung door: first call ${String(first.ms)} ms over 3 attempts, second refused in ${String(second.ms)} ms\n`);
+  }, 60_000);
+
+  it('a forge pass against a hung door ends after one call\'s waits, however many tests are waiting to be deliberated', async () => {
+    for (let i = 0; i < 3; i++) await anUndesignedTest();
+    const t0 = Date.now();
+    const r = await forgeUnderMode('hang');
+    const ms = Date.now() - t0;
+    expect(r.out.state).toBe('refused');
+    // One call's three attempts and its backoff, not one per lens per test.
+    expect(r.hits).toBe(3);
+    expect(ms).toBeLessThan(3 * 400 + 6_000);
+    process.stdout.write(`forge pass against a hung door: ${String(ms)} ms, ${String(r.hits)} requests\n`);
+  }, 60_000);
+
+  it('a slow but answering door is bounded by the pass budget: what is left waits for the next pass, said so', async () => {
+    const { forgePass, forgePassBudgetMs } = await import('../../../src/services/venture/forge-deliberation.js');
+    expect(forgePassBudgetMs({} as NodeJS.ProcessEnv)).toBe(15 * 60_000);
+    // A budget of nothing: deterministic, where one millisecond raced the clock.
+    process.env.FORGE_PASS_BUDGET_MS = '0';
+    try {
+      mode = 'ok';
+      const { forgetModelDoorFailures } = await import('../../../src/services/ai/client.js');
+      forgetModelDoorFailures();
+      await anUndesignedTest();
+      const pass = await forgePass(OWNER);
+      expect(pass.waiting.some((w) => /this pass used its/.test(w)), JSON.stringify(pass)).toBe(true);
+      expect(pass.deliberated.length).toBe(0);
+    } finally { delete process.env.FORGE_PASS_BUDGET_MS; }
   }, 60_000);
 });
 

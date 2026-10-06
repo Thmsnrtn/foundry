@@ -48,9 +48,14 @@ export async function markVisit(founderId: string): Promise<string | null> {
     .rows[0] as Record<string, unknown> | undefined;
 
   if (row === undefined) {
+    // TWO FIRST VISITS AT ONCE ARE ONE FIRST VISIT (remediation 1.2). His phone
+    // and his laptop, or a link preview beside the real tap, both read no row
+    // and both inserted; the loser hit the primary key and Home answered 503,
+    // "I can't reach my own records", on the very first visit. Whichever
+    // request writes the row, this is still the first visit: nothing to compare.
     await query(
       "INSERT INTO owner_visits (founder_id, looked_at, since) VALUES (?, datetime('now'), "
-      + "datetime('now'))", [founderId]);
+      + "datetime('now')) ON CONFLICT(founder_id) DO NOTHING", [founderId]);
     return null;
   }
 

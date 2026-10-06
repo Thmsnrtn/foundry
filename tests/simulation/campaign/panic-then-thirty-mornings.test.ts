@@ -237,19 +237,40 @@ describe('he resumes', () => {
     }
   }, 60_000);
 
-  // PINNED DEFECT F-PANIC-2 (it.fails), re-aimed: resumeEconomicActivity nulls
-  // economic_pause_at/_reason/_by and stopEverything writes no audit row, so
-  // once he resumes nothing anywhere says the estate was ever stopped, by whom,
-  // for how long, or what went unwritten meanwhile. Flip to it() when a pause
-  // leaves a durable trace.
-  it.fails('after he resumes, a durable record still says the estate was stopped, by whom and when', async () => {
-    const trace = Number((await one(
-      `SELECT COUNT(*) AS n FROM audit_log WHERE reasoning LIKE '%Stop everything%' OR action_type LIKE '%pause%' OR action_type LIKE '%stop%'`, [])).n);
+  // FIXED F-PANIC-2 (remediation 1.3, 6 October 2026): Stop everything and the
+  // resume that ends it each write a row into `estate_pause_events`, which
+  // nothing changes, and Activity reads them. (The pin first looked in
+  // audit_log; that table is per company and pruned at 180 days, so the record
+  // lives in its own kept rows instead — see migration 388.)
+  it('after he resumes, a durable record still says the estate was stopped, by whom and when', async () => {
+    const stops = (await query(
+      `SELECT kind, principal, reason, detail, paused_since, paused_seconds, unwritten FROM estate_pause_events WHERE founder_id = ? ORDER BY at, rowid`, [OWNER]))
+      .rows as unknown as Array<Record<string, unknown>>;
+    const trace = stops.length;
     if (trace === 0) {
       recordFinding({ id: 'F-PANIC-2', sev: 'P2', area: 'public-workshop/settings + control/stop',
         title: 'resuming after Stop everything erases the only record that the estate was ever stopped',
-        evidence: 'settings.ts resumeEconomicActivity sets economic_pause_at/_reason/_by = NULL; services/control/stop.ts writes no audit row; audit_log has 0 rows naming the pause after resume.' });
+        evidence: 'settings.ts resumeEconomicActivity sets economic_pause_at/_reason/_by = NULL; services/control/stop.ts writes no record; nothing names the pause after resume.' });
     }
     expect(trace).toBeGreaterThan(0);
+    // Two stops: the one that landed mid-send on day 3 (resumed at once, as
+    // that scenario does) and the owner's own on day 4. The latest resume is
+    // the one that ended thirty stopped mornings.
+    const stopped = stops.filter((r) => r.kind === 'stopped_everything').at(-1);
+    const resumed = stops.filter((r) => r.kind === 'resumed').at(-1);
+    expect(stops.filter((r) => r.kind === 'stopped_everything').length, 'each Stop is its own row').toBeGreaterThanOrEqual(2);
+    expect(stopped, 'the Stop itself is kept').toBeTruthy();
+    expect(String(stopped!.principal)).toBe(`founder:${OWNER}`);
+    expect(String(stopped!.detail)).toMatch(/new outreach paused/);
+    expect(resumed, 'and the resume that ended it').toBeTruthy();
+    // Thirty stopped mornings and a day: the pause lasted at least thirty days.
+    expect(Number(resumed!.paused_seconds)).toBeGreaterThanOrEqual(30 * 86_400);
+    expect(Number(resumed!.unwritten)).toBeGreaterThanOrEqual(0);
+    // Nothing may rewrite what he did.
+    await expect(query(`UPDATE estate_pause_events SET reason = 'nothing happened' WHERE founder_id = ?`, [OWNER])).rejects.toThrow(/kept as it was/);
+    // AND HE CAN READ IT, where the doctrine says he reads what happened.
+    const activity = asText(await me.page('/foundry/activity'));
+    expect(activity).toMatch(/You stopped everything/);
+    expect(activity).toMatch(/You resumed new activity after \d+ days?/);
   });
 });

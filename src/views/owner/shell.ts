@@ -390,6 +390,7 @@ ${/* ON THE HOME SCREEN, IT IS HIS PRODUCT. The owner's surface was the one
      colour and a generic icon, while the manifest it would have used described
      the commercial product and its dark palette. */ ''}
 <link rel="manifest" href="/manifest.json" />
+<link rel="icon" type="image/png" href="/static/icon-192.png" />
 <link rel="apple-touch-icon" href="/static/icon-192.png" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-title" content="Foundry" />

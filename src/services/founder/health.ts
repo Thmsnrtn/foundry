@@ -317,9 +317,15 @@ export async function howFoundryIsRunning(founderId: string, now: Date = new Dat
     const how = l.stoppedRunning
       ? 'has not run when it should have'
       : `has failed ${String(l.consecutiveFailures)} time${l.consecutiveFailures === 1 ? '' : 's'} running`;
+    // THE DOOR, NOT THE ROUTINE (remediation 1.5): when the model door is what
+    // failed, say so in its own words — what he would fix is the credit or the
+    // key, not the forge.
+    const { doorBehindFailure } = await import('../ai/model-door.js');
+    const door = l.stoppedRunning ? null : await doorBehindFailure(l.lastErrorName);
     return {
       state: 'stopped', word: 'Stopped',
-      sentence: `Foundry hasn't completed its scheduled work. ${what} ${how}; its last successful run was ${since(l.lastSuccessAt, now)}.`,
+      sentence: `Foundry hasn't completed its scheduled work. ${what} ${how}; its last successful run was ${since(l.lastSuccessAt, now)}.`
+        + (door ? ` That is because ${door}.` : ''),
       lastPassAt, stoppedLoop: { jobName: l.jobName, label: l.label, lastSuccessAt: l.lastSuccessAt },
     };
   }

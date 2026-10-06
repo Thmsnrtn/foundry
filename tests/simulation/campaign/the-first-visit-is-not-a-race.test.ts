@@ -8,9 +8,8 @@
 // it is missing; two first visits that overlap (phone and laptop, a link
 // preview, a prefetch) both read "missing" and the second insert throws.
 //
-// PINNED DEFECT F-WALK-1 (it.fails): this asserts the correct behaviour and
-// fails today. Flip it.fails to it once markVisit tolerates the race (INSERT
-// ... ON CONFLICT(founder_id) DO NOTHING, then re-read).
+// FIXED F-WALK-1 (remediation 1.2, 6 October 2026): markVisit inserts with
+// ON CONFLICT(founder_id) DO NOTHING, so overlapping first visits are one.
 // =============================================================================
 
 process.env.FOUNDRY_INSTANCE_POSTURE = 'private_owner';
@@ -31,8 +30,8 @@ vi.mock('../../../src/services/ai/client.js', async (orig) => ({
 }));
 
 let app: Awaited<ReturnType<typeof ownerApp>>;
-/** What the racing first visits answered — read by the plain test below, so a
- *  harness fault cannot hide inside the it.fails. */
+/** What the racing first visits answered — read by the guard below, so a
+ *  harness fault cannot hide inside the race test. */
 let firstVisit: number[] = [];
 
 beforeAll(async () => {
@@ -41,7 +40,7 @@ beforeAll(async () => {
 }, 60_000);
 
 describe('the first visit', () => {
-  it.fails('two first visits to Home that arrive together both answer 200', async () => {
+  it('two first visits to Home that arrive together both answer 200', async () => {
     const [a, b, c] = await Promise.all([app.request('/foundry'), app.request('/foundry'), app.request('/foundry')]);
     const statuses = [a.status, b.status, c.status];
     firstVisit = statuses;
@@ -50,7 +49,7 @@ describe('the first visit', () => {
   }, 30_000);
 
   it('the racing visits failed only as the race fails, and a later visit answers 200', async () => {
-    // Vacuity guard for the it.fails above: it must have run, and every answer
+    // Vacuity guard for the race test above: it must have run, and every answer
     // must be a 200 or the race's 503 — a 403/500 would be a harness fault.
     expect(firstVisit).toHaveLength(3);
     expect(firstVisit.every((s) => s === 200 || s === 503)).toBe(true);

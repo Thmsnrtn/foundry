@@ -41,7 +41,7 @@ export async function stopEverything(founderId: string, reason = 'the owner pres
   const workshop = (await query(`SELECT economic_pause_at FROM public_workshop WHERE founder_id = ?`, [founderId])).rows[0] as Record<string, unknown> | undefined;
   if (workshop) {
     const { pauseNewEconomicActivity } = await import('../public-workshop/settings.js');
-    await pauseNewEconomicActivity({ founderId, reason });
+    await pauseNewEconomicActivity({ founderId, reason, record: false });
     outreachPaused = true;
   }
 
@@ -53,5 +53,14 @@ export async function stopEverything(founderId: string, reason = 'the owner pres
     await actOnMission(founderId, m.key, 'paused', reason);
     missionsPaused += 1;
   }
+  // THE STOP IS KEPT (remediation 1.3): who, why, when, and what it stopped,
+  // in a row nothing changes — so a resume cannot erase that it happened.
+  const said = [
+    `${String(companies.length)} compan${companies.length === 1 ? 'y' : 'ies'} (${String(routines)} routine${routines === 1 ? '' : 's'} to watching)`,
+    outreachPaused ? 'new outreach paused' : 'no Workshop to pause',
+    `${String(missionsPaused)} Mission${missionsPaused === 1 ? '' : 's'} paused`,
+  ].join('; ');
+  const { recordEstateStopped } = await import('../public-workshop/settings.js');
+  await recordEstateStopped({ founderId, reason, stopped: said });
   return { companies: companies.length, routines, outreachPaused, missionsPaused };
 }

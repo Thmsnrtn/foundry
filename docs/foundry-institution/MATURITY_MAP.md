@@ -2730,6 +2730,25 @@ citation nobody retrieved is refused at launch and named to the owner).
 - A delivery refused for any reason still waits on the owner rather than being
   refunded automatically; with the money switch off, a refund is theirs anyway.
 
+### The simulation campaign's correctness defects (Remediation 1, 6 October 2026)
+
+**What changed.** The job lock is per acquisition; first visits cannot collide;
+a Stop and its resume are kept and read on Activity; a failing model door is
+asked once and then refused for ten minutes, each tier waits its own time, a
+forge pass has a wall-clock budget; Home, the absence page and Controls name the
+door in one sentence; an unreadable claim backs off; an unmatched payment event
+keeps its reason; decision forms and absence evidence are escaped; the shell
+declares its icon. **Evidence maturity.** E2: all five campaign files green,
+the four pinned `it.fails` flipped to `it`, each fix mutated away and its test
+red; Home walked on two phones and a desk on days 1, 9 and 39 with no console
+error and no failed resource. **Proof debt.** The breaker lives in one process
+and is not shared across a rolling deploy's two machines; its thresholds (three
+failures, ten minutes) and the tier timeouts are reasoned, not measured against
+a real provider outage; `rejection_streaks` keeps a read-then-insert with no
+unique key (a race makes a duplicate row, not an error) and is not fixed here;
+about thirty `raw()` interpolations of non-constant text remain in
+`foundry-shell.ts`, not audited here.
+
 ### Dependencies, and gates that say how long they take (Remediation 4, 6 October 2026)
 
 **What changed.** vitest 4.1 and `@clerk/backend` 3 replace vitest 1.6 and the

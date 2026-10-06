@@ -13,9 +13,9 @@ around each item.
 ---
 
 <!-- status:begin — generated from the headings below by node scripts/check-record-matches-code.mjs --write -->
-# 17 WAITING ON THE OWNER, 3 WITH COUNSEL, 7 DECIDED IN PLACE
+# 18 WAITING ON THE OWNER, 3 WITH COUNSEL, 7 DECIDED IN PLACE
 
-- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 19, 21, 25, 26, 27, 29, 30, 32, 33, 34, 35, 36.
+- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 19, 21, 25, 26, 27, 29, 30, 32, 33, 34, 35, 36, 37.
 - **Waiting on counsel:** PENDING 9, 13, 15 (interim positions in force; see below).
 - **Decided, and kept where they were asked:** PENDING 16, 20, 22, 23, 24, 28, 31.
 - **Answered and recorded as RESOLVED:** 15.
@@ -2188,4 +2188,27 @@ file is what buyers already buy.
 until then, free tool beside a paid brief), or keep briefs as the default.
 
 **Recommendation.** Adopt it.
+
+---
+
+## PENDING 37 — What a failed model call counts against your daily thinking: **OWNER** (2026-10-06)
+
+**What is true.** A call that reaches the model door and gets no answer ends
+"ambiguous": the provider may or may not have charged. Today the full amount
+reserved for it counts against the day's thinking cap until the reservation
+expires. In the campaign, twenty failures held 20¢ of the $1 pre-charter cap;
+since remediation 1.4's breaker, a failing door is asked once and the same
+morning holds about 16¢. Bounded either way.
+
+**Your choice.**
+- **(a)** Keep counting an ambiguous call at its full reservation. Safe: the cap
+  can never be exceeded by a charge we did not see. Cost: a bad morning eats
+  thinking budget for work that did not happen.
+- **(b)** Reconcile ambiguous calls against the provider's own usage reading
+  (OpenRouter reports what it charged) and release what it did not charge.
+  Truer, and a failing morning costs nothing; it needs one more read of the
+  provider each day, and until that read the reservation still counts.
+
+**Recommendation.** (a) now, (b) when the daily credit read (R33) is extended to
+usage — the breaker has already made the cost small.
 
