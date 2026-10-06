@@ -132,3 +132,29 @@ describe('what it tells him happened', () => {
     expect(out.changes.length).toBeLessThanOrEqual(2);
   });
 });
+
+describe('two visits that arrive together (F-WALK-1)', () => {
+  const RACER = 'changed_racer';
+  beforeAll(async () => {
+    await query('INSERT INTO founders (id,clerk_user_id,email,name) VALUES (?,?,?,?)',
+      [RACER, 'clerk_racer', 'racer@example.com', 'Racer']);
+  });
+
+  it('two first visits both read as first visits, and neither throws', async () => {
+    const both = await Promise.all([markVisit(RACER), markVisit(RACER), markVisit(RACER)]);
+    expect(both).toEqual([null, null, null]);
+    const n = (await query('SELECT COUNT(*) AS n FROM owner_visits WHERE founder_id = ?', [RACER])).rows[0] as Record<string, unknown>;
+    expect(Number(n.n)).toBe(1);
+  });
+
+  it('two returning visits move the marker once, and both measure from when he was last here', async () => {
+    await query("UPDATE owner_visits SET looked_at = datetime('now','-2 days'), since = datetime('now','-3 days') WHERE founder_id = ?", [RACER]);
+    const last = String(((await query('SELECT looked_at FROM owner_visits WHERE founder_id = ?', [RACER])).rows[0] as Record<string, unknown>).looked_at);
+    const both = await Promise.all([markVisit(RACER), markVisit(RACER)]);
+    // Without the compare-and-set the second update set since := the first's
+    // "now", and the line he reads from became "a moment ago".
+    expect(both).toEqual([last, last]);
+    const row = (await query('SELECT since FROM owner_visits WHERE founder_id = ?', [RACER])).rows[0] as Record<string, unknown>;
+    expect(String(row.since)).toBe(last);
+  });
+});

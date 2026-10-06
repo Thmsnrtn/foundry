@@ -3190,3 +3190,17 @@ it has met a real day.
   contention test and `tests/load/cron-load.ts` all use the production SQL now
   (`ACQUIRE_JOB_LOCK_SQL`) rather than a copy of it. Mutation: comparing the
   holder by instance prefix instead of token turns the campaign's lock test red.
+- **Two first visits to Home both answer 200 (F-WALK-1).** `markVisit` read the
+  visit row and inserted one with no conflict clause, so the second of two
+  overlapping first visits threw `SQLITE_CONSTRAINT_PRIMARYKEY` and Home said
+  "I can't reach my own records". It now inserts `ON CONFLICT(founder_id) DO
+  NOTHING` and re-reads, and a returning visit moves the marker only if nobody
+  moved it since it was read (compare-and-set on `looked_at`), so two returning
+  visits cannot reset the line to "a moment ago". The same read-then-insert
+  shape was found and closed in `openTheEars` (`workshop_mail_intake`) and
+  `givePublicIdentity` (`public_experiments`). Left as they are, recorded: the
+  MCP form in `routes/dashboard/connections.ts` (a single form post against two
+  overlapping unique indexes) and `publishPage`'s version number
+  (`max(version)+1`, serialised today by the one publishing pass). Mutations:
+  dropping the conflict clause turns the campaign test and a unit race test red;
+  an unconditional marker update turns the returning-visit test red.

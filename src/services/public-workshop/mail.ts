@@ -47,12 +47,13 @@ export class MailRefused extends Error {
 export async function openTheEars(founderId: string): Promise<{ intakeKey: string; url: string }> {
   const w = await publicWorkshopOf(founderId);
   if (!w) throw new MailRefused('no_workshop');
-  const existing = await one('SELECT intake_key FROM workshop_mail_intake WHERE founder_id = ?', [founderId]);
-  const key = existing ? String(existing.intake_key) : randomBytes(32).toString('base64url');
-  if (!existing) {
-    await query('INSERT INTO workshop_mail_intake (founder_id, intake_key) VALUES (?,?)', [founderId, key]);
-  }
-  return { intakeKey: key, url: `${process.env.APP_URL ?? ''}/workshop/mail` };
+  // Idempotent under a race: two openings at once (a double submit) both
+  // insert-or-nothing and both read the one key that stands.
+  await query('INSERT INTO workshop_mail_intake (founder_id, intake_key) VALUES (?,?) ON CONFLICT(founder_id) DO NOTHING',
+    [founderId, randomBytes(32).toString('base64url')]);
+  const standing = await one('SELECT intake_key FROM workshop_mail_intake WHERE founder_id = ?', [founderId]);
+  if (!standing) throw new MailRefused('no_intake', 'the intake key was not written');
+  return { intakeKey: String(standing.intake_key), url: `${process.env.APP_URL ?? ''}/workshop/mail` };
 }
 
 /** Whether mail can reach the institution at all. */
