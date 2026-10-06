@@ -293,6 +293,17 @@ export async function shapeAndMake(experimentId: string): Promise<Made | { refus
   if (pageNeed.length) return { refused: `the page copy left out ${pageNeed.join(', ')}` };
   const missing = need.filter((k) => str(raw, k) === null);
   if (missing.length) return { refused: `the offer left out ${missing.join(', ')}` };
+  // WHAT THE MODEL WROTE IS READ BEFORE IT IS STORED (R29c). The offer text
+  // and the deliverable were held to the banned claims and the page copy was
+  // not, though the page is what a stranger reads first; and the sentence that
+  // says how it charges was never read against the plan it describes.
+  const said = [...need.map((k) => str(raw, k) ?? ''), ...['summary', 'who', 'what', 'limits', 'sources', 'note'].map((k) => str(page, k) ?? '')].join('\n').toLowerCase();
+  const banned = BANNED_CLAIMS.filter((phrase) => said.includes(phrase));
+  if (banned.length) return { refused: `the copy makes a claim the Workshop does not make: ${banned.map((b) => `"${b}"`).join(', ')}` };
+  const chargesHow = (str(raw, 'charges_how') ?? '').toLowerCase().replace(/\bno subscription\b|\bnot a subscription\b/g, '');
+  const saysRecurring = /\b(weekly|every week|a week|per week|monthly|every month|per month|subscription|recurring|renews?)\b/.test(chargesHow);
+  if (recurs && !/\b(weekly|every week|a week|per week)\b/.test(chargesHow)) return { refused: 'the sentence on how it charges does not say it charges every week' };
+  if (!recurs && saysRecurring) return { refused: 'the sentence on how it charges describes a repeating charge the plan does not make' };
   const price = Number(raw.price_dollars);
   const band = recurs ? WEEKLY_BAND : OFFER_BAND;
   if (!Number.isInteger(price) || price < band.lowDollars || price > band.highDollars) return { refused: `the ${recurs ? 'weekly ' : ''}price is not a whole number of dollars between ${String(band.lowDollars)} and ${String(band.highDollars)}` };
