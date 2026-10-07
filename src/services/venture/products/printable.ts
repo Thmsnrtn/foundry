@@ -92,7 +92,7 @@ const ENTITIES: Record<string, string> = {
  */
 export function sanitizePageHtml(html: string): string[] {
   const problems: string[] = [];
-  if (/<!--/.test(html)) problems.push('a comment is not allowed');
+  if (/<!-{2}/.test(html)) problems.push('a comment is not allowed');
   const stack: string[] = [];
   const tag = /<(\/?)([a-zA-Z][a-zA-Z0-9]*)([^<>]*)>|[<>]/g;
   let m: RegExpExecArray | null;

@@ -13,9 +13,9 @@ around each item.
 ---
 
 <!-- status:begin — generated from the headings below by node scripts/check-record-matches-code.mjs --write -->
-# 21 WAITING ON THE OWNER, 3 WITH COUNSEL, 7 DECIDED IN PLACE
+# 22 WAITING ON THE OWNER, 3 WITH COUNSEL, 7 DECIDED IN PLACE
 
-- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 19, 21, 25, 26, 27, 29, 30, 32, 33, 34, 35, 36, 37, 38, 39, 40.
+- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 19, 21, 25, 26, 27, 29, 30, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41.
 - **Waiting on counsel:** PENDING 9, 13, 15 (interim positions in force; see below).
 - **Decided, and kept where they were asked:** PENDING 16, 20, 22, 23, 24, 28, 31.
 - **Answered and recorded as RESOLVED:** 15.
