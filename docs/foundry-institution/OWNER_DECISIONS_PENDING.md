@@ -2267,13 +2267,27 @@ the gate made after the first prototype overflowed on your iPhone: five
 widths, every owner route, no horizontal scroll by a single pixel. The phone-
 fit and four-doors tests cover part of it, not all of its routes and widths.
 
+*Measured 7 October 2026, before you decide:* run by hand, `measure-mobile` had
+been red on the frontier since 30 September, 40 failures out of 378, and nobody
+had run it to see. Thirty were its own: it never mounted Explore or Missions
+(so it measured two 404 pages), it held the company bar to the four doors
+although the bar was built to carry five, and it expected Needs you to light a
+door although the shell says Needs you lights none. Ten were real: inside a
+company with more than three dimensions, the phone bar's four-track grid
+wrapped More under Portfolio and grew the bar over the page's last lines.
+Both are fixed (the script reads the door rules from the shell; the company
+bar has five tracks, held in CI by `four-doors-do-not-collide`), and it now
+passes all 378 in about three minutes. That is the cost of (a), and the ten
+real failures are what (b) cost while it went unrun.
+
 **Your choice.**
 - **(a)** Run `measure-mobile` in `npm run check` (CI already has the browser;
-  it adds about a minute), so a deploy cannot pass with a page wider than your
-  phone.
+  it adds about three minutes), so a deploy cannot pass with a page wider than
+  your phone.
 - **(b)** Keep it by hand, before anything you will open on your phone, as its
   own header says.
 
 **Recommendation.** (a). Every regression this remediation found on Home was
-one a browser sees and a DOM test does not, and the browser is already there.
+one a browser sees and a DOM test does not, the browser is already there, and
+left by hand it went red for a week without anyone running it.
 

@@ -30,6 +30,7 @@ const CHROMIUM = [
 ].find((p) => existsSync(p));
 const WIDTHS = [375, 390, 430];
 const OWNER = 'collide_owner';
+let REFERENCE = '';
 let stop: (() => void) | null = null;
 let port = 0;
 
@@ -44,6 +45,12 @@ beforeAll(async () => {
   await proposeAct({ productId: 'collide_p', subject: 'set_prices', actionType: null, params: { price: 49 },
     summary: 'Raise the price to $49', why: 'Buyers asked', expectedEffect: 'More per sale', risk: 'Fewer sales',
     consequence: 'low', proposedBy: 'institution:test' });
+  // A COMPANY WITH MORE THAN THREE DIMENSIONS, so its bar carries More.
+  const { establishReferenceCompany, advanceReferenceWorld } = await import('../../src/services/reference/world.js');
+  const reference = await establishReferenceCompany({ scenarioKey: 'revenue_quietly_falling', ownerId: OWNER });
+  if (!reference) throw new Error('the reference scenario did not resolve');
+  await advanceReferenceWorld(reference.productId);
+  REFERENCE = reference.productId;
   const founder = (await query('SELECT * FROM founders WHERE id = ?', [OWNER])).rows[0] as Record<string, unknown>;
   const { withViewer } = await import('../../src/views/owner/viewer.js');
   const app = new Hono();
@@ -137,6 +144,33 @@ phones('the bar, on the phone he actually holds', () => {
     for (const r of seen.elsewhere) expect(r.height, r.label).toBeGreaterThanOrEqual(44);
     expect(seen.overflowX).toBe(0);
   }, 120_000);
+
+  // INSIDE A COMPANY THE BAR IS THE COMPANY'S, and keeps to five in one row:
+  // Portfolio, three dimensions, More (f97f3036). The four-door grid of 30
+  // September gave it four tracks, so More wrapped under Portfolio and the bar
+  // grew over the page's last lines — found when measure-mobile's door rules
+  // were corrected (remediation, 7 October 2026).
+  it('a company\'s bar keeps its five in one row, at every phone width', async () => {
+    for (const width of WIDTHS) {
+      for (const scale of [1, 2]) {
+        const seen = await measure(width, scale, `/foundry/companies/${REFERENCE}`);
+        const where = `${String(width)}px ${String(scale * 100)}%`;
+        expect(seen.doors.length, `${where}: Portfolio, three dimensions and More`).toBe(5);
+        expect(seen.doors[0]!.label, where).toBe('Portfolio');
+        expect(seen.doors[4]!.label, where).toBe('More');
+        expect(new Set(seen.doors.map((d) => Math.round(d.top))).size, `${where}: one row`).toBe(1);
+        for (let i = 1; i < seen.doors.length; i++) {
+          expect(seen.doors[i - 1]!.right, `${where} ${seen.doors[i - 1]!.label} overlaps ${seen.doors[i]!.label}`).toBeLessThanOrEqual(seen.doors[i]!.left + 0.5);
+        }
+        for (const d of seen.doors) {
+          expect(d.right - d.left, `${where} ${d.label} width`).toBeGreaterThanOrEqual(44);
+          expect(d.bottom - d.top, `${where} ${d.label} height`).toBeGreaterThanOrEqual(44);
+        }
+        expect(seen.doors.filter((d) => d.lit).length, `${where}: the dimension underfoot is lit`).toBe(1);
+        expect(seen.overflowX, where).toBe(0);
+      }
+    }
+  }, 240_000);
 
   it('the Letter lights no door, and its bar still has four', async () => {
     const seen = await measure(390, 1, '/letter');

@@ -1502,6 +1502,9 @@ main[data-place="money"] .mline.total{margin:.25rem -.65rem 0;padding:.95rem .65
      token that exists for exactly this and is declared for all three. */
   nav.places{background:var(--os-mobile-chrome);border-color:var(--v3-line);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);padding:5px 4px calc(5px + env(safe-area-inset-bottom))}
   nav.places div{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));max-width:none;margin:0}
+  /* INSIDE A COMPANY THE BAR HOLDS FIVE: Portfolio, three dimensions, More.
+     Four tracks wrapped More under Portfolio and grew the bar over the page. */
+  nav.places.company div{grid-template-columns:repeat(5,minmax(0,1fr))}
   nav.places a{min-height:52px;padding:4px 2px;gap:3px;font-size:clamp(9px,2.85vw,12px);line-height:1.1;color:var(--ink-3);white-space:nowrap;overflow:hidden}
   nav.places a svg{width:20px;height:20px;flex:0 0 auto}
   nav.places a.on{color:var(--accent)}
