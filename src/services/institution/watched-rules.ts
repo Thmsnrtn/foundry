@@ -78,6 +78,9 @@ export const WATCHED_RULES: readonly WatchedRule[] = [
       for (const r of await rows(`SELECT id, signed_by FROM portfolio_envelopes WHERE founder_id = ?`, [founderId])) {
         if (String(r.signed_by) !== me) out.push(`charter ${String(r.id)} was signed by ${String(r.signed_by)}`);
       }
+      // EVERY company's acts, the reference one's too: this reads for a broken
+      // rule, never for owner truth, and a rule broken in rehearsal is broken;
+      // STANDING DOES NOT APPLY either: an experimental asset's act is an act.
       for (const r of await rows(`
         SELECT a.id, a.decided_by, a.rung FROM proposed_acts a JOIN products p ON p.id = a.product_id
          WHERE p.owner_id = ? AND a.decided_by IS NOT NULL`, [founderId])) {
@@ -153,12 +156,11 @@ export const WATCHED_RULES: readonly WatchedRule[] = [
     async check(founderId) {
       const out: string[] = [];
       const pre = await preCharterCents();
-      for (const d of await rows(`
-        SELECT date, spent_cents,
-               (SELECT MAX(cognition_cents_per_day) FROM portfolio_envelopes e
-                 WHERE e.founder_id = ? AND date(e.signed_at) <= s.date AND date(e.expires_at) >= s.date) AS rate
-          FROM ai_daily_spend s WHERE scope = 'founder' AND scope_id = ?`, [founderId, founderId])) {
-        const allowed = d.rate == null ? pre : Number(d.rate);
+      const charters = await rows(`SELECT signed_at, expires_at, cognition_cents_per_day FROM portfolio_envelopes WHERE founder_id = ?`, [founderId]);
+      for (const d of await rows(`SELECT date, spent_cents FROM ai_daily_spend WHERE scope = 'founder' AND scope_id = ?`, [founderId])) {
+        const day = String(d.date).slice(0, 10);
+        const standing = charters.filter((c) => String(c.signed_at).slice(0, 10) <= day && String(c.expires_at).slice(0, 10) >= day);
+        const allowed = standing.length ? Math.max(...standing.map((c) => Number(c.cognition_cents_per_day))) : pre;
         // A cent of slack for a reservation's rounding; no more.
         if (Number(d.spent_cents) > allowed + 1) out.push(`thinking on ${String(d.date)} was $${(Number(d.spent_cents) / 100).toFixed(2)} against $${(allowed / 100).toFixed(2)} allowed`);
       }

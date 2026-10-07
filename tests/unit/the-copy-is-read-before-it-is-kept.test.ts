@@ -87,7 +87,7 @@ describe('what a stranger reads is held to what the file is held to (the twin\'s
   // invented statistic, a quoted buyer, or a struck-through price nobody was
   // ever charged. Each is refused before anything is made, quoted.
   for (const [what, summary, says] of [
-    ['a sales count nobody recorded', 'A dated shortlist. Over 2,400 contractors already use it (k1).', /a sales count nobody recorded: "Over 2,400 contractors already use"/],
+    ['a sales count nobody recorded', 'A dated shortlist. Over 2,400 contractors already use it (k1).', /a sales count nobody recorded: ".*Over 2,400 contractors already use it \(k1\)/],
     ['a struck-through price', 'A dated shortlist. Was $79, today only $19 (k2).', /a price other than the price it charges \(\$19\): ".*Was \$79.*k2/],
     ['an invented statistic', 'A dated shortlist. 87% of contractors miss a bid each year (k3).', /a statistic: ".*87%.*k3/],
     ['a quoted buyer', 'A dated shortlist. "This changed everything for my firm" — Dana R. (k4)', /a testimonial: ".*Dana R.*k4/],

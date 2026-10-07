@@ -24,7 +24,7 @@ manifest — is `history/IMPLEMENTATION_SLICES.md`. What to do next is
 | Migration numbers used more than once (historical, ratcheted) | 31 |
 | Tables in the schema snapshot | 307 |
 | Scheduled jobs | 36: 3 every few minutes, 8 hourly, 4 every few hours, 19 daily, 2 weekly |
-| Scripts `npm run check` runs | 42 |
+| Scripts `npm run check` runs | 43 |
 <!-- facts:end -->
 
 The counts above are generated from the repository, and a gate fails when they
