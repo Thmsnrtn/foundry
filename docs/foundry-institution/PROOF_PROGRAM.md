@@ -10,6 +10,32 @@
 - **E5 Production proven:** sustained production outcomes support the claim.
 - **E6 Broad institutional evidence:** repeated evidence across unfamiliar companies and conditions.
 
+## Where a simulation sits on the ladder
+
+The ladder above is the only one; a simulation is placed on it, not beside it.
+
+- **E1** — a unit test, or code and policy that exist.
+- **E2** — deterministic runtime, and that includes a deterministic simulation
+  of the real institution: every routine run day by day against the market
+  twin (`tests/simulation/twin/`) with a scripted model (`tests/simulation/brains/`).
+  Such a run says what the institution does under the twin's stated
+  assumptions. It never says what a market does: the twin's buyers are
+  imagined, and most of its numbers are named assumptions.
+- **E3** — a frozen or independent benchmark. A twin run with a REAL model,
+  whose products are judged by the held-out buyer panel the making code never
+  read (`tests/simulation/panel/`), can support E3 for what the institution
+  MAKES — its honesty, its refusals, its quality as judged — and only with a
+  pointer to the run record (`run: …`). It never supports a claim about
+  demand. A shadow on real traffic is real-world evidence short of a pilot and
+  is recorded at E3 with its pointer until a bounded pilot makes it E4.
+- **E4–E6** — unchanged: a pilot, production, breadth.
+
+`scripts/check-evidence-levels.mjs` (in `npm run check`) holds every row of
+the four tables where capability is claimed — the evidence frontier and the
+proven list in `IMPLEMENTATION_STATE.md`, the journeys and loop transitions in
+`MATURITY_MAP.md` — to a level in its own column, and every E3 or above to a
+pointer at what proved it.
+
 ## Capability graduation
 
 Evidence maturity governs what a capability may be exposed to, not merely how

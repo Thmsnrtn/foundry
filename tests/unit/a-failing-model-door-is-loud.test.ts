@@ -55,7 +55,10 @@ describe('discovery and the legal pass let it through', () => {
   it('neither files a door failure as "could not read it"', () => {
     for (const file of ['src/services/venture/interpretation.ts', 'src/services/venture/legal-pass.ts']) {
       const src = readFileSync(file, 'utf8');
-      expect(src, file).toMatch(/catch \(err\) \{\s*\n\s*if \(err instanceof ModelDoorError\) throw err;\s*\n\s*return \{ refused: `could not read it/);
+      // The door's failure is re-thrown FIRST in the catch; what may follow it
+      // before "could not read it" is the handling of a reply the door
+      // answered and refused (ModelReplyRefused), which is filed as declined.
+      expect(src, file).toMatch(/catch \(err\) \{\s*\n\s*if \(err instanceof ModelDoorError\) throw err;\s*\n(?:[^\n]*\n){0,8}?\s*return \{ refused: `could not read it/);
     }
   });
   it('the legal routine records a failure when the door failed', () => {

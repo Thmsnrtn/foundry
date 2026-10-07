@@ -292,6 +292,17 @@ describe('and then kills what the evidence actually contradicts', () => {
 
 describe('and promotes only what earned it', () => {
   it('builds the candidate out of the reading rather than fresh prose', async () => {
+    // THE EMPTY REGISTRY SEARCH ABOVE IS NOT A SECOND WAY OF KNOWING (F1.7,
+    // reached promotion in seeds.ts): on it alone the seed is refused.
+    const before = await promoteWhatEarnedIt({ founderId: OWNER, world: 'real' });
+    expect(before.promoted).toEqual([]);
+    expect(before.refused.find((r) => r.seed.includes('certificate expiry'))?.because).toContain('Only one way of knowing');
+    // A directory that SAW something is one.
+    const seed = (await openSeeds(OWNER)).find((s) => s.seed.includes('certificate expiry'))!;
+    const claim = (await query('SELECT id FROM market_claims WHERE seed_id = ? LIMIT 1', [seed.id])).rows[0] as Record<string, unknown>;
+    await observe({ founderId: OWNER, claimId: String(claim.id), sourceType: 'directory',
+      source: 'https://registry.example/pkg/cert-expiry', saw: 'the one package that tracks certificate expiry was last published three years ago',
+      bearing: 'supports', directness: 'direct', observedAt: new Date(), evidenceMode: 'real' });
     const pass = await promoteWhatEarnedIt({ founderId: OWNER, world: 'real' });
     const first = pass.promoted[0];
     expect(first).toBeDefined();

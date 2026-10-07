@@ -26,7 +26,8 @@
 
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
-import { callSonnet, ModelDoorError } from '../ai/client.js';
+import { callSonnet, ModelDoorError, ModelReplyRefused } from '../ai/client.js';
+import { numbersNotIn } from './invented-numbers.js';
 import { institutionSpend } from '../ai/what-it-is-for.js';;
 import { shieldUntrustedContent } from '../ai/prompt-shield.js';
 import { dataBlockInstruction, wrapDataBlock } from '../ai/sanitize.js';
@@ -233,6 +234,11 @@ export async function interpret(input: {
       'reading an observation', { kind: 'observation', id: input.observationId }));
   } catch (err) {
     if (err instanceof ModelDoorError) throw err;
+    // A REPLY REFUSED AT THE DOOR is an answer that was declined, and it is
+    // filed as one, with the door's reason, so the owner can read why.
+    if (err instanceof ModelReplyRefused) {
+      return record({ founderId: input.founderId, observationId: input.observationId, world: input.world, model, abstain: err.message });
+    }
     return { refused: `could not read it: ${err instanceof Error ? err.message : 'unknown'}` };
   }
 
@@ -276,6 +282,19 @@ export async function interpret(input: {
       });
     }
     read = second;
+  }
+
+  // A NUMBER THE TEXT DOES NOT HOLD IS INVENTED (invented-numbers.ts). The
+  // prompt forbids it in so many words; this is where it is checked, and the
+  // reading is filed as declined with the words that were refused.
+  const invented = numbersNotIn(saw, [read.reading, read.hypothesis, read.who_it_may_be, read.ambiguity,
+    read.or_it_could_be, read.misread_if, read.next_question]);
+  if (invented.length > 0) {
+    return record({
+      founderId: input.founderId, observationId: input.observationId,
+      world: input.world, model,
+      abstain: `it wrote a number the text does not contain, and a reader may not create counts: ${invented.slice(0, 3).join('; ')}`,
+    });
   }
 
   const kind = read.hypothesis_kind !== null

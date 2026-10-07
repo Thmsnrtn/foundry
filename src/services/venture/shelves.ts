@@ -87,7 +87,7 @@ export async function shelfCandidates(founderId: string): Promise<Shelf[]> {
          JOIN market_source_types t ON t.source_type = o.source_type
         WHERE c.seed_id IN (${holes})
           AND o.evidence_mode <> 'reference' AND t.epistemic_stance <> 'rehearsal'
-          AND (o.from_absence = 0 OR o.bearing = 'supports')
+          AND o.from_absence = 0 -- found nothing is not a way of knowing (F1.7; seeds.ts)
         GROUP BY c.seed_id`, seedIds))
       .rows as unknown as Array<Record<string, unknown>>) {
       stanceOf.set(String(r.seed_id), Number(r.stances));
@@ -111,7 +111,7 @@ export async function shelfCandidates(founderId: string): Promise<Shelf[]> {
          JOIN market_source_types t ON t.source_type = o.source_type
         WHERE c.opportunity_id IN (${holes})
           AND o.evidence_mode <> 'reference' AND t.epistemic_stance <> 'rehearsal'
-          AND (o.from_absence = 0 OR o.bearing = 'supports')
+          AND o.from_absence = 0 -- found nothing is not a way of knowing (F1.7; seeds.ts)
         GROUP BY c.opportunity_id`, rows.map((r) => String(r.id))))
       .rows as unknown as Array<Record<string, unknown>>) {
       oppStanceOf.set(String(r.opportunity_id), Number(r.stances));

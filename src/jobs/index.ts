@@ -1596,6 +1596,14 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
         logger.info(`institution_pulse_tick: owner ${sent ? 'told' : 'not told (already told, or the door refused)'} about ${pulse.stoppedLoop.jobName}`,
           { jobName: 'institution_pulse_tick' });
       }
+      // THE INSTITUTION'S OWN RULES, READ BACK (watched-rules.ts), after the
+      // pass is done: read-only, and a broken rule fails this routine with
+      // what broke, the way every watched loop says when its work failed. The
+      // twin's monitor reads the same rules after every simulated day.
+      const { brokenRules } = await import('../services/institution/watched-rules.js');
+      const broken: string[] = [];
+      for (const o of owners) for (const b of await brokenRules(String(o.founder_id))) broken.push(`${b.id}: ${b.violations.slice(0, 3).join('; ')}`);
+      if (broken.length > 0) throw new Error(`the institution's own rules are broken: ${broken.join(' | ')}`);
     },
     // After the hourly routines have had their turn, so a routine that ran at
     // :20, :35 or :40 is read as run rather than as stale by minutes.

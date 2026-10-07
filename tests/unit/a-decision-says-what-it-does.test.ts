@@ -64,6 +64,11 @@ async function aCandidate(word: string): Promise<string> {
     source: 'https://registry.example/search', saw: 'nothing relevant', bearing: 'supports',
     directness: 'inferred', observedAt: new Date(Date.now() - 3_600_000), evidenceMode: 'real',
     fromAbsence: true });
+  // THE SECOND WAY OF KNOWING SAW SOMETHING. An empty search is filed beside
+  // it, and since F1.7 reached promotion it is not counted as one (seeds.ts).
+  await observe({ founderId: OWNER, claimId: gap, sourceType: 'directory',
+    source: 'https://registry.example/pkg/abandoned', saw: 'the one package on the subject was last published three years ago',
+    bearing: 'supports', directness: 'direct', observedAt: new Date(Date.now() - 3_600_000), evidenceMode: 'real' });
   const interp = `int_${word.replace(/\W/g, '')}`;
   await query(
     `INSERT INTO observation_interpretations

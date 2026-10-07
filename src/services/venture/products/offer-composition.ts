@@ -314,6 +314,15 @@ export async function shapeAndMake(experimentId: string): Promise<Made | { refus
   const price = Number(raw.price_dollars);
   const band = recurs ? WEEKLY_BAND : OFFER_BAND;
   if (!Number.isInteger(price) || price < band.lowDollars || price > band.highDollars) return { refused: `the ${recurs ? 'weekly ' : ''}price is not a whole number of dollars between ${String(band.lowDollars)} and ${String(band.highDollars)}` };
+  // WHAT A STRANGER READS IS HELD TO WHAT THE FILE IS HELD TO. The page copy
+  // and the offer's own sentences were read only for the banned phrases, so a
+  // composition could put an invented statistic, a quoted buyer, a sales count
+  // or a struck-through price nobody was ever charged on the page itself. The
+  // same deterministic scan the hands run on a file (printable.ts), a sales
+  // count, and the public promise "the price on its page is the price you pay".
+  const facing = copyAStrangerReads(raw, page);
+  const wrong = await whatTheCopyMayNotSay(facing, price);
+  if (wrong.length) return { refused: `the copy a buyer would read says what nobody can stand behind: ${wrong.slice(0, 4).join('; ')}` };
   // NO PRICE IS MOSTLY FEES (R29), read at the least a buyer could pay. The
   // bands sit above the line today; this keeps a band change honest.
   const mostlyFees = priceIsMostlyFees({ venue: 'stripe', amountCents: price * 100, chosen: givesFirst ? CHOSEN_BAND : null });
@@ -381,6 +390,33 @@ export async function shapeAndMake(experimentId: string): Promise<Made | { refus
     });
   }
   return made;
+}
+
+// ─── What a stranger reads ───────────────────────────────────────────────────
+
+/** The offer's sentences and page copy a buyer actually sees. Not the reasons given to the owner (price_because, lighter). */
+const FACING = ['title', 'product_name', 'sells', 'claims_made', 'collects', 'delivers_by', 'sells_to', 'charges_how', 'offer_subject'] as const;
+const PAGE_FACING = ['summary', 'who', 'what', 'limits', 'sources', 'note'] as const;
+function copyAStrangerReads(raw: Row, page: Row): string {
+  return [...FACING.map((k) => str(raw, k) ?? ''), ...PAGE_FACING.map((k) => str(page, k) ?? '')].filter(Boolean).join('\n');
+}
+
+/** "Over 2,400 families already use it", "1,000+ sold": a count of buyers nobody recorded. */
+export const SALES_COUNT = /\b(?:over|more than)?\s*\d[\d,]*\+?\s+(?:[a-z]+s|people)\s+(?:already\s+)?(?:use|used|bought|own|love|have|trust|rely on)\b|\b\d[\d,]*\+?\s+(?:sold|sales|downloads|copies sold)\b/i;
+
+/** Each thing the buyer-facing copy may not say, quoted. Empty when it may be shown. */
+export async function whatTheCopyMayNotSay(copy: string, priceDollars: number): Promise<string[]> {
+  const { fabricationScan } = await import('./printable.js');
+  const out = fabricationScan(copy);
+  const sales = SALES_COUNT.exec(copy);
+  if (sales) out.push(`a sales count nobody recorded: "${copy.slice(Math.max(0, sales.index - 30), sales.index + sales[0].length + 30).replace(/\s+/g, ' ').trim()}"`);
+  for (const m of copy.matchAll(/\$\s?(\d+(?:\.\d{2})?)/g)) {
+    if (Number(m[1]) !== priceDollars) {
+      const at = m.index ?? 0;
+      out.push(`a price other than the price it charges ($${String(priceDollars)}): "…${copy.slice(Math.max(0, at - 30), at + m[0].length + 30).replace(/\s+/g, ' ').trim()}…"`);
+    }
+  }
+  return [...new Set(out)];
 }
 
 // ─── A printable file (products/printable.ts) ────────────────────────────────

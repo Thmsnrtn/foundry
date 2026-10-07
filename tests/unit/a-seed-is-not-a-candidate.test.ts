@@ -119,6 +119,28 @@ describe('what it would take to believe it', () => {
     expect(believe.enough).toBe(true);
   });
 
+  it('a search that found nothing is not a second way of knowing (F1.7), and cannot promote a candidate', async () => {
+    // The twin's year runs found candidates standing on one community post and
+    // one directory search that came back EMPTY — filed `supports` with
+    // `from_absence`, which F1.7 says is never counted as support. The reads
+    // were fixed then; the count that promotes was not.
+    const { seedId, claimId } = await seedFromSignal('I keep a paper log of every appliance filter');
+    await observe({ fromAbsence: true, founderId: OWNER, claimId, sourceType: 'directory',
+      source: 'https://registry.example/search?q=filter+log', saw: 'No maintained package on the subject turned up',
+      bearing: 'supports', directness: 'inferred', observedAt: new Date(), evidenceMode: 'real' });
+    const believe = await whatItWouldTakeToBelieve(seedId);
+    expect(believe.have.map((h) => h.stance)).toEqual(['problem_pain']);
+    expect(believe.enough).toBe(false);
+    const tried = await promote({ seedId, headline: 'A filter log', whoHasIt: 'homeowners', theProblem: 'filters are forgotten',
+      whyItMight: 'nothing exists', killThesis: 'nobody cares', unknowns: ['whether anyone would pay'], sources: ['https://forum.example/1'] });
+    expect('refused' in tried).toBe(true);
+    // An absence that CONTRADICTS stays what F3 left it: not counted either.
+    await observe({ fromAbsence: true, founderId: OWNER, claimId, sourceType: 'review',
+      source: 'https://apps.example/reviews', saw: 'no review complains of this', bearing: 'contradicts',
+      directness: 'inferred', observedAt: new Date(), evidenceMode: 'real' });
+    expect((await whatItWouldTakeToBelieve(seedId)).enough).toBe(false);
+  });
+
   it('a rehearsal is never one of the ways, and cannot even be filed as one', async () => {
     const { seedId, claimId } = await seedFromSignal('something only the rehearsal saw');
     // A guarantee stronger than the stance count: the evidence-mode boundary
