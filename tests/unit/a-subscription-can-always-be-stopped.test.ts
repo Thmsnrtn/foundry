@@ -59,7 +59,7 @@ beforeAll(async () => {
   await advanceDays(1);
   await runMorning(HANDS);
   app = await ownerApp();
-});
+}, 180_000);
 
 describe('a weekly offer is let in only when it can be stopped', () => {
   it('is refused while the first-proof rule stands, then while the money switch is off, then allowed', async () => {

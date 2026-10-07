@@ -5,7 +5,7 @@
 // CI ran `npm audit --audit-level=high || true`. The `|| true` turned a gate
 // into a log line nobody read: on the day it was removed the tree held eleven
 // high advisories and one critical. The six with a compatible fix were fixed.
-// The three that remain are listed below, each with the reason it cannot reach
+// What remains is listed below, each with the reason it cannot reach
 // production and what would close it. Any OTHER high or critical advisory
 // fails, so a new one is a decision rather than a line in a log.
 //
@@ -19,18 +19,13 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
 const ACCEPTED = {
-  // js-cookie <=3.0.5, prototype hijack in assign(). Reached only through
-  // @clerk/clerk-sdk-node 4 → @clerk/shared, where it is the BROWSER cookie
-  // helper; the server never calls it. Closed by the Clerk SDK major upgrade,
-  // which touches sign-in and gets its own slice with a sign-in rehearsal.
-  'GHSA-qjx8-664m-686j': 'js-cookie via Clerk SDK 4: browser helper, not reached on the server',
-  // vitest <3.2.6: arbitrary file read when the Vitest UI server is listening.
-  // A dev dependency; the UI server is never started here or in CI, and
-  // production images carry no dev dependencies. Closed by vitest 3+.
-  'GHSA-5xrq-8626-4rwp': 'vitest UI server: never started; dev only',
-  // vite server.fs.deny bypass on Windows alternate paths. The dev server is
-  // never run; vite is present only as vitest's transform. Closed with vitest 3+.
-  'GHSA-fx2h-pf6j-xcff': 'vite dev server on Windows: never run; dev only',
+  // Closed on 6 October 2026 by the remediation program's dependency PR: the
+  // Clerk SDK (and with it js-cookie, GHSA-qjx8-664m-686j) was replaced by
+  // `@clerk/backend` 3 used directly, and vitest 1 → 4 removed tinypool
+  // (GHSA-5gmw-xhrv-c9v3, GHSA-85c8-ppgw-ccpr), the UI-server read
+  // (GHSA-5xrq-8626-4rwp) and vite's Windows path bypass (GHSA-fx2h-pf6j-xcff);
+  // vite 8's postcss carries source-map-js 1.2.2 (GHSA-68fv-2mgg-jv7q).
+
   // braces <=3.0.3, stack exhaustion on deeply nested patterns (published 3
   // October 2026; no patched braces exists). Reached only through tsc-alias
   // (a dev dependency) → chokidar and globby/micromatch, which run once at

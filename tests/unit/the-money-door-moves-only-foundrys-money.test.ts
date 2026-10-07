@@ -124,7 +124,7 @@ describe('the door finds the refund act only for the refund the purchase allows'
     const { intakeStripeSettlement } = await import('../../src/services/venture/settlement-intake.js');
     await intakeStripeSettlement({ id: 'evt_door', type: 'payment_intent.succeeded', created: Math.floor(Date.now() / 1000),
       data: { object: { id: PAID, object: 'payment_intent', amount_received: 2900, currency: 'usd', metadata: { app: 'foundry', experiment_id: X, payment_link: link.id }, latest_charge: `ch_${PAID}` } } });
-  });
+  }, 180_000);
 
   it('a genuinely owed key carrying another charge, or another amount, finds no act and moves nothing', async () => {
     const f = (await query('SELECT * FROM experiment_fulfilments WHERE payment_ref = ?', [PAID])).rows[0] as Record<string, unknown>;

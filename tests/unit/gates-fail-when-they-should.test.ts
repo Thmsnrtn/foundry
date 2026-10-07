@@ -26,7 +26,25 @@
 
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+
+// A MEASURED BUDGET FOR EVERY TEST HERE. Each test runs a gate script, which
+// migrates a scratch database; at the start of `npm run check`, beside two
+// other vitest processes, one took 14–31 s (measured 6 October 2026). Vitest 1
+// let a synchronous test finish however long it ran; vitest 4 fails it at its
+// timeout, so the file says what it may take. The first budget, twice that,
+// was overrun the same afternoon: check-sql-columns, the first case, took 107 s
+// on a four-core machine while both suites migrated, against 20 s alone. Three
+// minutes covers the slowest seen with room.
+//
+// A HANG IS A FAILURE, NOT A REFUSAL (second remediation audit). A synchronous
+// test blocks the event loop, so vitest cannot fail one that never returns:
+// the job would sit until its own limit. Each gate script is killed at
+// GATE_TIMEOUT_MS instead, and a killed script throws by name rather than
+// reading as a non-zero exit, which a "this gate should fail" case would count
+// as the gate refusing its defect.
+vi.setConfig({ testTimeout: 180_000 });
+const GATE_TIMEOUT_MS = 170_000;
 import { execFileSync } from 'child_process';
 import {
   cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync,
@@ -118,14 +136,23 @@ function unwrite(relPath: string, find: string | RegExp, replaceWith: string): v
   writeFileSync(abs, after);
 }
 
+/** How a gate script ended, from execFileSync's error: its exit code, or a
+ *  throw when it was killed (a timeout or a signal), which no exit code means. */
+export function exited(script: string, err: unknown): { code: number; output: string } {
+  const e = err as { status?: number | null; signal?: string | null; stdout?: string; stderr?: string };
+  if (e.status === null || e.status === undefined || e.signal) {
+    throw new Error(`${script} did not exit on its own (${e.signal ?? 'no status'}): a gate that hangs is a failure, not a refusal`);
+  }
+  return { code: e.status, output: `${e.stdout ?? ''}${e.stderr ?? ''}` };
+}
+
 function run(script: string, args: string[] = []): { code: number; output: string } {
   try {
     const output = execFileSync('node', [resolve(ROOT, 'scripts', script), ...args],
-      { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+      { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: GATE_TIMEOUT_MS });
     return { code: 0, output };
   } catch (err) {
-    const e = err as { status?: number; stdout?: string; stderr?: string };
-    return { code: e.status ?? 1, output: `${e.stdout ?? ''}${e.stderr ?? ''}` };
+    return exited(script, err);
   }
 }
 
@@ -177,7 +204,12 @@ beforeAll(() => {
   // and a 300MB copy would cost more than the serial execution this replaces.
   symlinkSync(resolve(REPO, 'node_modules'), resolve(sandbox, 'node_modules'));
   ROOT = sandbox;
-});
+  // A MEASURED BUDGET, NOT THE DEFAULT. The copy is about 130 MB (docs carry
+  // the captures) and takes half a second on a quiet machine; at the start of
+  // `npm run check`, with three vitest processes migrating databases at once,
+  // it measured over ten. Vitest 4 fails a synchronous hook that overruns its
+  // timeout where vitest 1 let it finish, so the hook says what it may take.
+}, 120_000);
 
 afterAll(() => {
   if (sandbox !== null) rmSync(sandbox, { recursive: true, force: true });
@@ -866,6 +898,46 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('no longer one');
   });
 
+  // THE CRAWL (remediation 3, 6 October 2026). It counted a 503 as a pass,
+  // drove made-up ids, and kept a hand copy of the mount table; each of those
+  // is a way to stay green while looking at nothing. It is run here in the
+  // sandbox, where a planted defect cannot reach the real tree.
+  const crawl = (env: Record<string, string> = {}): { code: number; output: string } => {
+    try {
+      const output = execFileSync(resolve(ROOT, 'node_modules/.bin/tsx'), [resolve(ROOT, 'tests/simulation/crawl.ts')],
+        { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...env }, timeout: GATE_TIMEOUT_MS });
+      return { code: 0, output };
+    } catch (err) {
+      return exited('crawl.ts', err);
+    }
+  };
+
+  it('sim:crawl fails on an owner page that answers 503', () => {
+    const r = crawl({ CRAWL_PLANT: '/foundry/controls' });
+    expect(r.code).toBe(1);
+    expect(r.output).toContain('/foundry/controls → 503');
+  }, 120_000);
+
+  it('sim:crawl fails on an owner page that sends the signed-in owner to sign-in, written as an absolute URL', () => {
+    const r = crawl({ CRAWL_PLANT_REDIRECT: '/foundry/controls' });
+    expect(r.code).toBe(1);
+    expect(r.output).toContain('/foundry/controls → 302 to https://foundry.example/auth/login');
+  }, 120_000);
+
+  it('sim:crawl fails on a route src/index.ts declares that the crawl does not name', () => {
+    unwrite('src/index.ts', "app.get('/favicon.ico', pwa.favicon);",
+      "app.get('/favicon.ico', pwa.favicon);\napp.get('/planted-inline', (c) => c.text('x'));");
+    const r = crawl();
+    expect(r.code).toBe(1);
+    expect(r.output).toContain('GET /planted-inline');
+  }, 120_000);
+
+  it('sim:crawl passes on the tree as it stands, and says what it reached', () => {
+    const r = crawl();
+    expect(r.code, r.output.slice(-2000)).toBe(0);
+    expect(r.output).toMatch(/Population: \{"routes":\d+/);
+  }, 120_000);
+
   it('check-the-laboratory-is-the-institution passes on the tree as it stands', () => {
     const r = run('check-the-laboratory-is-the-institution.mjs');
     expect(r.code, r.output).toBe(0);
@@ -1360,11 +1432,10 @@ describe('the suite runner', () => {
   const suite = (file: string): { code: number; output: string } => {
     try {
       const output = execFileSync('node', [resolve(ROOT, 'scripts', 'run-suite.mjs')],
-        { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, FOUNDRY_SUITE_ONLY: file } });
+        { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, FOUNDRY_SUITE_ONLY: file }, timeout: GATE_TIMEOUT_MS });
       return { code: 0, output };
     } catch (err) {
-      const e = err as { status?: number; stdout?: string; stderr?: string };
-      return { code: e.status ?? 1, output: `${e.stdout ?? ''}${e.stderr ?? ''}` };
+      return exited('run-suite.mjs', err);
     }
   };
 
@@ -1402,5 +1473,22 @@ describe('and passes on a clean tree', () => {
       const r = run(script);
       expect(r.code, `${script}: ${r.output}`).toBe(0);
     }
+  // Every gate in turn, about thirty scripts: 144 s measured under load.
+  }, 300_000);
+});
+
+describe('a gate that hangs', () => {
+  it('is a failure by name, not a gate refusing its defect', () => {
+    const hang = (): never => {
+      try {
+        execFileSync('node', ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore', timeout: 300 });
+      } catch (err) { exited('a hanging script', err); }
+      throw new Error('the hanging script returned');
+    };
+    expect(hang).toThrow(/did not exit on its own/);
+    // An ordinary non-zero exit is still read as the gate's verdict.
+    let verdict = { code: -1, output: '' };
+    try { execFileSync('node', ['-e', 'process.exit(1)'], { stdio: 'ignore', timeout: 30_000 }); } catch (err) { verdict = exited('an exiting script', err); }
+    expect(verdict.code).toBe(1);
   });
 });

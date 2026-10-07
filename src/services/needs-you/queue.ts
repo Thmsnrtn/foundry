@@ -76,7 +76,15 @@ export function answersFor(i: AttentionItem): SixAnswers {
       mostItCanCost: 'Nothing: watching is not acting.', undo: 'Yes: you can hand it back at any time.',
       ifNothing: 'It stays here, and nothing happens.',
     };
-    case 'experiment': return {
+    case 'experiment': if (i.id === 'forge-designs-waiting') {
+      return {
+        what: i.summary, whyNow: i.detail,
+        ifYes: 'The next forge pass takes each up again against what is true now: it is sealed if nothing stands in the way, and stays here, with why, if something does.',
+        mostItCanCost: 'A model call for each the attacker is asked about again; nothing reaches anybody until a design is sealed and let in.',
+        undo: 'Taking them up again changes no design; retiring them cannot be undone, and their designs stay on record.',
+        ifNothing: 'They wait. Each is taken up again on its own when what it was refused on changes, and is retired after its fourth refusal.',
+      };
+    } return {
       what: i.summary, whyNow: i.id === 'workshop' ? 'Something only you can supply is missing.' : 'A real test is ready, or needs something only you can do.',
       ifYes: i.open ? `You open it: ${i.open.label}.` : 'The test starts, inside its own limits.',
       mostItCanCost: i.id === 'workshop' ? 'Nothing by itself.' : 'Its authorised cost, and the people its design names — both on its page.',

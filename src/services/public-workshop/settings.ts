@@ -14,6 +14,7 @@
 // the public record and the contact path carry on, because a customer's claim
 // on the Workshop does not depend on whether the owner is paying attention.
 // =============================================================================
+import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 
 export interface PublicWorkshop {
@@ -165,6 +166,30 @@ export function publicPostalLines(
   return named.length > 0 && lines[0]?.toLowerCase() === named ? lines.slice(1) : lines;
 }
 
+const US_STATES: Record<string, string> = {
+  AL: 'Alabama', AK: 'Alaska', AZ: 'Arizona', AR: 'Arkansas', CA: 'California', CO: 'Colorado', CT: 'Connecticut', DE: 'Delaware',
+  DC: 'the District of Columbia', FL: 'Florida', GA: 'Georgia', HI: 'Hawaii', ID: 'Idaho', IL: 'Illinois', IN: 'Indiana', IA: 'Iowa',
+  KS: 'Kansas', KY: 'Kentucky', LA: 'Louisiana', ME: 'Maine', MD: 'Maryland', MA: 'Massachusetts', MI: 'Michigan', MN: 'Minnesota',
+  MS: 'Mississippi', MO: 'Missouri', MT: 'Montana', NE: 'Nebraska', NV: 'Nevada', NH: 'New Hampshire', NJ: 'New Jersey',
+  NM: 'New Mexico', NY: 'New York', NC: 'North Carolina', ND: 'North Dakota', OH: 'Ohio', OK: 'Oklahoma', OR: 'Oregon',
+  PA: 'Pennsylvania', RI: 'Rhode Island', SC: 'South Carolina', SD: 'South Dakota', TN: 'Tennessee', TX: 'Texas', UT: 'Utah',
+  VT: 'Vermont', VA: 'Virginia', WA: 'Washington', WV: 'West Virginia', WI: 'Wisconsin', WY: 'Wyoming',
+};
+
+/**
+ * WHERE THE WORKSHOP IS, AS ITS OWN POSTAL ADDRESS SAYS — or null when the
+ * address does not say (none recorded, or not a US "City, ST 01234" line).
+ * Never a default: an offer that names a place names the one on record, and
+ * one with nothing on record names none (F1.7; it was 'Massachusetts' in code).
+ */
+export function workshopRegion(w: { postalAddress: string | null }): string | null {
+  for (const line of postalLines(w.postalAddress).reverse()) {
+    const m = /,\s*([A-Z]{2})\s+\d{5}(?:-\d{4})?\s*$/.exec(line);
+    if (m) return US_STATES[m[1]!] ?? null;
+  }
+  return null;
+}
+
 export async function setPostalAddress(founderId: string, address: string | null): Promise<void> {
   // Trailing and leading blanks are noise; the lines between them are not.
   const a = postalLines(address).join('\n') || null;
@@ -176,16 +201,97 @@ export async function setAbout(founderId: string, about: string): Promise<void> 
   await query(`UPDATE public_workshop SET about = ?, updated_at = datetime('now') WHERE founder_id = ?`, [about.trim(), founderId]);
 }
 
-export async function pauseNewEconomicActivity(input: { founderId: string; reason: string }): Promise<void> {
+export async function pauseNewEconomicActivity(input: {
+  founderId: string; reason: string;
+  /** False when the caller records the act itself — Stop everything does. */
+  record?: boolean;
+}): Promise<void> {
   const reason = input.reason.trim();
   if (!reason) throw new WorkshopRefused('reason_required');
-  await query(
+  const principal = `founder:${input.founderId}`;
+  const r = await query(
     `UPDATE public_workshop SET economic_pause_at = datetime('now'), economic_pause_reason = ?, economic_pause_by = ?, updated_at = datetime('now')
-      WHERE founder_id = ? AND economic_pause_at IS NULL`, [reason, `founder:${input.founderId}`, input.founderId]);
+      WHERE founder_id = ? AND economic_pause_at IS NULL`, [reason, principal, input.founderId]);
+  // ONLY A PAUSE THAT BEGAN IS A PAUSE: pressing it again while paused changes nothing.
+  if ((r.rowsAffected ?? 0) > 0 && input.record !== false) {
+    await query(`INSERT INTO estate_pause_events (id, founder_id, kind, principal, reason) VALUES (?,?,'paused',?,?)`,
+      [nanoid(), input.founderId, principal, reason]);
+  }
 }
 
+/**
+ * KEEP THAT THE ESTATE WAS STOPPED (remediation 1.3): who, why, and what the
+ * stop lowered. Written here, beside the pause and resume it belongs with, so
+ * `control/stop.ts` stays a file that only ever lowers.
+ */
+export async function recordEstateStopped(input: { founderId: string; reason: string; stopped: string }): Promise<void> {
+  await query(`INSERT INTO estate_pause_events (id, founder_id, kind, principal, reason, detail) VALUES (?,?,'stopped_everything',?,?,?)`,
+    [nanoid(), input.founderId, `founder:${input.founderId}`, input.reason, input.stopped]);
+}
+
+/**
+ * APPROVED AND STILL UNWRITTEN: every business he approved for one of his
+ * tests that nothing has been sent to. What a pause held back is this, read
+ * when it ends.
+ */
+export async function approvedStillUnwritten(founderId: string): Promise<number> {
+  const r = (await query(
+    `SELECT COUNT(*) AS n FROM experiment_recipients r JOIN venture_experiments e ON e.id = r.experiment_id
+      WHERE e.founder_id = ? AND r.review_status = 'approved'
+        AND NOT EXISTS (SELECT 1 FROM outbound_actions o WHERE o.experiment_id = r.experiment_id AND o.recipient_id = r.id)`,
+    [founderId])).rows[0] as Record<string, unknown> | undefined;
+  return Number(r?.n ?? 0);
+}
+
+/**
+ * RESUME, AND REMEMBER WHAT IS RESUMED FROM (remediation 1.3). The pause's
+ * own columns are cleared, as before, so nothing reads the estate as paused;
+ * the act of resuming is kept, with when the pause began, how long it lasted
+ * and how many approved businesses were still unwritten.
+ */
 export async function resumeEconomicActivity(founderId: string): Promise<void> {
-  await query(`UPDATE public_workshop SET economic_pause_at = NULL, economic_pause_reason = NULL, economic_pause_by = NULL, updated_at = datetime('now') WHERE founder_id = ?`, [founderId]);
+  const was = (await query(`SELECT economic_pause_at FROM public_workshop WHERE founder_id = ? AND economic_pause_at IS NOT NULL`, [founderId]))
+    .rows[0] as Record<string, unknown> | undefined;
+  const r = await query(`UPDATE public_workshop SET economic_pause_at = NULL, economic_pause_reason = NULL, economic_pause_by = NULL, updated_at = datetime('now')
+    WHERE founder_id = ? AND economic_pause_at IS NOT NULL`, [founderId]);
+  if (!was || (r.rowsAffected ?? 0) === 0) return;
+  const since = String(was.economic_pause_at);
+  const seconds = Number(((await query(`SELECT MAX(0, CAST(strftime('%s','now') - strftime('%s', ?) AS INTEGER)) AS s`, [since])).rows[0] as Record<string, unknown>).s);
+  await query(
+    `INSERT INTO estate_pause_events (id, founder_id, kind, principal, reason, paused_since, paused_seconds, unwritten)
+     VALUES (?,?,'resumed',?,?,?,?,?)`,
+    [nanoid(), founderId, `founder:${founderId}`, 'the owner resumed new activity', since, seconds, await approvedStillUnwritten(founderId)]);
+}
+
+export interface PauseRecord {
+  kind: 'stopped' | 'paused' | 'resumed';
+  at: string;
+  principal: string;
+  reason: string | null;
+  /** Resumed only: how long it had been paused, and how many approved businesses were still unwritten. */
+  durationSeconds: number | null;
+  waitingRecipients: number | null;
+}
+
+/**
+ * EVERY STOP, PAUSE AND RESUME, newest first — the history the pause columns
+ * cannot keep, read on the Workshop page beside the pause it explains (Stage 1
+ * F1.3, reconciled onto remediation 1.3: read from the kept rows
+ * `estate_pause_events` holds, the same rows Activity reads).
+ */
+export async function pauseHistory(founderId: string, most = 10): Promise<PauseRecord[]> {
+  const found = (await query(
+    `SELECT kind, principal, reason, paused_seconds, unwritten, at FROM estate_pause_events
+      WHERE founder_id = ? ORDER BY at DESC, rowid DESC LIMIT ?`, [founderId, most])).rows as unknown as Array<Record<string, unknown>>;
+  return found.map((r) => {
+    const kind: PauseRecord['kind'] = r.kind === 'stopped_everything' ? 'stopped' : r.kind === 'paused' ? 'paused' : 'resumed';
+    return {
+      kind, at: String(r.at), principal: String(r.principal ?? ''),
+      reason: kind === 'resumed' || r.reason == null ? null : String(r.reason),
+      durationSeconds: kind === 'resumed' ? Number(r.paused_seconds ?? 0) : null,
+      waitingRecipients: kind === 'resumed' ? Number(r.unwritten ?? 0) : null,
+    };
+  });
 }
 
 export async function newEconomicActivityPaused(founderId: string): Promise<boolean> {

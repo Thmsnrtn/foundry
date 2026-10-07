@@ -179,7 +179,12 @@ export async function healthOf(founderId: string, now: Date = new Date()): Promi
       + `connect it again before then, from Connectors, or it goes dark`);
   }
 
+  // THE MODEL DOOR, NAMED AS ITSELF (F-DOOR-2): a routine that fails because
+  // the door is down is the door's failure, and the door is what he would fix.
+  const { modelDoorDown } = await import('../ai/model-door.js');
+  const door = await modelDoorDown();
   const failed = [
+    ...(door ? [door] : []),
     ...blocked.map((b) => `${b.attempting} — ${b.because ?? 'blocked'}`),
     ...loops.map((l) => l.stoppedRunning ? `${l.label} has not run for longer than it should` : `${l.label} failed ${String(l.consecutiveFailures)} times running`),
     ...undone,
@@ -208,7 +213,7 @@ export async function healthOf(founderId: string, now: Date = new Date()): Promi
   const ownerAction = owedNeedingHim[0]?.asksHim
     ?? blocked.find((b) => b.ownerAction)?.ownerAction ?? (workshopNeeds.length ? workshopNeeds[0] ?? null : null);
 
-  const state: EstateState = blocked.length ? 'blocked' : (loops.length || workshopNeeds.length || undone.length) ? 'degraded' : 'ok';
+  const state: EstateState = blocked.length ? 'blocked' : (loops.length || workshopNeeds.length || undone.length || door) ? 'degraded' : 'ok';
   // LAST HEALTHY IS NOT THE LAST TIME A JOB RETURNED. A pass that returned
   // having done nothing the day required is not a moment of health, so it
   // cannot be the answer to "when was everything last right". When the day's
@@ -218,7 +223,7 @@ export async function healthOf(founderId: string, now: Date = new Date()): Promi
     state,
     word: state === 'ok' ? 'Healthy'
       : state === 'blocked' ? `${String(blocked.length)} ${blocked.length === 1 ? 'pass' : 'passes'} blocked`
-        : `${String(loops.length + workshopNeeds.length + venueNeeds.length)} ${loops.length + workshopNeeds.length + venueNeeds.length === 1 ? 'thing needs' : 'things need'} looking at`,
+        : `${String(loops.length + workshopNeeds.length + venueNeeds.length + (door ? 1 : 0))} ${loops.length + workshopNeeds.length + venueNeeds.length + (door ? 1 : 0) === 1 ? 'thing needs' : 'things need'} looking at`,
     failed,
     recovering: state === 'ok' ? 'nothing to recover' : ownerAction ? 'stuck' : 'automatically',
     dataLoss: 'none',
@@ -311,17 +316,33 @@ export async function howFoundryIsRunning(founderId: string, now: Date = new Dat
     // Not running at all outranks failing: a routine that throws is at least
     // being scheduled.
     .sort((a, b) => Number(b.stoppedRunning) - Number(a.stoppedRunning) || b.consecutiveFailures - a.consecutiveFailures);
+  // THE MODEL DOOR, read from the one canonical reading Controls uses, so a
+  // routine failing because the door is down names the door (F-DOOR-2). A
+  // failing routine names it in its own sentence below (doorBehindFailure);
+  // with no routine failing yet, the door down is itself the blocker.
+  const { modelDoorDown } = await import('../ai/model-door.js');
+  const doorDown = await modelDoorDown();
   if (stopped.length > 0) {
     const l = stopped[0]!;
     const what = l.label.charAt(0).toUpperCase() + l.label.slice(1);
     const how = l.stoppedRunning
       ? 'has not run when it should have'
       : `has failed ${String(l.consecutiveFailures)} time${l.consecutiveFailures === 1 ? '' : 's'} running`;
+    // THE DOOR, NOT THE ROUTINE (remediation 1.5): when the model door is what
+    // failed, say so in its own words — what he would fix is the credit or the
+    // key, not the forge.
+    const { doorBehindFailure } = await import('../ai/model-door.js');
+    const door = l.stoppedRunning ? null : await doorBehindFailure(l.lastErrorName);
     return {
       state: 'stopped', word: 'Stopped',
-      sentence: `Foundry hasn't completed its scheduled work. ${what} ${how}; its last successful run was ${since(l.lastSuccessAt, now)}.`,
+      sentence: `Foundry hasn't completed its scheduled work. ${what} ${how}; its last successful run was ${since(l.lastSuccessAt, now)}.`
+        + (door ? ` That is because ${door}.` : ''),
       lastPassAt, stoppedLoop: { jobName: l.jobName, label: l.label, lastSuccessAt: l.lastSuccessAt },
     };
+  }
+  if (doorDown) {
+    return { state: 'blocked', word: 'Blocked', lastPassAt, stoppedLoop: null,
+      sentence: `Foundry is running, but ${doorDown}.` };
   }
 
   // A FRESH INSTITUTION HAS NOTHING TO REPORT YET, and says so rather than

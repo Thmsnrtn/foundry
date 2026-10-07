@@ -111,6 +111,26 @@ export async function waitingOn(founderId: string): Promise<AttentionItem[]> {
       });
     }
   }
+  // DESIGNS THE FORGE COULD NOT SEAL, AS ONE ITEM (F1.5). Each is a test
+  // nothing will run until its facts change or he says; N of them are one
+  // question — take them up again, or retire them — not N.
+  const { designsWaiting, DESIGNS_WAITING } = await import('../venture/forge-deliberation.js');
+  const waitingDesigns = await designsWaiting(founderId);
+  if (waitingDesigns.length) {
+    const reasons = new Map<string, number>();
+    for (const d of waitingDesigns) { const first = d.because.split('; ')[0]!; reasons.set(first, (reasons.get(first) ?? 0) + 1); }
+    const why = [...reasons].sort((a, b) => b[1] - a[1]).map(([r, k]) => (waitingDesigns.length > 1 ? `${String(k)}: ${r}` : r));
+    const asked = waitingDesigns.filter((d) => d.rerunAskedAt !== null).length;
+    tests.push({
+      kind: 'experiment', id: DESIGNS_WAITING, productId: '', companyName: 'The forge',
+      summary: `${String(waitingDesigns.length)} ${waitingDesigns.length === 1 ? 'design is' : 'designs are'} waiting and cannot be let in`,
+      detail: `Why: ${why.join('; ')}.${asked ? ` You asked for ${asked === waitingDesigns.length ? 'them' : `${String(asked)} of them`} to be taken up again; the next forge pass does it.` : ''}`,
+      ...(waitingDesigns.length > 1 ? { points: waitingDesigns.map((d) => `${d.whatWeDo}: ${d.because}`) } : {}),
+      yes: { label: 'Take them up again', action: '/foundry/forge/designs-waiting/reconsider' },
+      no: { label: 'Retire them', action: '/foundry/forge/designs-waiting/retire' },
+      why: null, href: '/foundry/experiments',
+    });
+  }
   // THE WORKSHOP NEEDS HIM when something only he can supply is missing or
   // the world stopped carrying what was put up. One item, one place to go.
   const workshop: AttentionItem[] = [];

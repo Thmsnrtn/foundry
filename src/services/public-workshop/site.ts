@@ -87,7 +87,7 @@ fieldset{border:1px solid var(--line);border-radius:10px;margin:1rem 0;padding:.
 label.choice{font-weight:400;display:flex;gap:.6rem;align-items:flex-start;min-height:44px;padding:.4rem 0}
 textarea{width:100%;font:inherit;padding:.7rem .8rem;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);margin:.4rem 0 .8rem}input[type=email]{width:100%;font:inherit;padding:.7rem .8rem;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);margin:.4rem 0 .8rem}
 button{font:inherit}footer{border-top:1px solid var(--line);padding:1.5rem 1.25rem 3rem;color:var(--soft);font-size:.9rem}
-footer p{margin:.3rem 0}`;
+footer p{margin:.3rem 0}footer a{display:inline-block;padding:.4rem 0}`;
 
 function shell(f: PublicWorkshopFacts, title: string, current: string, body: string, description: string, at: { path: string; head?: string }): string {
   // The paths stay what they are; what a visitor reads is what a person calls it.

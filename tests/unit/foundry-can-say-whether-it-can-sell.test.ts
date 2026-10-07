@@ -97,17 +97,27 @@ describe('can it sell on its own: blockers stop it, costs leave minutes with the
   it('without the owner\'s per-sale-minutes decision or a charter, it cannot', async () => {
     const r = canSellOnItsOwn(await productionFacts(OWNER, { STRIPE_SECRET_KEY: 'x', STRIPE_WEBHOOK_SECRET: SECRET_VALUE }));
     expect(r.yes).toBe(false);
-    expect(r.blockers.join(' ')).toMatch(/allow offers that still take some of your minutes/);
+    // The per-sale-minutes decision is named, once: readiness's own placement
+    // refusal says it when it applies, and the generic sentence otherwise
+    // (reconciled 7 October 2026; the two were said side by side).
+    const minutes = r.blockers.filter((b) => /allow offers that still take some of your minutes|front loaded attention/.test(b));
+    expect(minutes).toHaveLength(1);
     expect(r.blockers.join(' ')).toMatch(/no charter is signed/);
   });
 
-  it('with the owner\'s own allowance, a live payment route and a charter with room, it can; the minutes left are named', async () => {
+  // REWRITTEN BY STAGE 1 F1.6 (was: "...it can"). This owner has no Workshop
+  // and no sending, and `readiness` refuses every forge-made test for both, so
+  // the old "yes" here was the lie F1.6 fixed. What is left in the way is
+  // exactly those two readiness gates, in readiness's words; the "yes" with
+  // every gate mended is proved in can-it-sell-says-no-whenever-readiness-would.
+  it('with the owner\'s own allowance, a live payment route and a charter with room, only what readiness also requires stands in the way; the minutes left are named', async () => {
     const { supersedeOriginationPolicy } = await import('../../src/services/venture/legal-surface.js');
     await supersedeOriginationPolicy({ founderId: OWNER, requirement: 'front_loaded_attention', treatment: 'prefer', why: 'The owner allowed it (PENDING 32).', by: `founder:${OWNER}` });
     const { signCharter } = await import('../../src/services/institution/charter.js');
     await signCharter({ founderId: OWNER, testsTotalCents: 10_000, probesInFlight: 3, cognitionCentsPerDay: 300, days: 90, publicVoice: 'Apex Micro', statement: 'A quarter.' });
     const r = canSellOnItsOwn(await productionFacts(OWNER, { STRIPE_SECRET_KEY: 'x', STRIPE_WEBHOOK_SECRET: SECRET_VALUE }));
-    expect(r).toMatchObject({ yes: true, blockers: [] });
+    expect(r.yes).toBe(false);
+    expect(r.blockers).toEqual(['there is no public Workshop to carry the page', expect.stringMatching(/^email sending is not connected: /)]);
     expect(r.costs.join(' ')).toMatch(/every refund and cancellation is yours/);
     expect(r.costs.join(' ')).toMatch(/every buyer email is yours/);
     const on = canSellOnItsOwn(await productionFacts(OWNER, { STRIPE_SECRET_KEY: 'x', STRIPE_WEBHOOK_SECRET: SECRET_VALUE, FOUNDRY_ENABLE_MONEY_TOOLS: 'true' }));

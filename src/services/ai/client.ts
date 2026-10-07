@@ -204,11 +204,171 @@ export class ModelDoorError extends Error {
   }
 }
 
+/**
+ * THE DOOR IS DOWN, AND NOT ASKED AGAIN YET (remediation 1.4). A typed refusal
+ * made before any money is reserved or any request sent: a hung or failing
+ * door used to be waited on three times per call, by every call, so one bad
+ * morning could hold the forge for tens of minutes. A `ModelDoorError`, so
+ * every caller that lets the door's failure through lets this through too.
+ */
+export class ModelDoorClosed extends ModelDoorError {
+  readonly until: Date;
+  constructor(failures: number, until: Date) {
+    super(`the model door failed ${String(failures)} times in a row; not asked again until ${until.toISOString().slice(11, 16)} UTC`, 503);
+    this.name = 'ModelDoorClosed';
+    this.until = until;
+  }
+}
+
+// ─── The door breaker (remediation 1.4) ────────────────────────────────────
+//
+// After DOOR_TRIPS_AFTER consecutive failed attempts at the door, each within
+// DOOR_WINDOW_MS of the last, no call is made for DOOR_COOLDOWN_MS. When the
+// cooldown ends ONE call is let through as a probe: an answer closes the
+// breaker, a failure opens it again at once. In memory, on purpose: this is
+// one process's view of a door it shares with nobody, and a restart is a new
+// view that should ask. `productionFacts` reads it through `modelDoorBreaker`.
+export const DOOR_TRIPS_AFTER = 3;
+const DOOR_WINDOW_MS = 10 * 60_000;
+export const DOOR_COOLDOWN_MS = 10 * 60_000;
+const door = { consecutive: 0, lastFailureAt: 0, openUntil: 0, probing: false, probeStartedAt: 0 };
+/** How long one probe may hold the door before another call may try (two of the longest attempts). */
+const PROBE_HOLD_MS = 4 * 60_000;
+
+/**
+ * WHETHER A FAILURE IS THE DOOR'S (remediation audit, 6 October 2026). A 400
+ * for one request — a prompt too long, a malformed body — is that request's
+ * fault, and counting three of them as "the door is down" shut every caller
+ * out for ten minutes and told the owner to check the credit and the key. The
+ * door is down when it does not answer (no status: a timeout, the network, an
+ * empty completion), errs (5xx), is rate limiting (429), or refuses the key or
+ * the credit (401, 402).
+ */
+function isTheDoors(status: number | undefined): boolean {
+  return status === undefined || status >= 500 || status === 429 || status === 408 || status === 401 || status === 402;
+}
+
+/** What the breaker says now: closed, or open until a moment, after how many failures. */
+export function modelDoorBreaker(now = Date.now()): { open: boolean; until: Date | null; consecutiveFailures: number } {
+  return { open: door.openUntil > now, until: door.openUntil > now ? new Date(door.openUntil) : null, consecutiveFailures: door.consecutive };
+}
+
+/** Test seam: a later morning, after the cooldown. Never called by the application. */
+export function forgetModelDoorFailures(): void {
+  door.consecutive = 0; door.lastFailureAt = 0; door.openUntil = 0; door.probing = false; door.probeStartedAt = 0;
+}
+
+/** Refuses a call while the door is known to be down. True when this call is
+ *  the probe, which the caller must hand back if it fails before the door. */
+function refuseIfDoorClosed(now = Date.now()): boolean {
+  if (door.openUntil > now) throw new ModelDoorClosed(door.consecutive, new Date(door.openUntil));
+  // ONE PROBE, NOT EVERY CALLER IN THE SAME INSTANT: while the probe is out,
+  // the door stays closed to everyone else (until it answers, fails, or has
+  // held longer than any attempt could take).
+  if (door.probing && now - door.probeStartedAt < PROBE_HOLD_MS) {
+    throw new ModelDoorClosed(door.consecutive, new Date(door.probeStartedAt + PROBE_HOLD_MS));
+  }
+  // The cooldown is over: this call is the probe, and the next failure reopens.
+  if (door.openUntil !== 0 || door.probing) { door.probing = true; door.probeStartedAt = now; door.openUntil = 0; return true; }
+  return false;
+}
+
+/**
+ * A PROBE THAT NEVER REACHED THE DOOR TESTED NOTHING (second remediation
+ * audit). The key, the owner and the spend cap are read after the probe is
+ * claimed; a refusal there used to leave the door held for four minutes, every
+ * caller told the door was down although nobody had asked it. The next call is
+ * the probe instead.
+ */
+function handBackProbe(): void {
+  if (door.probing) door.probeStartedAt = 0;
+}
+
+/** Whatever happens before the door is asked, a claimed probe is handed back if it throws. */
+async function beforeTheDoor<T>(probe: boolean, work: () => Promise<T>): Promise<T> {
+  try { return await work(); } catch (err) { if (probe) handBackProbe(); throw err; }
+}
+
+function doorAnswered(): void {
+  door.consecutive = 0; door.lastFailureAt = 0; door.openUntil = 0; door.probing = false; door.probeStartedAt = 0;
+}
+
+/**
+ * The door refused one request as that request's fault: it is up. But a
+ * refusal of a call sent before the breaker opened says nothing about the
+ * failures that opened it since, so an open breaker stays open (second audit).
+ * A probe's refusal does close it: a probe is sent with the breaker shut.
+ */
+function doorRefusedTheRequest(now = Date.now()): void {
+  if (door.openUntil > now) return;
+  doorAnswered();
+}
+
+/**
+ * What one failed attempt tells the breaker: the door's failure counts, the
+ * request's refusal does not. Both call paths use this; it is exported so the
+ * breaker's arithmetic is tested through the function the calls use. True
+ * when the breaker is now open.
+ */
+export function doorHeard(status: number | undefined, now = Date.now()): boolean {
+  if (isTheDoors(status)) return doorFailed(now);
+  doorRefusedTheRequest(now);
+  return false;
+}
+
+/** One failed attempt at the door. True when the breaker is now open. */
+function doorFailed(now = Date.now()): boolean {
+  door.consecutive = now - door.lastFailureAt <= DOOR_WINDOW_MS ? door.consecutive + 1 : 1;
+  door.lastFailureAt = now;
+  if (door.probing || door.consecutive >= DOOR_TRIPS_AFTER) {
+    door.openUntil = now + DOOR_COOLDOWN_MS;
+    door.probing = false;
+    return true;
+  }
+  return false;
+}
+
+/**
+ * HOW LONG ONE ATTEMPT MAY WAIT, BY TIER (remediation 1.4). One 120 s wait for
+ * every model meant a hung door cost a Haiku call as much as an Opus one. A
+ * deployment's AI_TIMEOUT_MS still overrides every tier.
+ */
+export function attemptTimeoutMs(model: string, env: NodeJS.ProcessEnv = process.env): number {
+  const set = Number.parseInt(env.AI_TIMEOUT_MS ?? '', 10);
+  if (Number.isFinite(set) && set > 0) return set;
+  const m = model.toLowerCase();
+  if (m.includes('haiku')) return 30_000;
+  if (m.includes('sonnet')) return 75_000;
+  return 120_000;
+}
+
+/**
+ * HOW LONG ONE WHOLE CALL MAY TAKE, BY TIER — every attempt and every backoff
+ * together (Stage 1 F1.4, kept when the two model-door fixes were reconciled).
+ * The per-attempt wait alone still let three Opus attempts hold one call for
+ * six minutes before the breaker had heard enough to open. No attempt starts,
+ * and no backoff waits, past the call's deadline; the last attempt's wait is
+ * cut to what is left. A deployment's AI_CALL_BUDGET_MS overrides every tier.
+ */
+export function callBudgetMs(model: string, env: NodeJS.ProcessEnv = process.env): number {
+  const set = Number.parseInt(env.AI_CALL_BUDGET_MS ?? '', 10);
+  if (Number.isFinite(set) && set > 0) return set;
+  const m = model.toLowerCase();
+  if (m.includes('haiku')) return 60_000;
+  if (m.includes('sonnet')) return 150_000;
+  return 180_000;
+}
+
 /** A 200 that carries an error, or no completion, is a failure and not an empty answer. */
 function noCompletion(data: OpenRouterResponse): ModelDoorError | null {
   const e = (data as unknown as { error?: { message?: string; code?: number } }).error;
   if (e || !Array.isArray(data.choices) || data.choices.length === 0) {
-    return new ModelDoorError(`OpenRouter answered with no completion${e?.message ? `: ${e.message}` : ''}`, typeof e?.code === 'number' && e.code >= 500 ? e.code : 502);
+    // An error the body names as the request's own (a 4xx other than a timeout
+    // or a rate limit: a prompt too long) keeps its code, so it is neither
+    // retried nor counted against the door; anything else is the door's.
+    const code = typeof e?.code === 'number' ? e.code : null;
+    const theRequests = code !== null && code >= 400 && code < 500 && code !== 408 && code !== 429;
+    return new ModelDoorError(`OpenRouter answered with no completion${e?.message ? `: ${e.message}` : ''}`, theRequests || (code !== null && code >= 500) ? code : 502);
   }
   return null;
 }
@@ -374,7 +534,7 @@ export async function isCostCeilingReached(productId?: string): Promise<boolean>
 }
 
 // ─── Timeout + Retry ─────────────────────────────────────────────────────────
-const AI_TIMEOUT_MS = parseInt(process.env.AI_TIMEOUT_MS ?? '120000', 10);
+// Each attempt's wait is `attemptTimeoutMs(model)`, read per call.
 const MAX_RETRIES = 2;
 const RETRY_BASE_MS = 1000;
 
@@ -451,18 +611,29 @@ export async function callClaude(
   // full authorized amount.
   await refuseIfNotEntitled(productId);
   refuseIfItChangesNothing(subjectWork(config.subject));
-  const apiKey = getApiKey();
+  // A DOOR KNOWN TO BE DOWN IS NOT ASKED, and nothing is reserved for it.
+  const probe = refuseIfDoorClosed();
+  const { apiKey, reservation } = await beforeTheDoor(probe, async () => ({
+    apiKey: getApiKey(),
+    reservation: await authorizeSpend(
+      productId, config.model, `${config.systemPrompt}\n${config.userPrompt}`, config.maxTokens,
+      subjectPurpose(config.subject), subjectWork(config.subject),
+    ),
+  }));
   const baseUrl = getBaseUrl();
-  const reservation = await authorizeSpend(
-    productId, config.model, `${config.systemPrompt}\n${config.userPrompt}`, config.maxTokens,
-    subjectPurpose(config.subject), subjectWork(config.subject),
-  );
   const startedAt = Date.now();
   let lastError: Error | null = null;
+  const waitMs = attemptTimeoutMs(config.model);
+  const budgetMs = callBudgetMs(config.model);
+  const deadline = startedAt + budgetMs;
+  let attempts = 0;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    attempts += 1;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), Math.min(waitMs, remaining));
 
     try {
       const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -496,6 +667,7 @@ export async function callClaude(
       const empty = noCompletion(data);
       if (empty) throw empty;
       const textContent = data.choices?.[0]?.message?.content ?? '';
+      doorAnswered();
 
       await settleSpend(reservation, computeCostCents(
         config.model, data.usage?.prompt_tokens ?? 0, data.usage?.completion_tokens ?? 0,
@@ -526,9 +698,10 @@ export async function callClaude(
     } catch (err) {
       clearTimeout(timeout);
       lastError = err instanceof Error ? err : new Error(String(err));
-
       const status = (err as unknown as Record<string, unknown>)?.status as number | undefined;
-      if (status && status < 500 && status !== 429) {
+      // The door answered this request with a refusal of it: the door is up.
+      const tripped = doorHeard(status);
+      if (status && status < 500 && status !== 429 && status !== 408) {
         await finishReservation(reservation, { kind: 'released' });
         log.error('ai_call.failed_non_retryable', lastError, {
           model: config.model,
@@ -538,9 +711,13 @@ export async function callClaude(
         reportError(lastError, { source: 'ai_client', productId, meta: { status } });
         throw asDoorError(lastError, 'the model door refused');
       }
+      // THE BREAKER OPENED ON THIS ATTEMPT: no more waiting on this call either.
+      if (tripped) break;
 
       if (attempt < MAX_RETRIES) {
         const delay = RETRY_BASE_MS * Math.pow(2, attempt) * (0.5 + Math.random() * 0.5);
+        // No backoff past the call's deadline: waiting to give up is still waiting.
+        if (Date.now() + delay >= deadline) break;
         log.warn('ai_call.retry', {
           model: config.model,
           productId: config.productId,
@@ -557,11 +734,12 @@ export async function callClaude(
   log.error('ai_call.exhausted', lastError, {
     model: config.model,
     productId: config.productId,
-    attempts: MAX_RETRIES + 1,
+    attempts,
+    budgetMs,
   });
   await finishReservation(reservation, { kind: 'ambiguous' });
-  reportError(lastError, { source: 'ai_client', productId: config.productId, meta: { attempts: MAX_RETRIES + 1 } });
-  throw asDoorError(lastError, 'AI call failed after retries');
+  reportError(lastError, { source: 'ai_client', productId: config.productId, meta: { attempts } });
+  throw asDoorError(lastError, `AI call failed after ${String(attempts)} attempt${attempts === 1 ? '' : 's'} within ${String(budgetMs)} ms`);
 }
 
 /**
@@ -615,14 +793,18 @@ export async function callClaudeMultiTurn(
   const apiKey = getApiKey();
   const baseUrl = getBaseUrl();
   const model = useOpus ? MODELS.OPUS : MODELS.SONNET;
-  const reservation = await authorizeSpend(
+  const probe = refuseIfDoorClosed();
+  const reservation = await beforeTheDoor(probe, () => authorizeSpend(
     productId, model, [systemPrompt, ...messages.map((m) => `${m.role}:${m.content}`)].join('\n'), maxTokens,
-  );
+  ));
   let lastError: Error | null = null;
+  const deadline = Date.now() + callBudgetMs(model);
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), Math.min(attemptTimeoutMs(model), remaining));
 
     try {
       const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -656,6 +838,7 @@ export async function callClaudeMultiTurn(
       const empty = noCompletion(data);
       if (empty) throw empty;
       const textContent = data.choices?.[0]?.message?.content ?? '';
+      doorAnswered();
 
       await settleSpend(reservation, computeCostCents(
         model, data.usage?.prompt_tokens ?? 0, data.usage?.completion_tokens ?? 0,
@@ -676,12 +859,15 @@ export async function callClaudeMultiTurn(
       clearTimeout(timeout);
       lastError = err instanceof Error ? err : new Error(String(err));
       const status = (err as unknown as Record<string, unknown>)?.status as number | undefined;
-      if (status && status < 500 && status !== 429) {
+      const tripped = doorHeard(status);
+      if (status && status < 500 && status !== 429 && status !== 408) {
         await finishReservation(reservation, { kind: 'released' });
         throw asDoorError(lastError, 'the model door refused');
       }
+      if (tripped) break;
       if (attempt < MAX_RETRIES) {
         const delay = RETRY_BASE_MS * Math.pow(2, attempt) * (0.5 + Math.random() * 0.5);
+        if (Date.now() + delay >= deadline) break;
         await new Promise((r) => setTimeout(r, delay));
       }
     }

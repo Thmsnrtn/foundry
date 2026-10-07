@@ -251,7 +251,7 @@ settingsRoutes.get('/settings', async (c) => {
             <span class="s">The same two acts, across every company you own.</span></span>
           <span class="ev-act-row">
             <a href="/settings/export-all" class="btn btn-ghost btn-sm"
-              aria-label="Export all products data">Copy all</a>
+              aria-label="Copy all: every company's data">Copy all</a>
             <a href="/settings/delete-all-products" class="btn btn-ghost btn-sm"
               style="color:var(--bad);" aria-label="Delete all products">Delete all</a>
           </span>
@@ -316,7 +316,7 @@ settingsRoutes.get('/settings', async (c) => {
         <form method="POST" action="/settings/cadence-mode" style="display:flex;align-items:center;">
           <input type="hidden" name="mode" value="${weekendMode ? 'standard' : 'weekend'}" />
           <label class="toggle" title="${weekendMode ? 'Back to the standard pace' : 'Slow Foundry to weekly'}">
-            <input type="checkbox" ${weekendMode ? 'checked' : ''} data-submits />
+            <input type="checkbox" ${weekendMode ? 'checked' : ''} data-submits aria-label="Weekend pace" />
             <span class="toggle-track"></span>
             <span class="toggle-thumb"></span>
           </label>

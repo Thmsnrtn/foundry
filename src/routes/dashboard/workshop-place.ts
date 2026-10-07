@@ -15,7 +15,7 @@ import type { HtmlEscapedString } from 'hono/utils/html';
 import { page } from './foundry-shell.js';
 import type { Where } from './foundry-shell.js';
 import { requireInstitutionOwner } from '../../middleware/rbac.js';
-import { APEX_MICRO, establishPublicWorkshop, pauseNewEconomicActivity, publicPostalLines, publicWorkshopOf, resumeEconomicActivity, setAbout, setPostalAddress, WorkshopRefused } from '../../services/public-workshop/settings.js';
+import { APEX_MICRO, establishPublicWorkshop, pauseHistory, pauseNewEconomicActivity, publicPostalLines, publicWorkshopOf, resumeEconomicActivity, setAbout, setPostalAddress, WorkshopRefused } from '../../services/public-workshop/settings.js';
 import { heldFromPublishing, livePublications, previewExperimentPage, publishSite, verifySite } from '../../services/public-workshop/publication.js';
 import { projectRegistry } from '../../services/public-workshop/projection.js';
 import { cloudflareReceipts, connectWorkshopSending, outstandingObligations, standUpWorkshop, workshopHealth } from '../../services/public-workshop/infrastructure.js';
@@ -79,6 +79,7 @@ workshopRoutes.get('/foundry/public-workshop', async (c: any) => {
   // "and then what".
   const { howThisWouldEnd } = await import('../../services/institution/winding-down.js');
   const ending = await howThisWouldEnd(founderId);
+  const history = await pauseHistory(founderId);
   const receipts = await cloudflareReceipts(founderId, 25);
   const { continuationsFor } = await import('../../services/public-workshop/suppression.js');
   const answers = await continuationsFor(founderId, 50);
@@ -119,6 +120,10 @@ workshopRoutes.get('/foundry/public-workshop', async (c: any) => {
            half is what stopping does not finish, and an owner who has to find
            that out afterwards has been handed a surprise instead of a choice.
            The uncomfortable half leads, whatever else is true. */ ''}
+      ${history.length ? html`<h3>Stops and pauses on record</h3>
+      <ul>${history.map((h) => html`<li>${h.at.slice(0, 16).replace('T', ' ')} &mdash; ${h.kind === 'stopped' ? 'everything stopped' : h.kind === 'paused' ? 'new economic activity paused' : 'resumed'}${h.principal === `founder:${founderId}` ? ' by you' : h.principal ? ` by ${h.principal}` : ''}${h.kind === 'resumed'
+        ? `, after ${h.durationSeconds !== null && h.durationSeconds >= 86_400 ? `${String(Math.round(h.durationSeconds / 86_400))} days` : h.durationSeconds !== null && h.durationSeconds >= 3_600 ? `${String(Math.round(h.durationSeconds / 3_600))} hours` : `${String(Math.max(1, Math.round((h.durationSeconds ?? 0) / 60)))} minutes`}; ${String(h.waitingRecipients ?? 0)} approved recipient${h.waitingRecipients === 1 ? ' was' : 's were'} still waiting to be written to`
+        : h.reason ? `: ${h.reason}` : ''}.</li>`)}</ul>` : ''}
       <h3>If you stopped now</h3>
       <p>${ending.sentence}</p>
       ${ending.itCannotSettle.length ? html`<ul>${ending.itCannotSettle.map((l) => html`<li><strong>${l.what}</strong> &mdash; ${l.because}.</li>`)}</ul>` : ''}
@@ -170,7 +175,11 @@ workshopRoutes.get('/foundry/public-workshop', async (c: any) => {
       </details>`}
     </section>
 
-    <section class="know" id="identity"><h2>Identity</h2>
+    ${/* THE TERMS ONE TAP DOWN (remediation, 6 October 2026: 234 words on a
+         phone). The name the public reads is the summary; who else carries the owner's
+         name, the disclosure, the address and the spacing are inside, with
+         the two forms that change them. */ ''}
+    <section class="know" id="identity"><details class="fold"><summary><h2>Identity</h2><span class="gist">${w.publicName}${w.postalAddress ? '' : ' · no postal address yet'}</span></summary>
       <dl class="facts">
         <dt>Public name</dt><dd>${w.publicName}</dd>
         ${/* WHAT THE PUBLIC ACTUALLY READS, not what he typed. This used to ask
@@ -188,10 +197,31 @@ workshopRoutes.get('/foundry/public-workshop', async (c: any) => {
       </dl>
       <form method="POST" action="/foundry/public-workshop/postal" class="stack"><label>Postal address for commercial mail (a business or mailbox address, not your home) <textarea name="address" rows="4" placeholder="Street, Suite …&#10;Town, MA 0xxxx">${w.postalAddress ?? ''}</textarea></label><button class="btn" type="submit">Save</button></form>
       <form method="POST" action="/foundry/public-workshop/about" class="stack"><label>About you, for the public About page (only what you want published) <textarea name="about" rows="4">${w.about}</textarea></label><button class="btn" type="submit">Save</button></form>
-    </section>
+    </details></section>
 `;
   return c.html(page('Workshop', body, 'foundry', frame));
 });
+
+/**
+ * THE PUBLIC PAGE, SHOWN INSIDE FOUNDRY, POINTS AT THE PUBLIC SITE.
+ *
+ * The page's links are the public site's own — `/privacy`, `/contact`, `/` —
+ * and served from Foundry's origin they resolved to Foundry's pages: "privacy
+ * page" opened the owner's privacy settings, "Contact" a 404, the name their
+ * own front door. A base address sends them where a visitor's would go, in a
+ * new tab so the preview stays where it was left. And a preview submits
+ * nothing: the page's one form (continue to buy) is drawn and disabled, so
+ * looking cannot become a purchase on the real site. The published bytes are
+ * untouched; only what Foundry serves as the preview changes.
+ */
+export function asPreview(page: string, origin: string): string {
+  const esc = (v: string): string => v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  return page
+    .replace('<head>', `<head>\n<base href="${esc(origin)}/" target="_blank">\n<link rel="icon" href="data:,">`)
+    .replace(/<body>/, '<body>\n<p role="note" style="margin:0;padding:.6rem 1.25rem;background:var(--card);color:var(--ink);border-bottom:1px solid var(--line);font-size:.9rem">A preview, drawn now from the rows. Links open the public site in a new tab; nothing here can be sent.</p>')
+    .replace(/<button(?![^>]*\bdisabled\b)/g, '<button disabled')
+    .replace(/<input(?=[^>]*type="submit")(?![^>]*\bdisabled\b)/g, '<input disabled');
+}
 
 /** The page as it would be published, rendered now from the rows. */
 workshopRoutes.get('/foundry/public-workshop/preview/:experimentId', async (c: any) => {
@@ -202,7 +232,7 @@ workshopRoutes.get('/foundry/public-workshop/preview/:experimentId', async (c: a
   if (!own) return c.notFound();
   const preview = await previewExperimentPage(experimentId);
   if (!preview) return c.notFound();
-  return c.html(preview.html);
+  return c.html(asPreview(preview.html, preview.origin));
 });
 
 /**

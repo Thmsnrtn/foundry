@@ -652,6 +652,12 @@ CREATE TABLE chat_sessions (
   message_count INTEGER DEFAULT 0,
   status TEXT DEFAULT 'active'
 );
+CREATE TABLE claim_look_failures (
+  id TEXT PRIMARY KEY,
+  claim_id TEXT NOT NULL,
+  because TEXT NOT NULL,
+  failed_at TEXT NOT NULL
+);
 CREATE TABLE cloudflare_mutations (
   id                TEXT PRIMARY KEY,
   founder_id        TEXT NOT NULL REFERENCES founders(id),
@@ -1354,6 +1360,24 @@ CREATE TABLE epistemic_stances (
   not_the_same_as TEXT NOT NULL,
   sort_order   INTEGER NOT NULL
 );
+CREATE TABLE estate_pause_events (
+  id             TEXT PRIMARY KEY,
+  founder_id     TEXT NOT NULL REFERENCES founders(id),
+  kind           TEXT NOT NULL CHECK (kind IN ('stopped_everything', 'paused', 'resumed')),
+  principal      TEXT NOT NULL,
+  -- Stop and pause: the reason given. A resume carries the reason it ended.
+  reason         TEXT,
+  -- Stop: what it stopped, in words.
+  detail         TEXT,
+  -- Resume only: when the pause it ended began, how long it lasted, and how
+  -- many approved businesses were still unwritten when it ended.
+  paused_since   TEXT,
+  paused_seconds INTEGER CHECK (paused_seconds IS NULL OR paused_seconds >= 0),
+  unwritten      INTEGER CHECK (unwritten IS NULL OR unwritten >= 0),
+  at             TEXT NOT NULL DEFAULT (datetime('now')),
+  CHECK (kind = 'resumed' OR (reason IS NOT NULL AND paused_since IS NULL AND paused_seconds IS NULL AND unwritten IS NULL)),
+  CHECK (kind <> 'resumed' OR (paused_since IS NOT NULL AND paused_seconds IS NOT NULL AND unwritten IS NOT NULL))
+);
 CREATE TABLE etsy_mail_heard (
   id              TEXT PRIMARY KEY,
   founder_id      TEXT NOT NULL REFERENCES founders(id),
@@ -1635,6 +1659,11 @@ CREATE TABLE forge_refusals (
   stage TEXT NOT NULL CHECK (stage IN ('deliberate', 'make')),
   because TEXT NOT NULL,
   refused_at TEXT NOT NULL
+, facts TEXT);
+CREATE TABLE forge_rerun_asks (
+  id TEXT PRIMARY KEY,
+  experiment_id TEXT NOT NULL,
+  asked_at TEXT NOT NULL
 );
 CREATE TABLE founder_ai_profile (
   id TEXT PRIMARY KEY,
@@ -3868,7 +3897,7 @@ CREATE TABLE stripe_webhook_events (
   event_id TEXT PRIMARY KEY,
   event_type TEXT NOT NULL,
   processed_at DATETIME NOT NULL
-, livemode INTEGER);
+, livemode INTEGER, unmatched_because TEXT);
 CREATE TABLE structural_fact_kinds (
   fact                TEXT PRIMARY KEY,
   what_it_is          TEXT NOT NULL,
@@ -4559,6 +4588,7 @@ CREATE INDEX idx_chat_messages_session ON chat_messages(session_id, created_at);
 CREATE INDEX idx_chat_sessions_founder ON chat_sessions(founder_id);
 CREATE INDEX idx_chat_sessions_product ON chat_sessions(product_id, status);
 CREATE INDEX idx_checkpoints_product ON forecast_checkpoints(product_id, metric_name, checkpoint_date);
+CREATE INDEX idx_claim_look_failures_claim ON claim_look_failures(claim_id, failed_at);
 CREATE INDEX idx_cloudflare_mutations_resource ON cloudflare_mutations(founder_id, resource, recorded_at);
 CREATE INDEX idx_cognition_occasions_kind
   ON cognition_occasions(cognition, at DESC);
@@ -4638,6 +4668,7 @@ CREATE INDEX idx_effect_outcome_reports
   ON signal_events(product_id, source, created_at);
 CREATE INDEX idx_envelope_usage_lookup
   ON envelope_usage(product_id, scope, week_starting);
+CREATE INDEX idx_estate_pause_events_founder ON estate_pause_events(founder_id, at);
 CREATE INDEX idx_evidence_policy_live
   ON delegation_evidence_policy(founder_id, ceiling, superseded_at);
 CREATE INDEX idx_exec_queue_job ON execution_queue(job_type, status);
@@ -4666,6 +4697,7 @@ CREATE INDEX idx_feedback_type ON founder_feedback(feedback_type, created_at DES
 CREATE INDEX idx_fh_founder ON founder_health(founder_id);
 CREATE INDEX idx_fhs_founder_date ON founder_health_snapshots(founder_id, snapshot_date);
 CREATE INDEX idx_forge_refusals_experiment ON forge_refusals(experiment_id, stage, refused_at);
+CREATE INDEX idx_forge_rerun_asks_experiment ON forge_rerun_asks(experiment_id, asked_at);
 CREATE UNIQUE INDEX idx_founder_company_fact
   ON founder_evidence_requests(product_id,predicate) WHERE scope='company';
 CREATE UNIQUE INDEX idx_founder_evidence_request_identity
@@ -6033,6 +6065,11 @@ BEGIN SELECT RAISE(ABORT,'epistemic_stance:constitutional'); END;
 CREATE TRIGGER epistemic_stances_constitutional_update
 BEFORE UPDATE ON epistemic_stances
 BEGIN SELECT RAISE(ABORT,'epistemic_stance:constitutional'); END;
+CREATE TRIGGER estate_pause_events_are_kept
+BEFORE UPDATE ON estate_pause_events
+BEGIN
+  SELECT RAISE(ABORT, 'estate_pause_events: what the owner did is kept as it was');
+END;
 CREATE TRIGGER etsy_mail_heard_only_buyers_are_answered
 BEFORE UPDATE OF answered_at ON etsy_mail_heard
 WHEN NEW.answered_at IS NOT NULL AND NEW.kind <> 'buyer_message'

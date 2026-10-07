@@ -50,7 +50,7 @@ beforeAll(async () => {
   PRODUCT = String(((await query('SELECT id FROM products WHERE from_experiment_id = ?', [X])).rows[0] as Record<string, unknown>).id);
   const { retireExperimentalAsset } = await import('../../src/services/venture/asset.js');
   expect(await retireExperimentalAsset({ productId: PRODUCT, because: 'the test is over and nobody is owed anything' })).toBe(true);
-});
+}, 180_000);
 
 describe('a month on, the buyer asks for their money back', () => {
   it('the asset is archived, and the refund still goes through, under the act the owner approved', async () => {

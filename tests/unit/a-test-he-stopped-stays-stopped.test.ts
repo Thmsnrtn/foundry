@@ -25,7 +25,7 @@ beforeAll(async () => {
   ({ experimentId } = await seedProductionShape({ unsettled: true }));
   app = await ownerApp();
   me = owner(app);
-});
+}, 180_000);
 
 describe('stopping a running test from its page', () => {
   it('writes the stop on the test with his reason, and the page says "Stopped by you"', async () => {

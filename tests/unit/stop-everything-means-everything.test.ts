@@ -77,3 +77,35 @@ describe('one press', () => {
     expect(src).not.toMatch(/\bINSERT INTO|\bUPDATE\b/);
   });
 });
+
+describe('the record outlives the resume (F-PANIC-2)', () => {
+  // Stage 1 F1.3's assertions, rewritten onto remediation 1.3's record when the
+  // two fixes were reconciled: the record is `estate_pause_events` (kept rows,
+  // estate-wide, one per act), not one audit_log row per company.
+  it('one Stop is one act on record across three companies, nobody else\'s estate is touched, and Resume adds to the record rather than erasing it', async () => {
+    const { pauseHistory, resumeEconomicActivity, pauseNewEconomicActivity } = await import('../../src/services/public-workshop/settings.js');
+    const stops = (await query(`SELECT founder_id, principal, detail FROM estate_pause_events WHERE kind = 'stopped_everything'`, [])).rows as unknown as Array<Record<string, unknown>>;
+    expect(stops).toHaveLength(1);
+    expect(stops[0]).toMatchObject({ founder_id: OWNER, principal: `founder:${OWNER}` });
+    expect(String(stops[0]!.detail)).toMatch(/3 companies/);
+    expect(await pauseHistory(OTHER)).toEqual([]);
+
+    await resumeEconomicActivity(OWNER);
+    // A second resume with nothing paused writes nothing: the record says what happened, once.
+    await resumeEconomicActivity(OWNER);
+    const kinds = (await pauseHistory(OWNER)).map((h) => h.kind);
+    expect(kinds.filter((k) => k === 'resumed')).toHaveLength(1);
+    expect(kinds.filter((k) => k === 'stopped')).toHaveLength(1);
+    // The Stop's own pause is the Stop: it is not a second act on record.
+    expect(kinds.filter((k) => k === 'paused')).toHaveLength(0);
+
+    // A pause from the Workshop page alone is recorded too, with its reason.
+    await pauseNewEconomicActivity({ founderId: OWNER, reason: 'away for the weekend' });
+    const latest = (await pauseHistory(OWNER))[0]!;
+    expect(latest).toMatchObject({ kind: 'paused', principal: `founder:${OWNER}`, reason: 'away for the weekend' });
+    await resumeEconomicActivity(OWNER);
+    const resumed = (await pauseHistory(OWNER))[0]!;
+    expect(resumed).toMatchObject({ kind: 'resumed', principal: `founder:${OWNER}`, waitingRecipients: 0 });
+    expect(resumed.durationSeconds).toBeGreaterThanOrEqual(0);
+  });
+});

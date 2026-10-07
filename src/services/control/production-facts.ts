@@ -14,7 +14,15 @@
 // names what clears it and whose act that is.
 // =============================================================================
 
+import { modelDoorBlocker } from '../ai/model-door.js';
 import { query } from '../../db/client.js';
+import { CLAIM_LOOK_GIVES_UP_AFTER } from '../venture/market-evidence.js';
+import { SENDING_NOT_CONNECTED } from '../venture/hand.js';
+
+/** The claims the market-evidence routine has left: the ones its window leaves out, by the same test. */
+const CLAIMS_LEFT = `c.founder_id = ? AND c.evidence_mode = 'real' AND c.settled_as IS NULL
+          AND NOT EXISTS (SELECT 1 FROM market_observations o WHERE o.claim_id = c.id)
+          AND (SELECT COUNT(*) FROM claim_look_failures f WHERE f.claim_id = c.id) >= ?`;
 
 type Row = Record<string, unknown>;
 
@@ -46,6 +54,24 @@ export interface ProductionFacts {
   subscriptionsAllowed: boolean;
   /** Whether the model answers, and how long its credit lasts (R33). */
   modelDoor: import('../ai/model-door.js').ModelDoorFacts;
+  /** Payment events in the last thirty days that carried our tag and matched no test of ours (remediation 1.6). */
+  unmatchedPaymentEvents: Array<{ eventId: string; because: string; at: string }>;
+  /** Real market claims no source could read after four looks, now left (migration 389). */
+  claimsLeft?: Array<{ claimId: string; claim: string; because: string }>;
+  /** How many claims were left in all; `claimsLeft` shows the oldest ten. */
+  claimsLeftTotal?: number;
+  /**
+   * WHAT `readiness` WOULD REFUSE ANY FORGE-MADE TEST FOR, read through the
+   * same functions it uses (venture/hand.ts): what the Workshop lacks, whether
+   * sending is ready, and what the first-proof policy says of the offer the
+   * forge makes (a one-time brief, `briefFacts`), before it has an asset.
+   */
+  workshopLacks: string[];
+  sending: { status: string; detail: string };
+  placementRefused: string[];
+  /** Real offers on a page now, for tests still running; and designs ever made. */
+  onOffer?: number;
+  designed?: number;
 }
 
 export async function productionFacts(founderId: string, env: NodeJS.ProcessEnv = process.env): Promise<ProductionFacts> {
@@ -73,6 +99,11 @@ export async function productionFacts(founderId: string, env: NodeJS.ProcessEnv 
   const fla = (await originationPolicyFor(founderId)).find((p) => p.requirement === 'front_loaded_attention') ?? null;
   const { correspondenceMode } = await import('../public-workshop/correspondence.js');
   const { subscriptionsAllowed } = await import('./decisions.js');
+  const { placementRefusedFor, sendingReadiness, whatTheWorkshopLacks } = await import('../venture/hand.js');
+  const { publicWorkshopOf } = await import('../public-workshop/settings.js');
+  const { briefFacts } = await import('../venture/products/offer-composition.js');
+  const workshop = await publicWorkshopOf(founderId);
+  const sending = await sendingReadiness(founderId);
   return {
     secrets, paymentEvents,
     moneySwitchOn: env.FOUNDRY_ENABLE_MONEY_TOOLS === 'true',
@@ -82,6 +113,30 @@ export async function productionFacts(founderId: string, env: NodeJS.ProcessEnv 
     correspondence: await correspondenceMode(founderId),
     subscriptionsAllowed: (await subscriptionsAllowed(founderId)).allowed,
     modelDoor: await (await import('../ai/model-door.js')).modelDoorFacts(),
+    claimsLeft: ((await query(
+      `SELECT c.id AS claim_id, c.claim,
+              (SELECT f2.because FROM claim_look_failures f2 WHERE f2.claim_id = c.id ORDER BY f2.failed_at DESC, f2.rowid DESC LIMIT 1) AS because
+         FROM market_claims c
+        WHERE ${CLAIMS_LEFT}
+        ORDER BY c.formed_at, c.rowid LIMIT 10`, [founderId, CLAIM_LOOK_GIVES_UP_AFTER])).rows as unknown as Array<Record<string, unknown>>)
+      .map((r) => ({ claimId: String(r.claim_id), claim: String(r.claim), because: String(r.because ?? '') })),
+    claimsLeftTotal: Number(((await query(
+      `SELECT COUNT(*) AS n FROM market_claims c WHERE ${CLAIMS_LEFT}`, [founderId, CLAIM_LOOK_GIVES_UP_AFTER])).rows[0] as Record<string, unknown> | undefined)?.n ?? 0),
+    unmatchedPaymentEvents: ((await query(
+      `SELECT event_id, unmatched_because, processed_at FROM stripe_webhook_events
+        WHERE unmatched_because IS NOT NULL AND datetime(processed_at) >= datetime('now', '-30 days')
+        ORDER BY processed_at DESC LIMIT 10`, [])).rows as unknown as Row[])
+      .map((r) => ({ eventId: String(r.event_id), because: String(r.unmatched_because), at: String(r.processed_at) })),
+    workshopLacks: whatTheWorkshopLacks(workshop),
+    sending: { status: sending.status, detail: sending.detail },
+    // A forge test has no asset of its own until it is decided, so the
+    // offer's own facts are what readiness reads; so does this.
+    placementRefused: await placementRefusedFor(founderId, null, briefFacts()),
+    onOffer: Number(((await query(
+      `SELECT COUNT(*) AS n FROM experiment_exposures p JOIN venture_experiments x ON x.id = p.experiment_id
+        WHERE p.founder_id = ? AND p.evidence_mode = 'real' AND x.what_happened IS NULL AND x.retired_at IS NULL`, [founderId])).rows[0] as Row | undefined)?.n ?? 0),
+    designed: Number(((await query(
+      `SELECT COUNT(*) AS n FROM probe_designs WHERE founder_id = ?`, [founderId])).rows[0] as Row | undefined)?.n ?? 0),
   };
 }
 
@@ -90,30 +145,47 @@ export async function productionFacts(founderId: string, env: NodeJS.ProcessEnv 
  * reaching a buyer at all; costs let it sell but leave minutes per sale with
  * the owner. Each names what clears it. An empty `blockers` is the only "yes".
  */
-export function canSellOnItsOwn(f: ProductionFacts): { yes: boolean; blockers: string[]; costs: string[] } {
+export function canSellOnItsOwn(f: ProductionFacts): { yes: boolean; blockers: string[]; costs: string[]; nothingOnSale: string | null } {
   const blockers: string[] = [];
   const costs: string[] = [];
   if (!f.secrets.find((s) => s.name === 'STRIPE_SECRET_KEY')?.present) blockers.push('no payment provider is configured');
   if (f.paymentEvents.status === 'not_working') {
     blockers.push('nothing can hear a payment, so every priced offer is refused: add STRIPE_WEBHOOK_SECRET from the one Foundry endpoint in Stripe');
   }
-  if (!f.frontLoadedAttention || !f.frontLoadedAttention.ownersOwn || f.frontLoadedAttention.treatment === 'require' || f.frontLoadedAttention.treatment === 'refuse') {
+  // Said once: when readiness's own placement refusal (below) already names
+  // front-loaded attention, that sentence is the blocker, not this one too.
+  const placementNamesIt = f.placementRefused.some((why) => /front.loaded.attention/i.test(why));
+  if (!placementNamesIt && (!f.frontLoadedAttention || !f.frontLoadedAttention.ownersOwn || f.frontLoadedAttention.treatment === 'require' || f.frontLoadedAttention.treatment === 'refuse')) {
     blockers.push('no forge-made offer may be placed until you allow offers that still take some of your minutes per sale (Your decisions)');
   }
+  // WHAT READINESS WOULD REFUSE EVERY FORGE-MADE TEST FOR, in its own words
+  // (venture/hand.ts): a "yes" here while readiness refuses would be a lie.
+  blockers.push(...f.workshopLacks);
+  if (f.sending.status !== 'ready') blockers.push(`${SENDING_NOT_CONNECTED}: ${f.sending.detail}`);
+  for (const why of f.placementRefused) blockers.push(`placing it would be refused: ${why}`);
   if (!f.charter) blockers.push('no charter is signed, so nothing is let in without you');
   else if (f.charter.daysLeft < 16) blockers.push(`the charter has ${String(f.charter.daysLeft)} days left, too few to read a new test; renew it`);
   else if (f.inFlight >= f.charter.probesInFlight) blockers.push(`all ${String(f.charter.probesInFlight)} places are taken by tests still running`);
   // THE MODEL DOOR (R33): nothing new is found or designed without it.
   const m = f.modelDoor;
-  if (m.failedToday > 0 && m.answeredToday === 0) {
-    blockers.push(`the model door failed ${String(m.failedToday)} time${m.failedToday === 1 ? '' : 's'} today and answered nothing, so nothing new can be found or designed: check the OpenRouter credit and key`);
-  }
+  const doorDown = modelDoorBlocker(m);
+  if (doorDown) blockers.push(doorDown);
   if (m.daysLeft !== null && m.daysLeft < 3) blockers.push(`about ${String(m.daysLeft)} days of model credit left at the last week's spend: add OpenRouter credit`);
   else if (m.daysLeft !== null && m.daysLeft < 14) costs.push(`about ${String(m.daysLeft)} days of model credit left at the last week's spend; fourteen is the margin`);
   if (m.readOn === null) costs.push(`the model credit has not been read yet${m.lastReadFailed ? `: ${m.lastReadFailed}` : '; it is read once a day'}`);
+  const unmatched = f.unmatchedPaymentEvents ?? [];
+  if (unmatched.length > 0) {
+    costs.push(`${String(unmatched.length)} payment event${unmatched.length === 1 ? '' : 's'} in the last thirty days carried Foundry's tag and matched no test (the latest: ${unmatched[0]!.because}); any payment among them is still read from Stripe's own list each day`);
+  }
   if (f.paymentEvents.status === 'unknown') costs.push(`the payment route is not yet proved live: ${f.paymentEvents.detail}`);
   if (!f.moneySwitchOn) costs.push('every refund and cancellation is yours in Stripe until the money switch is on');
   if (f.correspondence === 'off') costs.push('every buyer email is yours until correspondence is at least "drafts"');
   if (f.unplaced.length > 0) costs.push(`${String(f.unplaced.length)} approved test${f.unplaced.length === 1 ? '' : 's'} never reached a page; stop or re-allow ${f.unplaced.length === 1 ? 'it' : 'them'}`);
-  return { yes: blockers.length === 0, blockers, costs };
+  // READY IS NOT SELLING: with every door open but nothing on a page, a bare
+  // "yes" reads to the owner as "it is selling". Say what is actually there.
+  const nothingOnSale = (f.onOffer ?? 0) > 0 ? null
+    : (f.designed ?? 0) === 0
+      ? 'nothing is on sale yet: the forge has not designed anything'
+      : `nothing is on sale yet: the forge has designed ${String(f.designed)} but none has reached a page`;
+  return { yes: blockers.length === 0, blockers, costs, nothingOnSale };
 }

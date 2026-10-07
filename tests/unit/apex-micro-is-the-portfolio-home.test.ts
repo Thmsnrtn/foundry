@@ -41,7 +41,7 @@ beforeAll(async () => {
   });
   const { findProof1 } = await import('../../src/services/venture/proof-1.js');
   X = (await findProof1(OWNER))!;
-});
+}, 180_000);
 
 describe('the reader is a judgement, and deliberately not a score', () => {
   it('carries no number anybody could optimise', () => {

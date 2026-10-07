@@ -13,7 +13,7 @@
 // than asking him nothing.
 // =============================================================================
 
-import { html, raw } from 'hono/html';
+import { html } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import {
   type CannotSay, type Consequence, effectInWords, isCannotSay, labelFor,
@@ -79,14 +79,13 @@ export function renderDecision(input: {
   }
 
   const not = c.doesNotAuthorise.length === 0 ? '' : html`<p class="quiet">Approving
-    this does not authorise ${raw(c.doesNotAuthorise.join(', '))}. Each of those is
+    this does not authorise ${c.doesNotAuthorise.join(', ')}. Each of those is
     a decision of its own, and you would be asked.</p>`;
 
   return html`<div class="decision">
     ${facts}
     <form method="POST" action="${input.action}">
-      ${raw(Object.entries(input.hidden)
-    .map(([k, v]) => `<input type="hidden" name="${k}" value="${v}" />`).join(''))}
+      ${Object.entries(input.hidden).map(([k, v]) => html`<input type="hidden" name="${k}" value="${v}" />`)}
       <button class="${input.primary ? 'btn go' : 'btn'}" type="submit">${labelFor(c)}</button>
     </form>
     ${not}

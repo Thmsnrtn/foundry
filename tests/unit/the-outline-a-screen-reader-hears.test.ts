@@ -45,6 +45,11 @@ beforeAll(async () => {
   const { charterRoutes } = await import('../../src/routes/dashboard/charter-place.js');
   app.route('/', experimentRoutes);
   app.route('/', charterRoutes);
+  // The two the owner walk found with no h1 at all (remediation, 6 October 2026).
+  const { inboxRoutes } = await import('../../src/routes/dashboard/inbox-place.js');
+  const { moneyRoutes } = await import('../../src/routes/dashboard/money-place.js');
+  app.route('/', inboxRoutes);
+  app.route('/', moneyRoutes);
   await app.request('/foundry/companies', { method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ name: 'Tidewater' }).toString() });
@@ -53,7 +58,8 @@ beforeAll(async () => {
 });
 
 describe('every place the owner can be', () => {
-  const places = ['/foundry', '/foundry/companies', '/foundry/controls', '/foundry/charter', '/foundry/experiments/history'];
+  const places = ['/foundry', '/foundry/companies', '/foundry/controls', '/foundry/charter', '/foundry/experiments/history',
+    '/foundry/etsy-messages', '/foundry/money/research'];
   for (const path of places) {
     it(`${path} descends one level at a time`, async () => {
       const levels = outline(await (await app.request(path)).text());

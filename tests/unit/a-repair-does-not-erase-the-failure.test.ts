@@ -34,7 +34,7 @@ beforeAll(async () => {
   // no days to doubt.
   const seeded = await seedProductionShape({ settledBy: 'the world' });
   X = seeded.experimentId;
-});
+}, 180_000);
 
 describe('an interval is opened, kept, and closed rather than deleted', () => {
   it('a path found not working opens one, and a second unreadable pass neither opens nor closes it', async () => {

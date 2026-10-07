@@ -15,6 +15,7 @@
 
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
+import { modelDoorBreaker } from './client.js';
 
 const OPENROUTER = 'https://openrouter.ai/api/v1';
 
@@ -67,6 +68,25 @@ export interface ModelDoorFacts {
   daysLeft: number | null;
   /** The last reading, when it failed, and why. */
   lastReadFailed: string | null;
+  /** When the breaker has stopped asking the door, until when (ISO), else null (remediation 1.4). */
+  closedUntil: string | null;
+}
+
+/**
+ * THE ONE SENTENCE FOR A DOOR THAT IS DOWN (remediation 1.5), or null when it
+ * is not. Controls, Home's pulse and the absence page all read this, so the
+ * owner is told the same thing — and told what he would fix, the credit and
+ * the key, rather than that a routine failed. Its words are the code's.
+ */
+export function modelDoorBlocker(m: ModelDoorFacts): string | null {
+  const stopped = m.closedUntil ? `; I have stopped asking it until ${m.closedUntil.slice(11, 16)} UTC` : '';
+  if (m.failedToday > 0 && m.answeredToday === 0) {
+    return `the model door failed ${String(m.failedToday)} time${m.failedToday === 1 ? '' : 's'} today and answered nothing, so nothing new can be found or designed${stopped}: check the OpenRouter credit and key`;
+  }
+  if (m.closedUntil) {
+    return `the model door failed several times in a row, so nothing new can be found or designed${stopped}: check the OpenRouter credit and key`;
+  }
+  return null;
 }
 
 export async function modelDoorFacts(): Promise<ModelDoorFacts> {
@@ -81,5 +101,28 @@ export async function modelDoorFacts(): Promise<ModelDoorFacts> {
     failedToday: today.failed, answeredToday: today.settled,
     remainingUsd, readOn: good ? String(good.read_on) : null, daysLeft,
     lastReadFailed: last && Number(last.ok) === 0 ? String(last.detail ?? 'the reading failed') : null,
+    closedUntil: (() => { const b = modelDoorBreaker(); return b.until ? b.until.toISOString() : null; })(),
   };
+}
+
+/**
+ * WHEN A ROUTINE FAILED BECAUSE THE DOOR DID, the door's own sentence; null
+ * when its last failure was something else. `job_health` keeps the error's
+ * class, so the reading is exact rather than guessed from timing. Home's pulse
+ * and the absence page read it so neither says only that a routine failed.
+ */
+export async function doorBehindFailure(lastErrorName: string | null): Promise<string | null> {
+  if (lastErrorName !== 'ModelDoorError' && lastErrorName !== 'ModelDoorClosed') return null;
+  return modelDoorBlocker(await modelDoorFacts())
+    ?? 'the model door failed on its last attempt: check the OpenRouter credit and key';
+}
+
+/**
+ * IS THE DOOR DOWN NOW, in the one sentence — `modelDoorBlocker` read from the
+ * ledger and the breaker (Stage 1 F1.4, reconciled onto remediation 1.5). For
+ * surfaces that ask about the door itself rather than about one routine's
+ * failure: Home's health card and its pulse when no routine has failed yet.
+ */
+export async function modelDoorDown(): Promise<string | null> {
+  return modelDoorBlocker(await modelDoorFacts());
 }

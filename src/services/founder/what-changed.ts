@@ -25,7 +25,13 @@ const A_SEPARATE_VISIT_MINUTES = 30;
 
 /** One statement, on one line, so the column gate can read it as one. */
 const UPDATE_THE_MARKER =
-  "UPDATE owner_visits SET since = looked_at, looked_at = datetime('now') WHERE founder_id = ?";
+  "UPDATE owner_visits SET since = looked_at, looked_at = datetime('now') WHERE founder_id = ? AND looked_at = ?";
+
+/** The first visit's row, written only if no visit has been recorded. Two first
+ *  visits that arrive together (phone and laptop, a link preview, a prefetch)
+ *  both read "no row"; the loser of the insert must not throw (F-WALK-1). */
+const RECORD_THE_FIRST_VISIT =
+  "INSERT INTO owner_visits (founder_id, looked_at, since) VALUES (?, datetime('now'), datetime('now')) ON CONFLICT(founder_id) DO NOTHING";
 
 export interface Change {
   /** One sentence, in his register, about a thing that actually happened. */
@@ -43,14 +49,17 @@ export interface Change {
  * means.
  */
 export async function markVisit(founderId: string): Promise<string | null> {
-  const row = (await query(
+  const read = async (): Promise<Record<string, unknown> | undefined> => (await query(
     'SELECT looked_at, since FROM owner_visits WHERE founder_id = ?', [founderId]))
     .rows[0] as Record<string, unknown> | undefined;
+  let row = await read();
 
   if (row === undefined) {
-    await query(
-      "INSERT INTO owner_visits (founder_id, looked_at, since) VALUES (?, datetime('now'), "
-      + "datetime('now'))", [founderId]);
+    // Idempotent: whichever concurrent first visit inserts, the others do
+    // nothing and read the row it wrote. Every one of them is a first visit.
+    await query(RECORD_THE_FIRST_VISIT, [founderId]);
+    row = await read();
+    if (row === undefined) throw new Error('owner_visits: the visit row was not written');
     return null;
   }
 
@@ -60,8 +69,15 @@ export async function markVisit(founderId: string): Promise<string | null> {
     .rows[0] as Record<string, unknown>;
 
   if (Number(awayLongEnough.yes) === 1) {
-    // A new visit: measure from when he was last here, and move the marker.
-    await query(UPDATE_THE_MARKER, [founderId]);
+    // A new visit: measure from when he was last here, and move the marker —
+    // only if nobody moved it since we read it. Two returning visits that
+    // arrive together would otherwise both move it, and the second would set
+    // `since` to the first's "now", erasing what changed while he was away.
+    const moved = await query(UPDATE_THE_MARKER, [founderId, String(row.looked_at)]);
+    if (moved.rowsAffected === 0) {
+      const now = await read();
+      return now === undefined ? null : String(now.since);
+    }
     return String(row.looked_at);
   }
   // Still the same visit. The line holds still so a refresh does not erase what

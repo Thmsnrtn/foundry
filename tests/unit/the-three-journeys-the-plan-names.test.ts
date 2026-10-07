@@ -30,7 +30,7 @@ import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 
 vi.setConfig({ testTimeout: 180_000 });
-const CHROMIUM = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/usr/bin/chromium'].find((p) => existsSync(p));
+const CHROMIUM = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/usr/bin/chromium', '/usr/bin/google-chrome'].find((p) => existsSync(p));
 const QUIET = 'tj_quiet';
 const STALE = 'tj_stale';
 const STEER = 'tj_steer';

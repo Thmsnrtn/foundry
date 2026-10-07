@@ -192,7 +192,7 @@ export async function checkBriefQuality(founderId: string, m: Material, now: Dat
  * "one-time, no subscription" whatever the plan was, so a weekly offer read as
  * a single purchase and a pay-what-it-was-worth offer as a fixed price.
  */
-export function renderOfferTemplate(plan: OfferShapePlan, workshop: string, region: string): string {
+export function renderOfferTemplate(plan: OfferShapePlan, workshop: string, region: string | null): string {
   const dollars = (plan.price.amountCents / 100).toFixed(plan.price.amountCents % 100 === 0 ? 0 : 2);
   const terms = plan.price.recurring
     ? `It's $${dollars} a week until you cancel. You can cancel any time from the link in every email, and nothing is charged after you cancel.`
@@ -202,7 +202,7 @@ export function renderOfferTemplate(plan: OfferShapePlan, workshop: string, regi
   return [
     'Hi,',
     '',
-    `${workshop} is a small digital workshop in ${region}. It has put together ${plan.shape.sells}`,
+    `${workshop} is a small digital workshop${region ? ` in ${region}` : ''}. It has put together ${plan.shape.sells}`,
     '',
     `${terms} What's in it, and what it doesn't cover:`,
     '',
@@ -229,7 +229,7 @@ export async function makeBrief(input: { founderId: string; experimentId: string
   // WHAT MAY BE SOLD IS ASKED FIRST (R23), before anything is looked up or made.
   const refusedForSale = sourcesRefusedForSale(input.spec.sourceTypes);
   if (refusedForSale.length > 0) return { refused: `a brief that is sold may not be made from ${refusedForSale.join('; ')}` };
-  const { publicWorkshopOf } = await import('../../public-workshop/settings.js');
+  const { publicWorkshopOf, workshopRegion } = await import('../../public-workshop/settings.js');
   const w = await publicWorkshopOf(input.founderId);
   if (!w) return { refused: 'there is no Workshop to speak as' };
   const made = await rowsForBrief(input.founderId, input.spec);
@@ -240,7 +240,7 @@ export async function makeBrief(input: { founderId: string; experimentId: string
   if (!quality.ok) return { refused: `the brief did not pass its own gate: ${quality.failures.join('; ')}` };
   const offerShapeId = await recordMaterial({ founderId: input.founderId, experimentId: input.experimentId, kind: 'offer_shape', title: 'offer shape', body: JSON.stringify({ ...input.plan, kind: 'data_brief', spec: input.spec }), by: HAND });
   const deliverableId = await recordMaterial({ founderId: input.founderId, experimentId: input.experimentId, kind: 'deliverable', title: input.spec.title, body, pulledAt: made.pulledAt, by: HAND });
-  const offerTemplateId = await recordMaterial({ founderId: input.founderId, experimentId: input.experimentId, kind: 'offer_template', title: `Offer: ${input.spec.title}`, body: renderOfferTemplate(input.plan, w.publicName, 'Massachusetts'), by: HAND });
+  const offerTemplateId = await recordMaterial({ founderId: input.founderId, experimentId: input.experimentId, kind: 'offer_template', title: `Offer: ${input.spec.title}`, body: renderOfferTemplate(input.plan, w.publicName, workshopRegion(w)), by: HAND });
   return { deliverableId, offerTemplateId, offerShapeId, items: made.items.length, quality };
 }
 

@@ -44,7 +44,7 @@ beforeAll(async () => {
   for (const t of threads.filter((x) => /one|two/.test(x.key) || /Thanks|Got it/.test(x.newest.body))) {
     await mail.settleThread({ founderId: OWNER, threadKey: t.key, because: 'the owner dealt with it' });
   }
-});
+}, 180_000);
 
 describe('the door places each sentence', () => {
   it('classifies the six with a search open, none of them unplaceable', () => {

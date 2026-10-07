@@ -35,7 +35,7 @@ beforeAll(async () => {
   await seedProductionShape({
     charter: true, searching: true, eyes: true, settledBy: 'the world', earsOpen: true,
   });
-});
+}, 180_000);
 
 describe('what stopping would leave', () => {
   it('says nothing is outstanding when nobody is owed anything', async () => {

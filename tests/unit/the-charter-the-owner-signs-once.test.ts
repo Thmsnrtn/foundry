@@ -277,7 +277,9 @@ describe('what he sees', () => {
     const home = await (await app.request('/foundry')).text();
     expect(home).toContain('Chartered');
     expect(home).toContain('$100 of $100 left');
-    expect(home).toContain('href="/foundry/charter" aria-label="The charter"');
+    // The row is a door to the charter, named by what it says ("Autonomy
+    // Chartered …"), not by a label that hid that (axe, remediation 2026-10).
+    expect(home).toContain('<a class="ev-item" href="/foundry/charter">');
     const controls = await (await app.request('/foundry/controls')).text();
     expect(controls).toContain('Active</span>');
     // The money is this signature's, whole; the places are not (R52): tests the
