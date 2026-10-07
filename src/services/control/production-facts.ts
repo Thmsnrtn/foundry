@@ -16,6 +16,12 @@
 
 import { modelDoorBlocker } from '../ai/model-door.js';
 import { query } from '../../db/client.js';
+import { CLAIM_LOOK_GIVES_UP_AFTER } from '../venture/market-evidence.js';
+
+/** The claims the market-evidence routine has left: the ones its window leaves out, by the same test. */
+const CLAIMS_LEFT = `c.founder_id = ? AND c.evidence_mode = 'real' AND c.settled_as IS NULL
+          AND NOT EXISTS (SELECT 1 FROM market_observations o WHERE o.claim_id = c.id)
+          AND (SELECT COUNT(*) FROM claim_look_failures f WHERE f.claim_id = c.id) >= ?`;
 
 type Row = Record<string, unknown>;
 
@@ -51,6 +57,8 @@ export interface ProductionFacts {
   unmatchedPaymentEvents: Array<{ eventId: string; because: string; at: string }>;
   /** Real market claims no source could read after four looks, now left (migration 389). */
   claimsLeft?: Array<{ claimId: string; claim: string; because: string }>;
+  /** How many claims were left in all; `claimsLeft` shows the oldest ten. */
+  claimsLeftTotal?: number;
 }
 
 export async function productionFacts(founderId: string, env: NodeJS.ProcessEnv = process.env): Promise<ProductionFacts> {
@@ -91,10 +99,11 @@ export async function productionFacts(founderId: string, env: NodeJS.ProcessEnv 
       `SELECT c.id AS claim_id, c.claim,
               (SELECT f2.because FROM claim_look_failures f2 WHERE f2.claim_id = c.id ORDER BY f2.failed_at DESC, f2.rowid DESC LIMIT 1) AS because
          FROM market_claims c
-        WHERE c.founder_id = ? AND c.settled_as IS NULL
-          AND (SELECT COUNT(*) FROM claim_look_failures f WHERE f.claim_id = c.id) >= 4
-        ORDER BY c.formed_at, c.rowid LIMIT 10`, [founderId])).rows as unknown as Array<Record<string, unknown>>)
+        WHERE ${CLAIMS_LEFT}
+        ORDER BY c.formed_at, c.rowid LIMIT 10`, [founderId, CLAIM_LOOK_GIVES_UP_AFTER])).rows as unknown as Array<Record<string, unknown>>)
       .map((r) => ({ claimId: String(r.claim_id), claim: String(r.claim), because: String(r.because ?? '') })),
+    claimsLeftTotal: Number(((await query(
+      `SELECT COUNT(*) AS n FROM market_claims c WHERE ${CLAIMS_LEFT}`, [founderId, CLAIM_LOOK_GIVES_UP_AFTER])).rows[0] as Record<string, unknown> | undefined)?.n ?? 0),
     unmatchedPaymentEvents: ((await query(
       `SELECT event_id, unmatched_because, processed_at FROM stripe_webhook_events
         WHERE unmatched_because IS NOT NULL AND datetime(processed_at) >= datetime('now', '-30 days')

@@ -66,7 +66,9 @@ describe('a call that could change nothing', () => {
   it('is refused in the client before the spend is authorised', () => {
     const client = readFileSync(resolve(import.meta.dirname, '../../src/services/ai/client.ts'), 'utf8');
     const refusal = client.indexOf('refuseIfItChangesNothing(subjectWork(config.subject))');
-    const reserve = client.indexOf('const reservation = await authorizeSpend(', refusal);
+    // The reservation is the first `await authorizeSpend(` after the refusal
+    // (it moved inside the probe's hand-back guard, second remediation audit).
+    const reserve = client.indexOf('await authorizeSpend(', refusal);
     expect(refusal).toBeGreaterThan(0);
     expect(reserve).toBeGreaterThan(refusal);
   });
