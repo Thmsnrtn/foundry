@@ -2815,9 +2815,11 @@ a responsibility, the buyer's signed links — a made-up signed link is checked
 to be refused); the crawl drives GET only, so a POST that 500s on a real row is
 the suite's to find; the floors are today's reach, not a measured need;
 `measure-mobile` is not in the chain (PENDING 40). The browser tests are: CI's
-runner has Chrome and its log shows nothing skipped (this entry first said the
-opposite, from a comment; the audit caught it), one browser test that could
-not see the runner's Chrome now can, and
+runner has Chrome and both shards' totals show nothing skipped (this entry
+first said the opposite, from a comment; the audit caught it). One browser test
+did not name the runner's Chrome and found a browser at another of its paths
+(this entry next said it had skipped, which those totals refute; the second
+audit caught that); it now names it, and
 `a-browser-gate-runs-where-the-release-is-decided` holds both facts.
 
 ### What the remediation could not exercise, at its true level (6 October 2026)

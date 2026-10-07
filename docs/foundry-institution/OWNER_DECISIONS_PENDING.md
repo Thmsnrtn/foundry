@@ -2253,14 +2253,16 @@ was looking for.
 **What is true.** *Corrected the same day, after the remediation's independent
 audit: the first version of this entry said the CI runner has no Chromium and
 the browser tests skip there. It has one (`/usr/bin/google-chrome` on
-`ubuntu-latest`), and the CI log's shard totals show nothing skipped.* The
-browser tests in the suite — the one thing on the first screen, axe and the
-24px floor, the four doors, the twelve journeys, the phone fit — run in
-`npm run check`, which gates every deploy. One of them,
-`the-three-journeys-the-plan-names`, did not look for the runner's Chrome and
-skipped there; it now does, and `a-browser-gate-runs-where-the-release-is-decided`
-fails if any browser test cannot see the runner's browser, or if a CI runner
-has none. What is still outside the chain is `scripts/measure-mobile.mts` —
+`ubuntu-latest`), and both shards' totals on the CI log show nothing skipped
+(2,925 and 2,983 passed on `ce7e000a`).* The browser tests in the suite — the
+one thing on the first screen, axe and the 24px floor, the four doors, the
+twelve journeys, the three journeys, the phone fit — run in `npm run check`,
+which gates every deploy. One of them, `the-three-journeys-the-plan-names`,
+did not name the runner's Chrome; since nothing skipped, it found a browser at
+another of its paths. *A second correction:* this entry first said it had been
+skipping on CI, which the same totals refute. It now names the runner's Chrome
+too, and `a-browser-gate-runs-where-the-release-is-decided` fails if any
+browser test cannot see the runner's browser, or if a CI runner has none. What is still outside the chain is `scripts/measure-mobile.mts` —
 the gate made after the first prototype overflowed on your iPhone: five
 widths, every owner route, no horizontal scroll by a single pixel. The phone-
 fit and four-doors tests cover part of it, not all of its routes and widths.

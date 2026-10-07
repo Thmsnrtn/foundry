@@ -6,7 +6,7 @@
 // fail where no Chromium is installed, so a laptop without one can still run
 // the suite. That is only safe while the machine that decides a release has
 // one. It does: GitHub's `ubuntu-latest` carries `/usr/bin/google-chrome`, and
-// the shard totals on the CI log read "passed" with nothing skipped. This
+// both shards' totals on the CI log read "passed" with nothing skipped. This
 // remediation first wrote the opposite into the record, from a comment, and
 // the independent audit caught it.
 //
@@ -20,7 +20,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const DIR = resolve(import.meta.dirname);
+const TESTS = resolve(import.meta.dirname, '..');
 const RUNNER_BROWSER = '/usr/bin/google-chrome';
 const CANDIDATES = [
   '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -30,14 +30,17 @@ const CANDIDATES = [
 /** The test files that skip without a browser and do not look for the runner's. */
 export function blindOnTheRunner(files: Array<[string, string]>): string[] {
   return files
-    .filter(([, src]) => /describe\.skip|if \(!CHROMIUM\) return/.test(src) && /chromium/i.test(src))
+    // Every way a file can step aside without a browser: describe.skip, a
+    // skipIf or runIf, or a hook that returns early (second remediation audit).
+    .filter(([, src]) => /describe\.skip|\.(skipIf|runIf)\(|if \(!CHROMIUM\) return/.test(src) && /chromium/i.test(src))
     .filter(([, src]) => !src.includes(`'${RUNNER_BROWSER}'`))
     .map(([name]) => name);
 }
 
 describe('the browser gates on the release runner', () => {
-  const files = readdirSync(DIR).filter((f) => f.endsWith('.test.ts'))
-    .map((f) => [f, readFileSync(resolve(DIR, f), 'utf8')] as [string, string]);
+  // Every test file under tests/, not only tests/unit.
+  const files = (readdirSync(TESTS, { recursive: true }) as string[]).filter((f) => f.endsWith('.test.ts'))
+    .map((f) => [f, readFileSync(resolve(TESTS, f), 'utf8')] as [string, string]);
 
   it('there are browser gates, or this proves nothing', () => {
     expect(files.filter(([, s]) => /describe\.skip/.test(s) && /CHROMIUM/.test(s)).length).toBeGreaterThanOrEqual(5);
@@ -56,6 +59,7 @@ describe('the browser gates on the release runner', () => {
     const blind = "const CHROMIUM = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome'].find(existsSync);\nconst d = CHROMIUM ? describe : describe.skip;";
     const seeing = `const CHROMIUM = ['/usr/bin/chromium', '${RUNNER_BROWSER}'].find(existsSync);\nconst d = CHROMIUM ? describe : describe.skip;`;
     const noBrowser = 'describe.skip("later", () => {});';
-    expect(blindOnTheRunner([['a', blind], ['b', seeing], ['c', noBrowser]])).toEqual(['a']);
+    const viaSkipIf = "const CHROMIUM = ['/usr/bin/chromium'].find(existsSync);\ndescribe.skipIf(!CHROMIUM)('phones', () => {});";
+    expect(blindOnTheRunner([['a', blind], ['b', seeing], ['c', noBrowser], ['d', viaSkipIf]])).toEqual(['a', 'd']);
   });
 });

@@ -905,11 +905,10 @@ describe('every gate refuses the defect it exists for', () => {
   const crawl = (env: Record<string, string> = {}): { code: number; output: string } => {
     try {
       const output = execFileSync(resolve(ROOT, 'node_modules/.bin/tsx'), [resolve(ROOT, 'tests/simulation/crawl.ts')],
-        { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...env } });
+        { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...env }, timeout: GATE_TIMEOUT_MS });
       return { code: 0, output };
     } catch (err) {
-      const e = err as { status?: number; stdout?: string; stderr?: string };
-      return { code: e.status ?? 1, output: `${e.stdout ?? ''}${e.stderr ?? ''}` };
+      return exited('crawl.ts', err);
     }
   };
 
@@ -917,6 +916,12 @@ describe('every gate refuses the defect it exists for', () => {
     const r = crawl({ CRAWL_PLANT: '/foundry/controls' });
     expect(r.code).toBe(1);
     expect(r.output).toContain('/foundry/controls → 503');
+  }, 120_000);
+
+  it('sim:crawl fails on an owner page that sends the signed-in owner to sign-in, written as an absolute URL', () => {
+    const r = crawl({ CRAWL_PLANT_REDIRECT: '/foundry/controls' });
+    expect(r.code).toBe(1);
+    expect(r.output).toContain('/foundry/controls → 302 to https://foundry.example/auth/login');
   }, 120_000);
 
   it('sim:crawl fails on a route src/index.ts declares that the crawl does not name', () => {

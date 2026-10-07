@@ -31,7 +31,8 @@
 //
 // Run:  npx tsx tests/simulation/crawl.ts
 //       CRAWL_PLANT=<route>  (gates-fail-when-they-should) makes that route
-//       answer 503, to show the crawl goes red on it.
+//       answer 503, to show the crawl goes red on it;
+//       CRAWL_PLANT_REDIRECT=<route> makes it send the owner to sign-in.
 // =============================================================================
 
 process.env.NODE_ENV = 'test';
@@ -109,6 +110,7 @@ type FounderRow = Record<string, unknown>;
 let currentFounder: FounderRow | null = null;
 let lastError = '';
 const PLANT = process.env.CRAWL_PLANT ?? null;
+const PLANT_REDIRECT = process.env.CRAWL_PLANT_REDIRECT ?? null;
 
 const app = new (Hono as any)();
 app.use('*', async (c: any, next: any) => {
@@ -116,6 +118,7 @@ app.use('*', async (c: any, next: any) => {
   c.set('csrfToken', 'test-csrf');
   // A PLANTED DEFECT, for the gate that proves this crawl can fail.
   if (PLANT && c.req.path === PLANT) return c.json({ error: 'planted' }, 503);
+  if (PLANT_REDIRECT && c.req.path === PLANT_REDIRECT) return c.redirect(`https://foundry.example/auth/login?next=${encodeURIComponent(PLANT_REDIRECT)}`, 302);
   await next();
 });
 app.onError((err: any, c: any) => {
@@ -296,8 +299,9 @@ async function look(where: string, url: string): Promise<number> {
   else if (res.status === 403) findings.push({ kind: 'owner-refused', where, note: `${url} → 403 for the owner the posture admits` });
   // A REDIRECT TO SIGN-IN OR ONBOARDING IS A REFUSAL TOO, said politely: the
   // owner, signed in, sent away from a page of theirs (remediation audit).
+  // Read as a path, so an absolute URL or a query string cannot slip by.
   else if (res.status >= 300 && res.status < 400 && !KNOWN_REDIRECTS[url]
-    && /^\/(auth\/login|onboarding)\b/.test(res.headers.get('location') ?? '')) {
+    && /^\/(auth\/login|onboarding)\b/.test(new URL(res.headers.get('location') ?? '/', 'http://crawl.local').pathname)) {
     findings.push({ kind: 'owner-refused', where, note: `${url} → ${String(res.status)} to ${res.headers.get('location') ?? ''} for the owner` });
   }
   else if (res.status === 404 && !KNOWN_404[url]) findings.push({ kind: 'not-found', where, note: `${url} → 404 for a row that exists` });

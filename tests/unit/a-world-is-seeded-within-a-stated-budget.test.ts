@@ -36,11 +36,20 @@ function beforeAlls(src: string): string[] {
   return out;
 }
 
+/** A source with its comments and string literals blanked: what the code says. */
+function codeOf(src: string): string {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(['"`])(?:\\.|(?!\1)[^\\\n])*\1/g, "''")
+    .replace(/\/\/[^\n]*/g, ' ');
+}
+
 /** The files with a world-seeding hook that states no budget. */
 export function unbudgeted(files: Array<[string, string]>): string[] {
-  // A file-wide budget is a `hookTimeout:` in code, not the word in a comment.
-  return files.filter(([, src]) => !/^[^/\n]*\bhookTimeout\s*:/m.test(src)
-    && beforeAlls(src).some((b) => SEEDS.test(b) && !/,\s*[\d_]+\s*\)$/.test(b)))
+  // A file-wide budget is a `hookTimeout:` in code — not the word in a line or
+  // block comment, nor inside a string (second remediation audit).
+  return files.filter(([, src]) => !/\bhookTimeout\s*:/.test(codeOf(src))
+    && beforeAlls(codeOf(src)).some((b) => SEEDS.test(b) && !/,\s*[\d_]+\s*\)$/.test(b)))
     .map(([name]) => name);
 }
 
@@ -49,7 +58,7 @@ describe('hooks that seed a world', () => {
     .map((f) => [f, readFileSync(resolve(DIR, f), 'utf8')] as [string, string]);
 
   it('there are such hooks, or this proves nothing', () => {
-    expect(files.filter(([, s]) => beforeAlls(s).some((b) => SEEDS.test(b))).length).toBeGreaterThan(20);
+    expect(files.filter(([, s]) => beforeAlls(codeOf(s)).some((b) => SEEDS.test(b))).length).toBeGreaterThan(20);
   });
 
   it('every one states how long it may take', () => {
@@ -61,7 +70,10 @@ describe('hooks that seed a world', () => {
     const budgeted = "beforeAll(async () => {\n  await seedProductionShape({});\n}, 180_000);";
     const fileWide = "vi.setConfig({ hookTimeout: 180_000 });\n" + onDefault;
     const commentOnly = "// no hookTimeout here\n" + onDefault;
+    const blockComment = "/**\n * hookTimeout: 60s, said in prose\n */\n" + onDefault;
+    const inAString = "const note = 'hookTimeout: 1';\n" + onDefault;
     const unrelated = "beforeAll(async () => {\n  await runMigrations();\n});";
-    expect(unbudgeted([['a', onDefault], ['b', budgeted], ['c', fileWide], ['d', unrelated], ['e', commentOnly]])).toEqual(['a', 'e']);
+    expect(unbudgeted([['a', onDefault], ['b', budgeted], ['c', fileWide], ['d', unrelated], ['e', commentOnly],
+      ['f', blockComment], ['g', inAString]])).toEqual(['a', 'e', 'f', 'g']);
   });
 });
