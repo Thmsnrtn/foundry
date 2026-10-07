@@ -82,6 +82,30 @@ describe('the page copy is held to the same claims as the offer', () => {
   });
 });
 
+describe('what a stranger reads is held to what the file is held to (the twin\'s adversarial world)', () => {
+  // Read only for the banned phrases, the page could carry a sales count, an
+  // invented statistic, a quoted buyer, or a struck-through price nobody was
+  // ever charged. Each is refused before anything is made, quoted.
+  for (const [what, summary, says] of [
+    ['a sales count nobody recorded', 'A dated shortlist. Over 2,400 contractors already use it (k1).', /a sales count nobody recorded: "Over 2,400 contractors already use"/],
+    ['a struck-through price', 'A dated shortlist. Was $79, today only $19 (k2).', /a price other than the price it charges \(\$19\): ".*Was \$79.*k2/],
+    ['an invented statistic', 'A dated shortlist. 87% of contractors miss a bid each year (k3).', /a statistic: ".*87%.*k3/],
+    ['a quoted buyer', 'A dated shortlist. "This changed everything for my firm" — Dana R. (k4)', /a testimonial: ".*Dana R.*k4/],
+  ] as const) {
+    it(`${what} on the page is refused, quoted, and nothing is made`, async () => {
+      reply = { ...good, page: { ...good.page, summary } };
+      const r = await made();
+      expect('refused' in r ? r.refused : '').toMatch(says);
+      expect(await materials()).toBe(0);
+    });
+  }
+  it('the price it charges, said on the page, is not refused', async () => {
+    reply = { ...good, page: { ...good.page, summary: 'A dated shortlist, $19 once.' } };
+    const r = await made();
+    expect('refused' in r ? r.refused : 'made').not.toMatch(/a price other than/);
+  });
+});
+
 describe('the sentence on how it charges matches the plan', () => {
   it('a one-time plan whose sentence describes a weekly charge is refused', async () => {
     reply = { ...good, charges_how: 'charged every week until you cancel' };

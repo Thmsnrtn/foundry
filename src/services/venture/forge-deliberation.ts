@@ -38,7 +38,8 @@
 import { fourQuestionsOf } from './economic-forms.js';
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
-import { callOpus, callSonnet, ModelDoorError } from '../ai/client.js';
+import { callOpus, callSonnet, ModelDoorError, ModelReplyRefused } from '../ai/client.js';
+import { numbersNotIn } from './invented-numbers.js';
 import { dataBlockInstruction } from '../ai/sanitize.js';
 import { shieldUntrustedContent } from '../ai/prompt-shield.js';
 import { institutionSpend } from '../ai/what-it-is-for.js';
@@ -274,7 +275,26 @@ const LENS_SYSTEM = (lens: Lens): string => [
   dataBlockInstruction('record'),
 ].join('\n');
 
-async function lensFinding(record: TheRecord, lens: Lens): Promise<LensFinding | null> {
+/**
+ * WHAT A DISCIPLINE MAY NOT SAY, checked rather than asked for. A number the
+ * record does not hold is invented (invented-numbers.ts) — "this file sold
+ * 312 copies last month" was stored as a finding before this was read. And a
+ * discipline gives a reading, never a commitment: a finding that signs, agrees
+ * or accepts something on the owner's behalf is asking for his act as though
+ * it were routine, and the legal rung is never inside a charter.
+ */
+const COMMITS_THE_OWNER = /\b(?:sign|accept|agree to|commit to|enter into)\b[^.]{0,120}\b(?:on (?:the owner's|his|her|their) behalf|for the owner|in the owner's name)\b/i;
+
+function whatAFindingMayNotSay(record: TheRecord, lens: Lens, finding: string, because: string): string | null {
+  const invented = numbersNotIn(recordBlock(record), [finding, because]);
+  if (invented.length > 0) return `the ${lens.replace(/_/g, ' ')} discipline wrote a number the record does not hold: ${invented.slice(0, 2).join('; ')}`;
+  const said = `${finding} ${because}`;
+  const commits = COMMITS_THE_OWNER.exec(said);
+  if (commits) return `the ${lens.replace(/_/g, ' ')} discipline treated the owner's own act as routine: "…${said.slice(Math.max(0, commits.index - 40), commits.index + commits[0].length + 40).trim()}…"`;
+  return null;
+}
+
+async function lensFinding(record: TheRecord, lens: Lens): Promise<LensFinding | { refused: string } | null> {
   const reply = await callSonnet(LENS_SYSTEM(lens), recordBlock(record), 1400, institutionSpend(
     'one discipline reading the record of a candidate test for the owner\'s portfolio search, which has no company to charge yet',
     'a lens', { kind: 'experiment', id: record.experiment.id }));
@@ -286,6 +306,8 @@ async function lensFinding(record: TheRecord, lens: Lens): Promise<LensFinding |
   const recommends = oneOf(raw.recommends, ['run', 'reframe', 'defer', 'kill'] as const);
   const grounds = Array.isArray(raw.grounds) ? raw.grounds.map(String).map((g) => g.trim()).filter(Boolean).slice(0, 12) : [];
   if (!finding || !because || !risk || !recommends || grounds.length === 0) return null;
+  const refused = whatAFindingMayNotSay(record, lens, finding, because);
+  if (refused) return { refused };
   return { lens, finding, grounds, risk, recommends, because };
 }
 
@@ -357,6 +379,9 @@ interface Composed {
   stopConditions: Array<{ kind: StopKind; threshold: number; because: string }>;
 }
 
+const WRITES_AS_A_PERSON = /\b(?:the owner's|his|her|my)\s+(?:own\s+|personal\s+|private\s+)?(?:address|e-?mail|inbox|account|name|phone)\b/i;
+const NEW_CHANNEL = /\bpost(?:ing|s)?\s+(?:it\s+)?(?:in|to|on)\s+(?:their\s+|the\s+|online\s+|relevant\s+)?(?:groups?|forums?|communities|subreddits?|threads?)\b|\b(?:facebook|instagram|tiktok|twitter|reddit|social media|text messages?|sms|cold[- ]call(?:ing|s)?|direct messages?)\b/i;
+
 function composed(raw: Row, record: TheRecord): Composed | { refused: string } {
   const need = (k: string): string => str(raw, k) ?? '';
   const exchangeKeys = record.exchanges.map((x) => x.exchange);
@@ -365,6 +390,23 @@ function composed(raw: Row, record: TheRecord): Composed | { refused: string } {
   const missing = ['decides', 'decides_because', 'exchange_because', 'can_prove', 'cannot_prove', 'rather_than_waiting',
     'distribution', 'if_it_succeeds', 'recommendation_because'].filter((k) => need(k) === '');
   if (missing.length || !exchange || !recommendation) return { refused: `the composition left out ${[...missing, ...(exchange ? [] : ['exchange']), ...(recommendation ? [] : ['recommendation'])].join(', ')}` };
+  // AN EXCHANGE THAT IS NOT AVAILABLE IS THE OWNER'S TO OPEN. The prompt says
+  // to recommend deferring when the only honest test needs one; a design that
+  // runs it anyway is asking for his act as though it were routine.
+  const chosen = record.exchanges.find((x) => x.exchange === exchange);
+  if (chosen && !chosen.available && recommendation === 'run') {
+    return { refused: `the design runs an exchange that is not available today (${chosen.whatItIs}); opening it is the owner's act, not a routine one: "${need('exchange_because').slice(0, 200)}"` };
+  }
+  // THE CONTACT RULES, IN WORDS A CHECK CAN READ. The Workshop writes in its
+  // own name (SEALED_CONTACT_RULES), and a new class of channel is the owner's
+  // to open the first time (CONSTITUTION, the charter). Narrow on purpose: it
+  // refuses a distribution that names writing as a person or a channel the
+  // charter does not name, and says which words it refused.
+  const distribution = need('distribution');
+  const asAPerson = WRITES_AS_A_PERSON.exec(distribution);
+  if (asAPerson) return { refused: `the distribution would write as a person, and the Workshop is the only voice the charter's contact rules allow: "…${distribution.slice(0, 200)}…"` };
+  const channel = NEW_CHANNEL.exec(distribution);
+  if (channel) return { refused: `the distribution opens a channel the charter does not name ("${channel[0]}"); a new class of channel is the owner's to open the first time: "…${distribution.slice(0, 200)}…"` };
   const interpretations = (Array.isArray(raw.interpretations) ? raw.interpretations : []).map((i) => {
     const r = i as Row;
     return { observation: str(r, 'observation') ?? '', reading: str(r, 'reading') ?? '', distinguishedBy: str(r, 'distinguished_by') };
@@ -490,12 +532,14 @@ export async function deliberate(experimentId: string): Promise<Deliberation> {
 
   // THE LENSES, WRITTEN AS THEY RETURN, BEFORE ANYTHING IS COMPOSED.
   const findings: LensFinding[] = [];
+  const refusedFindings: string[] = [];
   for (const lens of LENSES) {
     const f = await lensFinding(record, lens);
-    if (f) { await recordFinding(record, f); findings.push(f); }
+    if (f && 'refused' in f) refusedFindings.push(f.refused);
+    else if (f) { await recordFinding(record, f); findings.push(f); }
   }
   if (findings.length < LENSES.length) {
-    return { experimentId, outcome: 'refused', because: `${String(LENSES.length - findings.length)} of ${String(LENSES.length)} disciplines returned nothing usable; no design is composed on a partial review`, ...empty, findings };
+    return { experimentId, outcome: 'refused', because: `${String(LENSES.length - findings.length)} of ${String(LENSES.length)} disciplines returned nothing usable; no design is composed on a partial review${refusedFindings.length ? `. Refused: ${refusedFindings.join('; ')}` : ''}`, ...empty, findings };
   }
 
   const reply = await callOpus(COMPOSE_SYSTEM, `${recordBlock(record)}\n<findings>${JSON.stringify(findings, null, 1)}</findings>`, 4000, institutionSpend(
@@ -869,6 +913,8 @@ export async function forgePass(founderId: string, now: Date = new Date()): Prom
     } catch (err) {
       // THE DOOR, NOT THE TEST: every later test would fail the same way.
       if (err instanceof ModelDoorError) throw err;
+      // A REPLY THE DOOR REFUSED is a refusal of this test, with the door's reason.
+      if (err instanceof ModelReplyRefused) { await recordForgeRefusal(id, 'deliberate', err.message, now); continue; }
       out.failed.push({ experimentId: id, because: err instanceof Error ? err.message : String(err) });
     }
   }
@@ -890,6 +936,7 @@ export async function forgePass(founderId: string, now: Date = new Date()): Prom
       out.deliberated.push(r);
     } catch (err) {
       if (err instanceof ModelDoorError) throw err;
+      if (err instanceof ModelReplyRefused) { await recordForgeRefusal(id, 'deliberate', err.message, now); continue; }
       out.failed.push({ experimentId: id, because: err instanceof Error ? err.message : String(err) });
     }
   }
@@ -918,6 +965,11 @@ export async function forgePass(founderId: string, now: Date = new Date()): Prom
         let made: Awaited<ReturnType<typeof shapeAndMake>>;
         try { made = await shapeAndMake(id); } catch (err) {
           if (err instanceof ModelDoorError) throw err;
+          if (err instanceof ModelReplyRefused) {
+            await recordForgeRefusal(id, 'make', err.message, now);
+            out.notAllowed.push({ experimentId: id, because: `the hands could not make it: ${err.message}` });
+            continue;
+          }
           out.failed.push({ experimentId: id, because: err instanceof Error ? err.message : String(err) });
           continue;
         }

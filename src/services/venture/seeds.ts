@@ -114,7 +114,11 @@ export async function whatItWouldTakeToBelieve(
        JOIN epistemic_stances s ON s.stance = t.epistemic_stance
       WHERE c.seed_id = ? AND o.evidence_mode <> 'reference'
         AND t.epistemic_stance <> 'rehearsal'
-        AND (o.from_absence = 0 OR o.bearing = 'supports')
+        -- A SEARCH THAT FOUND NOTHING IS NOT A WAY OF KNOWING (F1.7). It is
+        -- filed 'supports' with from_absence set, and this used to count
+        -- it, so a candidate could stand on one post and one empty search.
+        -- An absence that contradicts stays out too, as F3 left it.
+        AND o.from_absence = 0
       GROUP BY t.epistemic_stance
       ORDER BY s.sort_order`, [seedId]))
     .rows as unknown as Array<Record<string, unknown>>).map((r) => ({

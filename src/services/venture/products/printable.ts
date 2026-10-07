@@ -574,6 +574,11 @@ export async function makePrintable(input: {
   if (pages < PRINTABLE_PAGES.min || pages > PRINTABLE_PAGES.max) fit.push(`${String(pages)} pages is outside ${String(PRINTABLE_PAGES.min)}–${String(PRINTABLE_PAGES.max)}`);
   fit.push(...printed.overflow);
   if (fit.length) return { refused: `the printed file does not fit its pages: ${fit.slice(0, 6).join('; ')}` };
+  // THE LISTING SAYS THE PAGES THE FILE HAS. A count the listing states is
+  // read against the file as printed: "a 30-page bundle" over seven pages was
+  // let through by every gate, because each checked one side.
+  const stated = [...input.listing.matchAll(/\b(\d{1,3})[\s-]+(?:fill-in\s+|printable\s+)?pages?\b/gi)].map((m) => Number(m[1])).find((n) => n !== pages);
+  if (stated !== undefined) return { refused: `the listing says ${String(stated)} pages and the file has ${String(pages)}` };
 
   const honest = await modelHonestyCheck(text, { founderId: input.founderId, experimentId: input.experimentId });
   if (!honest.clean) return { refused: `the second reading found what nobody can stand behind: ${honest.findings.slice(0, 6).join('; ')}` };

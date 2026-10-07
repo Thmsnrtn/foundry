@@ -294,7 +294,18 @@ npm run lint:columns              # the SQL/schema/authority gates — seconds
 npx vitest run tests/unit/<file>  # one test file — seconds
 npm run check                     # composite: typecheck + ratchets + full suite (~10 min)
 bash scripts/schema-snapshot.sh   # regenerate docs/db/schema.snapshot.sql after a migration
+npx vitest run tests/simulation/twin/a-year-in-the-twin.test.ts   # the twin, default: 3 capable × 60 days + 1 adversarial × 30 (~4 min)
+SIM_LONG=1 SIM_SEEDS=10 SIM_DAYS=365 SIM_BRAINS=capable CAMPAIGN_OUT=/tmp/twin-capable \
+  npx vitest run tests/simulation/twin/a-year-in-the-twin.test.ts                # a long run: opt-in, refused without SIM_LONG=1
 ```
+
+The long runs take about a second and a half per simulated day per world
+(10 × 365 is a couple of hours); run them through the gate lock or alone, and
+read `$CAMPAIGN_OUT/scorecard.md`. `SIM_BRAINS` is `capable`, `degraded` or
+`adversarial` (`SIM_ADVERSARIAL_DAYS`, `SIM_ADVERSARIAL_SEEDS` for the last),
+`SIM_SEED_BASE` moves the seeds, `SIM_SENSITIVITY=0` skips the sweep,
+`SIM_CLOSED_LOOP=1` re-runs the institution for the most sensitive parameter,
+`SIM_VERBOSE=1` prints a line a simulated day.
 
 Tests need **no external services**. They set `TURSO_DATABASE_URL=file::memory:`
 and `ENCRYPTION_KEY` themselves and run migrations into a fresh in-memory
@@ -321,6 +332,13 @@ where it lives.
 | CI gates ("ratchets") | `scripts/check-*.mjs`, chained by `npm run lint:columns` |
 | Gate baselines | `docs/db/*-baseline.txt` |
 | Gate self-tests (planted defects) | `tests/unit/gates-fail-when-they-should.test.ts` |
+| The market twin: parameters with sources, segments, the public world, the market | `tests/simulation/twin/` (`params.ts`, `segments.ts`, `public-world.ts`, `market.ts`) |
+| One simulated world of the real institution; the year runs; the scorecard | `tests/simulation/twin/world-run.ts`, `a-year-in-the-twin.test.ts`, `scorecard.ts`, `sensitivity.ts` |
+| Scripted model outputs: capable, degraded, adversarial | `tests/simulation/brains/` |
+| The continuous invariant monitor and its canaries | `tests/simulation/invariants.ts`, `invariant-canaries.test.ts` |
+| The institution's own rules, read back by the hourly pulse | `src/services/institution/watched-rules.ts` |
+| The buyer panel bank (working / held-out) and the three judges | `tests/fixtures/buyer-panel-bank/`, `tests/simulation/panel/` |
+| Evidence level on every capability claim | `scripts/check-evidence-levels.mjs` (`npm run evidence:levels`) |
 
 **Evidence levels (E0–E6) are defined in `PROOF_PROGRAM.md`.** Every maturity
 claim below uses them; read that file before trusting a level here.
@@ -952,13 +970,13 @@ caller appears for one without the other. Wiring both needs a real answer to
 
 | Capability | Level | Scope |
 |---|---|---|
-| Reconstruction / recognition / understanding / Shadowing / judgment / development | E3 | prior exercised synthetic dimensions only |
-| Assisting (support reply) | E3 | **prior synthetic dimensions only — unchanged for three sessions** |
-| Production reachability | E3 | four synthetic non-software companies, each now entering through the ONE intake production has — they used to be admitted by SaaS event types nothing emits, so the benchmark answered "can a normal company enter the ladder?" through a door the running system does not have. Better founded, same level: still synthetic. |
+| Reconstruction / recognition / understanding / Shadowing / judgment / development | E3 | prior exercised synthetic dimensions only: `tests/contracts/reconstruction-benchmark.ts`, `responsibility-recognition-benchmark.ts`, `responsibility-understanding-benchmark.ts`, `responsibility-shadowing-benchmark.ts`, `institutional-judgment-benchmark.ts`, `development-benchmark.ts` |
+| Assisting (support reply) | E3 | **prior synthetic dimensions only — unchanged for three sessions**: `tests/contracts/responsibility-assisting-benchmark.ts`, `support-drafting-benchmark.ts` |
+| Production reachability | E3 | four synthetic non-software companies, each now entering through the ONE intake production has — they used to be admitted by SaaS event types nothing emits, so the benchmark answered "can a normal company enter the ladder?" through a door the running system does not have. Better founded, same level: still synthetic. `tests/contracts/production-reachability-benchmark.ts`, `institution-production-reachability.test.ts` |
 | Everything wired through production-facing services | E2 | local runtime through production-facing services |
 | Recursive Foundry operation | **E1** | `recursive-institution-contract.ts` has **zero importers in `src/`** — only its test reaches it. It was recorded as E2, which means "local runtime through production-facing services", and there is no production-facing service. `recursive-institution-v1` reporting ordinary on thirteen dimensions is a benchmark result, not a runtime one. Never run by a real owner in production. Corrected on evidence, not re-measured upward. |
 | Institutional economics | **E1** | `institutional-economics.ts` also has zero importers in `src/`. Attribution is structural and the arithmetic is tested; nothing in production consumes it, so the same correction applies. Seven components remain named-unmeasured. |
-| Assisting → Operating | frozen | migration 115; unchanged |
+| Assisting → Operating | **E1** (frozen) | migration 115; unchanged |
 | First Economic Closure machinery (276–279) | **E2** | An approved test gets an experimental asset the database keeps outside every operating path until reality earns it; a real candidate's legal surface is recognised from its own record with quoted grounds, durable floors and owner-supersedable policy; a sealed settlement rule is applied to provider events with no opinion; the owner's paragraph is heard in full and reaches the search. All of it local runtime against planted cases and the reference world. **No provider has reported a real event, no offer has been placed, no unmatched external counterparty has paid.** The milestone sentence on the first screen is composed from the ledger and reads "No offer has been placed in the world yet" today. |
 | The owner's places (no migration) | **E2** | Every owner screen renders the same frame — trail, object chips, local addresses in fixed order, visible Ask scope — from `page()`'s `Where`; company dimensions, `/foundry/why/:kind/:id`, `/foundry/decisions` and `/foundry/searching` are projections in `place.ts`, `why.ts` and `places.ts`. Twenty-two acceptance cases over ten states; rendered at 375–1440 and 200% text with no overflow. **No real owner has used it on a real day.** |
 | Undertakings (281) | **E2** | An owner verb about a company becomes a thread he saw before it bound: his words, what it was understood as, steps from rows (looked, found, needs, you said, proposed, approved, refused, closed), cost and actor. Reader is phrase tables. Advice agreed to and acts decided join the thread; stop drops it; Work, the chip, "what are you doing" and `/foundry/why/undertaking/:id` read it. Fourteen acceptance cases. **No step yet thinks, spends or acts on its own.** |
@@ -966,7 +984,8 @@ caller appears for one without the other. Wiring both needs a real answer to
 | The first real experiment has a hand (284, `experiment_hand_tick`) | **E2** | Proof 1 as ordinary venture rows with its rule sealed on the delivery; the owner's three acts on one page (`/foundry/experiments/:id`, Home queue); Allow = three exact acts under three ask-first boundaries on the test's asset; every effect from the experimental asset resolves its act at the door from rows (`experimentActFor`), the shape the kill switch said the first hand would fill; the payment link is the exposure, created through the door or pasted and held to one contract; the hand carries offers, receipts, purchases from the existing webhook, deliveries, refunds, the buyer's own refund link, settlement and take-down; what is owed outlives the test. Rehearsed end to end against stubbed providers (`the-first-real-experiment-runs-by-hand`, 14; every RAISE of 284 planted, 7); rendered at five phone widths. Not commercial evidence: no business was contacted, no money moved. |
 | Authority place (no migration) | **E2** | Every company has `/authority`: how much the institution does on its own, DERIVED from boundaries, the allowance, consents and delegations — Watch · Propose · Carry within limits · Some of each — never stored. Lighter is one confirmed tap through the existing narrowing writers, fingerprinted against the rows it was read from; heavier is one sentence per door through `/said`; the thirty-day line says "would have changed nothing" when nothing was proposed. Eight acceptance cases; rendered at 375–1440 and 200% text. |
 | The owner surface, driven as a person (no migration) | **E2** | `scripts/owner-review-harness.mts` serves production's shape; three reviewers who had not seen the code attempted twelve owner objectives on a phone (20 Sep): 1 achieved, 8 partial, 3 failed. The failures became `the-first-direction-lands.test.ts` and a browser read-back of the exact owner journey. What was left is in `MATURITY_MAP.md`. **No real owner has used it on a real day.** |
-| Real founders, providers, pilots, production | unproven | E4/E5/E6 |
+| The market twin, its year runs and the continuous invariant monitor (no migration) | **E2** | Deterministic simulation: the real institution, every routine, day by day, against an imagined market whose every number is a range with a named source, and a scripted model in three kinds (capable, degraded, adversarial). Invariants checked after every simulated day, each with a canary. Says what the institution does under those assumptions; says nothing about real buyers. `tests/simulation/twin/a-year-in-the-twin.test.ts`, run: `$CAMPAIGN_OUT/scorecard.json` |
+| Real founders, providers, pilots, production | **E0** (unproven) | nothing has reached E4, E5 or E6 |
 
 ## Open proof debt
 
@@ -1009,17 +1028,17 @@ caller appears for one without the other. Wiring both needs a real answer to
 
 ### Proven — E3, or structurally enforced and mutation-verified
 
-| What | How it is proven |
-|---|---|
-| Reconstruction, recognition, understanding, Shadowing, Assisting, judgment, development | Executable benchmark gates, each with a running test. **Scope: the synthetic dimensions those corpora actually exercise — nothing wider.** |
-| Production reachability | `production-reachability-v1` across four synthetic non-software companies, each admitted through the one intake production has |
-| Unfamiliar-company generalization | Independently generated corpus against the frozen recognition gate |
-| **Institutional invariants live in the database** | Not in application code, so a bug in a service cannot bypass them. Reproducible counts across `src/db/migrations/`: **87** `CREATE TRIGGER` statements carrying **74** distinct trigger names, and **222** `RAISE(ABORT, …)` guards — re-counted after migration 169. The name count did not move because 169 drops and recreates `founder_assertion_guard` rather than adding a guard; the statement and abort counts moved by exactly what it re-declares. A previous figure of "169 … verified by count" appeared here with no stated method and cannot be reproduced by any obvious one; these numbers name their own command so the next steward can check them. |
-| The scheduled pass has no epistemic privilege | Four-part audit: structural, behavioural (four refusals + one advancing control), provenance, idempotency |
-| Support-chain reachability | Sixteen named links, invocation-based, mutation-verified against a removed call |
-| Institutional cognition is deterministic | Gate test; no model reachable from the kernel |
-| NULL-semantics of every guard | Systematic audit (migration 130) plus a standing gate |
-| Coverage integrity in both new gates | Dropping an observation reports *unexercised* rather than passing |
+| What | Level | How it is proven |
+|---|---|---|
+| Reconstruction, recognition, understanding, Shadowing, Assisting, judgment, development | **E3** | Executable benchmark gates, each with a running test. **Scope: the synthetic dimensions those corpora actually exercise — nothing wider.** `tests/contracts/reconstruction-benchmark.ts` and the `responsibility-*-benchmark.ts` corpora |
+| Production reachability | **E3** | `production-reachability-v1` across four synthetic non-software companies, each admitted through the one intake production has: `tests/contracts/production-reachability-benchmark.ts` |
+| Unfamiliar-company generalization | **E3** | Independently generated corpus against the frozen recognition gate: `unfamiliar-company-generalization.test.ts` |
+| **Institutional invariants live in the database** | **E2** | Not in application code, so a bug in a service cannot bypass them. Reproducible counts across `src/db/migrations/`: **87** `CREATE TRIGGER` statements carrying **74** distinct trigger names, and **222** `RAISE(ABORT, …)` guards — re-counted after migration 169. The name count did not move because 169 drops and recreates `founder_assertion_guard` rather than adding a guard; the statement and abort counts moved by exactly what it re-declares. A previous figure of "169 … verified by count" appeared here with no stated method and cannot be reproduced by any obvious one; these numbers name their own command so the next steward can check them. |
+| The scheduled pass has no epistemic privilege | **E2** | Four-part audit: structural, behavioural (four refusals + one advancing control), provenance, idempotency |
+| Support-chain reachability | **E2** | Sixteen named links, invocation-based, mutation-verified against a removed call |
+| Institutional cognition is deterministic | **E2** | Gate test; no model reachable from the kernel |
+| NULL-semantics of every guard | **E2** | Systematic audit (migration 130) plus a standing gate |
+| Coverage integrity in both new gates | **E2** | Dropping an observation reports *unexercised* rather than passing |
 
 ### Implemented but unproven — E2, real code path, local runtime only
 

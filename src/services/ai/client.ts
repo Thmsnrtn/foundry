@@ -598,10 +598,51 @@ function buildSystemMessageContent(
   return blocks;
 }
 
+// ─── The deploy marker never leaves the door ────────────────────────────────
+//
+// A commit whose message carries the private deploy marker deploys production
+// (.github/workflows/deploy-private.yml, matched without regard to case). The
+// marker is a word, and a model can write any word. So nothing a model says
+// may carry it anywhere Foundry writes — a reading, a design, a page, a file,
+// a message — and the one place every model reply passes is here. A reply
+// that carries it is REFUSED, not repaired: it was answered and is paid for,
+// and then it is not used, with a reason that says where in the reply the
+// marker sat (the marker itself shown as a placeholder, never written out).
+// Assembled at run time so this file does not carry it either.
+
+const DEPLOY_MARKER = ['[deploy', '-private]'].join('');
+
+/** A model's reply that was answered and refused, with why. Not a door failure: the door is up. */
+export class ModelReplyRefused extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ModelReplyRefused';
+  }
+}
+
+/** Throws ModelReplyRefused when the reply carries the deploy marker; otherwise returns nothing. */
+export function refuseAMarkedReply(content: string): void {
+  const at = content.toLowerCase().indexOf(DEPLOY_MARKER);
+  if (at < 0) return;
+  const anyCase = new RegExp(DEPLOY_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+  const around = content.slice(Math.max(0, at - 60), at + DEPLOY_MARKER.length + 60)
+    .replace(anyCase, '⟨the deploy marker⟩').replace(/\s+/g, ' ').trim();
+  throw new ModelReplyRefused(`the model's reply carried the marker that deploys production, which nothing Foundry writes may carry; it was refused, not used: "…${around}…"`);
+}
+
 /**
  * Make an LLM call via OpenRouter with cost ceiling, timeout, and retry.
+ * The reply is refused at the door when it carries the deploy marker.
  */
 export async function callClaude(
+  config: AICallConfig & { subject: SpendSubject },
+): Promise<AIResponse> {
+  const reply = await callClaudeAtTheDoor(config);
+  refuseAMarkedReply(reply.content);
+  return reply;
+}
+
+async function callClaudeAtTheDoor(
   config: AICallConfig & { subject: SpendSubject },
 ): Promise<AIResponse> {
   const productId = subjectProductId(config.subject);
@@ -787,6 +828,18 @@ export async function callClaudeMultiTurn(
   messages: Array<{ role: 'user' | 'assistant'; content: string }>,
   maxTokens: number = 1024,
   useOpus: boolean = false,
+  productId?: string,
+): Promise<AIResponse> {
+  const reply = await callClaudeMultiTurnAtTheDoor(systemPrompt, messages, maxTokens, useOpus, productId);
+  refuseAMarkedReply(reply.content);
+  return reply;
+}
+
+async function callClaudeMultiTurnAtTheDoor(
+  systemPrompt: string,
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>,
+  maxTokens: number,
+  useOpus: boolean,
   productId?: string,
 ): Promise<AIResponse> {
   await refuseIfNotEntitled(productId);
