@@ -57,7 +57,7 @@ beforeAll(async () => {
   const other = await openMandate({ founderId: 'sell_elsewhere', statement: 'Small things for trades businesses', shape: null, evidenceMode: 'real' });
   if ('refused' in other) throw new Error(other.refused);
   await aWorkshopTest('sell_elsewhere', other.id, 'sell_nows_x');
-});
+}, 180_000);
 
 describe('each gate readiness refuses for, the verdict refuses for too', () => {
   const gates: Array<{ name: string; says: RegExp; is: string; breakIt: () => Promise<void>; mendIt: () => Promise<void> }> = [

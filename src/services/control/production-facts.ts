@@ -144,7 +144,10 @@ export function canSellOnItsOwn(f: ProductionFacts): { yes: boolean; blockers: s
   if (f.paymentEvents.status === 'not_working') {
     blockers.push('nothing can hear a payment, so every priced offer is refused: add STRIPE_WEBHOOK_SECRET from the one Foundry endpoint in Stripe');
   }
-  if (!f.frontLoadedAttention || !f.frontLoadedAttention.ownersOwn || f.frontLoadedAttention.treatment === 'require' || f.frontLoadedAttention.treatment === 'refuse') {
+  // Said once: when readiness's own placement refusal (below) already names
+  // front-loaded attention, that sentence is the blocker, not this one too.
+  const placementNamesIt = f.placementRefused.some((why) => /front.loaded.attention/i.test(why));
+  if (!placementNamesIt && (!f.frontLoadedAttention || !f.frontLoadedAttention.ownersOwn || f.frontLoadedAttention.treatment === 'require' || f.frontLoadedAttention.treatment === 'refuse')) {
     blockers.push('no forge-made offer may be placed until you allow offers that still take some of your minutes per sale (Your decisions)');
   }
   // WHAT READINESS WOULD REFUSE EVERY FORGE-MADE TEST FOR, in its own words

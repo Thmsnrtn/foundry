@@ -7944,7 +7944,10 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
   const factsHtml = html`<section class="card" id="production-facts" aria-labelledby="production-facts-h">
     <h2 id="production-facts-h">Can Foundry sell on its own today? <span class="status ${sell.yes ? 'go' : 'wait'}">${sell.yes ? 'Yes' : 'Not yet'}</span></h2>
     ${sell.blockers.length ? html`<p class="quiet">What stops it:</p><ul class="mandate-list">${sell.blockers.map((b) => html`<li><span class="mandate-when">${b}.</span></li>`)}</ul>` : ''}
-    ${sell.costs.length ? html`<p class="quiet">What it would still cost you per sale:</p><ul class="mandate-list">${sell.costs.map((b) => html`<li><span class="mandate-when dim">${b}.</span></li>`)}</ul>` : ''}
+    ${/* WHAT A SALE WOULD STILL COST HIM folds under its count: these are not
+         what stops it (those stay open above), and with readiness's gates read
+         too (Stage 1 F1.6) the card crossed the phone's 700-word line. */ ''}
+    ${sell.costs.length ? html`<details class="fold"><summary><h3>What it would still cost you per sale</h3><span class="gist">${count(sell.costs.length, 'thing')}</span></summary><ul class="mandate-list">${sell.costs.map((b) => html`<li><span class="mandate-when dim">${b}.</span></li>`)}</ul></details>` : ''}
     <details><summary>Production facts</summary>
       <dl class="facts">
         ${facts.secrets.map((x) => html`<dt>${x.name}</dt><dd>${x.present ? 'set' : 'not set'} <span class="quiet">· ${x.unblocks}</span></dd>`)}

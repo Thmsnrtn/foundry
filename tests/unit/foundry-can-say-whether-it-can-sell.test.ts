@@ -97,7 +97,11 @@ describe('can it sell on its own: blockers stop it, costs leave minutes with the
   it('without the owner\'s per-sale-minutes decision or a charter, it cannot', async () => {
     const r = canSellOnItsOwn(await productionFacts(OWNER, { STRIPE_SECRET_KEY: 'x', STRIPE_WEBHOOK_SECRET: SECRET_VALUE }));
     expect(r.yes).toBe(false);
-    expect(r.blockers.join(' ')).toMatch(/allow offers that still take some of your minutes/);
+    // The per-sale-minutes decision is named, once: readiness's own placement
+    // refusal says it when it applies, and the generic sentence otherwise
+    // (reconciled 7 October 2026; the two were said side by side).
+    const minutes = r.blockers.filter((b) => /allow offers that still take some of your minutes|front loaded attention/.test(b));
+    expect(minutes).toHaveLength(1);
     expect(r.blockers.join(' ')).toMatch(/no charter is signed/);
   });
 
