@@ -1,75 +1,82 @@
 // =============================================================================
 // Tests: distributed job-lock contention (Roadmap 3.1 — web/worker split)
 //
-// The whole safety of moving 75 crons onto a dedicated worker rests on one
+// The whole safety of moving the crons onto a dedicated worker rests on one
 // property: during a rolling deploy two workers overlap, and every job must run
 // AT MOST ONCE. These deterministic assertions guard that property; the load
 // harness (tests/load/cron-load.ts) additionally checks it under volume + timing.
+//
+// THE REAL LOCK, NOT A MIRROR OF ITS SQL (remediation 1.1, 6 October 2026).
+// This file used to copy acquireJobLock's SQL with an instance id per caller,
+// because the real helper keyed ownership on one id per PROCESS — and that is
+// exactly why it let a second run of a routine start in the same process: the
+// mirror tested the property the real code did not have. Each acquisition now
+// carries its own token, so many racing acquisitions in one process are as
+// distinct as many workers, and the real functions are what is tested.
 // =============================================================================
+process.env.TURSO_DATABASE_URL = 'file::memory:';
+process.env.ENCRYPTION_KEY = '3'.repeat(64);
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import { createClient } from '@libsql/client';
-import { readFileSync, readdirSync } from 'fs';
-import { resolve } from 'path';
-import { splitSqlStatements } from '../../src/db/migrate.js';
+import { runMigrations } from '../../src/db/migrate.js';
+import { query } from '../../src/db/client.js';
+import { acquireJobLock, releaseJobLock } from '../../src/services/job-lock.js';
 
-const MIGRATIONS_DIR = resolve(__dirname, '../../src/db/migrations');
-let db: ReturnType<typeof createClient>;
+const holder = async (job: string) => ((await query('SELECT locked_by FROM job_locks WHERE job_name = ?', [job])).rows[0] as Record<string, unknown> | undefined)?.locked_by ?? null;
 
-// Mirror of acquireJobLock's SQL, parameterized by instanceId (production hard-
-// codes one INSTANCE_ID per process; a single-process test needs distinct ids).
-async function acquireAs(instanceId: string, jobName: string, ttlSeconds = 300): Promise<boolean> {
-  await db.execute({
-    sql: `INSERT INTO job_locks (job_name, locked_at, locked_by, expires_at)
-          VALUES (?, datetime('now'), ?, datetime('now', ?))
-          ON CONFLICT(job_name) DO UPDATE SET
-            locked_at = datetime('now'),
-            locked_by = excluded.locked_by,
-            expires_at = excluded.expires_at
-          WHERE job_locks.expires_at < datetime('now')`,
-    args: [jobName, instanceId, `+${ttlSeconds} seconds`],
-  });
-  const r = await db.execute({ sql: 'SELECT locked_by FROM job_locks WHERE job_name = ?', args: [jobName] });
-  return (r.rows[0] as Record<string, unknown>)?.locked_by === instanceId;
-}
-
-beforeAll(async () => {
-  db = createClient({ url: 'file::memory:' });
-  for (const f of readdirSync(MIGRATIONS_DIR).filter((x) => x.endsWith('.sql')).sort()) {
-    for (const stmt of splitSqlStatements(readFileSync(resolve(MIGRATIONS_DIR, f), 'utf-8'))) {
-      await db.execute({ sql: stmt, args: [] }).catch(() => {});
-    }
-  }
-});
-
-beforeEach(async () => {
-  await db.execute({ sql: 'DELETE FROM job_locks', args: [] });
-});
+beforeAll(async () => { await runMigrations(); });
+beforeEach(async () => { await query('DELETE FROM job_locks', []); });
 
 describe('job-lock contention', () => {
-  it('lets exactly one of many racing instances win the same job', async () => {
-    const instances = Array.from({ length: 16 }, (_, i) => `inst-${i}`);
-    const results = await Promise.all(instances.map((id) => acquireAs(id, 'lifecycle_check')));
-    expect(results.filter(Boolean).length).toBe(1);
+  it('lets exactly one of many racing acquisitions win the same job', async () => {
+    const results = await Promise.all(Array.from({ length: 16 }, () => acquireJobLock('lifecycle_check')));
+    expect(results.filter((t) => t !== null).length).toBe(1);
   });
 
-  it('blocks every other instance while the lock is held', async () => {
-    expect(await acquireAs('A', 'metric_snapshot')).toBe(true);
-    expect(await acquireAs('B', 'metric_snapshot')).toBe(false);
-    expect(await acquireAs('C', 'metric_snapshot')).toBe(false);
+  it('blocks every other acquisition while the lock is held', async () => {
+    expect(await acquireJobLock('metric_snapshot')).not.toBeNull();
+    expect(await acquireJobLock('metric_snapshot')).toBeNull();
+    expect(await acquireJobLock('metric_snapshot')).toBeNull();
   });
 
   it('keeps distinct jobs independent (no cross-job contention)', async () => {
-    expect(await acquireAs('A', 'job_x')).toBe(true);
-    expect(await acquireAs('B', 'job_y')).toBe(true); // different job → not blocked
+    expect(await acquireJobLock('job_x')).not.toBeNull();
+    expect(await acquireJobLock('job_y')).not.toBeNull(); // different job → not blocked
   });
 
   it('reclaims an expired lease from a crashed worker (no permanent deadlock)', async () => {
-    expect(await acquireAs('crashed', 'red_daily')).toBe(true);
-    await db.execute({
-      sql: "UPDATE job_locks SET expires_at = datetime('now','-1 seconds') WHERE job_name = 'red_daily'",
-      args: [],
-    });
-    expect(await acquireAs('healthy', 'red_daily')).toBe(true);
+    expect(await acquireJobLock('red_daily')).not.toBeNull();
+    await query("UPDATE job_locks SET expires_at = datetime('now','-1 seconds') WHERE job_name = 'red_daily'", []);
+    expect(await acquireJobLock('red_daily')).not.toBeNull();
+  });
+});
+
+describe('inside one process, a run in progress is not run again (remediation 1.1)', () => {
+  it('the run already holding the lock is refused a second acquisition, by this same process', async () => {
+    const first = await acquireJobLock('forge_tick');
+    expect(first).not.toBeNull();
+    expect(await acquireJobLock('forge_tick'), 'an overrunning hourly tick, or the boot catch-up, asking again').toBeNull();
+  });
+
+  it('the first run\'s lock survives a refused second run, and only its own release ends it', async () => {
+    const first = (await acquireJobLock('forge_tick'))!;
+    const second = await acquireJobLock('forge_tick');
+    expect(second).toBeNull();
+    // The release a second run would make with any token but the holder's.
+    await releaseJobLock('forge_tick', 'another-run-entirely');
+    expect(await holder('forge_tick'), 'nobody else can end the first run\'s hold').toBe(first);
+    expect(await acquireJobLock('forge_tick'), 'and it still keeps a third run out').toBeNull();
+    await releaseJobLock('forge_tick', first);
+    expect(await holder('forge_tick')).toBeNull();
+    expect(await acquireJobLock('forge_tick'), 'released by its own holder, the routine is free').not.toBeNull();
+  });
+
+  it('a run whose lease expired and was taken cannot release the new holder', async () => {
+    const stale = (await acquireJobLock('slo_check'))!;
+    await query("UPDATE job_locks SET expires_at = datetime('now','-1 seconds') WHERE job_name = 'slo_check'", []);
+    const fresh = (await acquireJobLock('slo_check'))!;
+    expect(fresh).not.toBe(stale);
+    await releaseJobLock('slo_check', stale);
+    expect(await holder('slo_check')).toBe(fresh);
   });
 });

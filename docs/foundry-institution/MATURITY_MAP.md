@@ -2730,6 +2730,92 @@ citation nobody retrieved is refused at launch and named to the owner).
 - A delivery refused for any reason still waits on the owner rather than being
   refunded automatically; with the money switch off, a refund is theirs anyway.
 
+### The simulation campaign's correctness defects (Remediation 1, 6 October 2026)
+
+**What changed.** The job lock is per acquisition; first visits cannot collide;
+a Stop and its resume are kept and read on Activity; a failing model door is
+asked once and then refused for ten minutes, each tier waits its own time, a
+forge pass has a wall-clock budget; Home, the absence page and Controls name the
+door in one sentence; an unreadable claim backs off; an unmatched payment event
+keeps its reason; decision forms and absence evidence are escaped; the shell
+declares its icon. **Evidence maturity.** E2: all five campaign files green,
+the four pinned `it.fails` flipped to `it`, each fix mutated away and its test
+red; Home walked on two phones and a desk on days 1, 9 and 39. *Corrected by
+Remediation 2:* the Home-only walk saw no failed resource, but the full walk
+that followed still logged a browser-level 404 for `/favicon.ico` on 64 pages —
+declaring the icon did not stop Chromium asking. The address is now served.
+**Proof debt.** The breaker lives in one process
+and is not shared across a rolling deploy's two machines; its thresholds (three
+failures, ten minutes) and the tier timeouts are reasoned, not measured against
+a real provider outage; `rejection_streaks` keeps a read-then-insert with no
+unique key (a race makes a duplicate row, not an error) and is not fixed here;
+about thirty `raw()` interpolations of non-constant text remain in
+`foundry-shell.ts`, not audited here. `stripe_webhook_events` carries no owner, so the
+unmatched reasons Controls reads are the whole account's — right only while one
+owner holds the instance. *Corrected after the independent audit:* the breaker
+counted a request's own 400 as the door being down and let every concurrent
+call through as the probe, and a given-up claim could fill the evidence window
+for good. Both are fixed, each with a test that is red on the first cut.
+*And after the second audit:* a probe refused before it reached the door (no
+key, a spend cap) held the door shut for four minutes, so it is now handed
+back; a request's refusal arriving while the breaker is open no longer closes
+it; a 200 whose body names the request (a prompt too long) is no longer
+retried or counted, and a 408 is; a claim whose words leave nothing to search
+for now leaves the window the same way, named on Controls; and Controls says
+how many claims were left, not only the oldest ten. Each has a test, red with
+its fix reverted.
+
+### The owner's daily screens (Remediation 2, 6 October 2026)
+
+**What changed.** On a day something needs the owner, Home draws the decision first
+and the pulse, the ways in, the glance and a standing permission beneath it; a
+card whose button only opens a page keeps "if you do nothing" open and folds
+its other terms. Every control on the walked pages reaches 24px (bare links by
+padding that moves no line of text; switches' checkboxes cover the switch);
+components carry 44. Settings' and Privacy's switches have names; the Inbox's
+selected filter keeps its own ground; Activity's list holds only terms; the
+Needs-you pill and the company cards are named by what they say. Etsy buyers
+and Trading research have an h1. The Workshop preview points at the public
+site and submits nothing. `/favicon.ico` answers. Controls' decisions, the
+absence page's thinking ledger (and a longer horizon when it adds no new
+failure), the experiment page's case,
+the reviewed recipients, the decide page's reasoning, the Letter's capability
+list and the Workshop's identity terms are folded under headings that say what
+is inside. The decision card's facts, notes and hidden fields, and the river
+view's company cards, are escaped (a company's name reached both as markup).
+**Evidence maturity.** E2 in a browser on the walk's world: the one-thing card
+and its button above the fixed bars on 390×844, 375×667 and 430×932 on day 1
+and after the charter lapses (day 39), where it sat at 888–957px; axe at
+serious and above clean on 23 owner pages on a phone and a desk; no control
+under 24px; no owner page over 700 words but one. Each fix was mutated away and
+its test went red. **Proof debt.** WebKit is not driven (Safari is the owner's
+phone); "Before you decide" is 1,517 words with its terms open (PENDING 38);
+"If you stepped away" stays over 700 (about 1,070) whenever a longer horizon
+adds a failure, because a failing property and what would fix it are never
+folded;
+Controls' health card opens when anything is wrong, by design, and then runs
+past 700 words; inline links reach 24px, not 44 — the WCAG 2.2 inline
+exception, not the design target; keyboard and screen-reader passes are axe's
+rules only, never a person with VoiceOver.
+
+### Dependencies, and gates that say how long they take (Remediation 4, 6 October 2026)
+
+**What changed.** vitest 4.1 and `@clerk/backend` 3 replace vitest 1.6 and the
+Clerk SDK; `verifiedClerkClaims` reads the package's exported `verifyToken`
+(which throws a failure and returns the payload), refuses any failure in
+either shape, and keeps the issuer check the removed `issuer` option carried.
+The first cut read the inner function's `{ data }` shape and would have locked
+the owner out; the independent audit found it, and a test with no double — a
+signed RS256 token through the installed package — now holds it. Hooks get a
+minute (vitest 4 fails an overrun hook; three overran ten seconds on CI).
+**Evidence maturity.** E2: the full chain green on vitest 4, the advisory gate
+green with one written exception, the real-library test red on the first
+adapter and green on this one.
+**Proof debt.** No real Clerk session has been verified against `@clerk/backend`
+3 — the sign-in rehearsal against the live instance is the owner's; the
+moderate OpenTelemetry advisories wait on `@sentry/node` 11, a major upgrade of
+its own; braces stays accepted until a release above 3.0.3 or tsc-alias goes.
+
 ### A missing listing says why (Roadmap 2027 R34, 6 October 2026)
 
 **What changed.** A test's listing missing from a complete shop read is asked

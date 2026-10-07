@@ -13,9 +13,9 @@ around each item.
 ---
 
 <!-- status:begin — generated from the headings below by node scripts/check-record-matches-code.mjs --write -->
-# 17 WAITING ON THE OWNER, 3 WITH COUNSEL, 7 DECIDED IN PLACE
+# 20 WAITING ON THE OWNER, 3 WITH COUNSEL, 7 DECIDED IN PLACE
 
-- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 19, 21, 25, 26, 27, 29, 30, 32, 33, 34, 35, 36.
+- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 19, 21, 25, 26, 27, 29, 30, 32, 33, 34, 35, 36, 37, 38, 39.
 - **Waiting on counsel:** PENDING 9, 13, 15 (interim positions in force; see below).
 - **Decided, and kept where they were asked:** PENDING 16, 20, 22, 23, 24, 28, 31.
 - **Answered and recorded as RESOLVED:** 15.
@@ -2188,4 +2188,63 @@ file is what buyers already buy.
 until then, free tool beside a paid brief), or keep briefs as the default.
 
 **Recommendation.** Adopt it.
+
+---
+
+## PENDING 37 — What a failed model call counts against your daily thinking: **OWNER** (2026-10-06)
+
+**What is true.** A call that reaches the model door and gets no answer ends
+"ambiguous": the provider may or may not have charged. Today the full amount
+reserved for it counts against the day's thinking cap until the reservation
+expires. In the campaign, twenty failures held 20¢ of the $1 pre-charter cap;
+since remediation 1.4's breaker, a failing door is asked once and the same
+morning holds about 16¢. Bounded either way.
+
+**Your choice.**
+- **(a)** Keep counting an ambiguous call at its full reservation. Safe: the cap
+  can never be exceeded by a charge we did not see. Cost: a bad morning eats
+  thinking budget for work that did not happen.
+- **(b)** Reconcile ambiguous calls against the provider's own usage reading
+  (OpenRouter reports what it charged) and release what it did not charge.
+  Truer, and a failing morning costs nothing; it needs one more read of the
+  provider each day, and until that read the reservation still counts.
+
+**Recommendation.** (a) now, (b) when the daily credit read (R33) is extended to
+usage — the breaker has already made the cost small.
+
+## PENDING 38 — How much of "Before you decide" is open before you press Allow: **OWNER** (2026-10-06)
+
+**What is true.** The page you read before allowing a test that writes to
+strangers was 2,444 words on a phone. Remediation 2 folded the reasoning — why
+this question, why this exchange, what each discipline said, what each answer
+would mean, the public name's costs, the readiness legs (a blocked leg is still
+said outside its fold) — and left open the case for running it, who it reaches
+and what it spends, where it stops itself, and the decision. It is now about
+1,500 words, over the 700-word line; the gate names it as an exception (the
+other is the absence page, long whenever a failure is open, by doctrine).
+
+**Your choice.**
+- **(a)** Keep the terms open. Nothing you agree to is behind a tap; the page
+  stays long.
+- **(b)** Fold "who it reaches" and "where it stops" too, leaving their
+  one-line totals (how many businesses, the money ceiling, the first stop) in
+  the summaries. About 600 words; every term one tap away.
+
+**Recommendation.** (a). It is the only decision that reaches a stranger, and
+"a term behind a tap is not consent" is the same rule the Home card keeps.
+
+## PENDING 39 — The four company tabs that appear only with rows: **OWNER** (2026-10-06)
+
+**What is true.** Economics, Customers, Experiments and Evidence appear on a
+company only when it has rows for them; their addresses answer an old link by
+returning to the overview. The walk reached them through the route table, on
+companies that had no such rows, and reported "bounces". No page links to an
+absent one: the company's tabs are built from the dimensions that have rows
+(`services/founder/place.ts`).
+
+**Your choice.** (a) keep them conditional; (b) always show all four, with an
+empty state that says what would fill each.
+
+**Recommendation.** (a): a tab with nothing behind it is the dead end the walk
+was looking for.
 

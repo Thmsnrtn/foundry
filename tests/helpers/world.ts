@@ -559,6 +559,12 @@ export async function ownerApp(): Promise<Hono> {
   const { resolve } = await import('node:path');
   const { staticAssetHandler } = await import('../../src/routes/public/static-assets.js');
   app.get('/static/:file', staticAssetHandler(resolve(process.cwd(), 'src')) as never);
+  // And the manifest, the service worker and the favicon, from the same handlers production mounts.
+  const { pwaHandlers } = await import('../../src/routes/public/static-assets.js');
+  const pwa = pwaHandlers(resolve(process.cwd(), 'src'));
+  app.get('/manifest.json', pwa.manifest as never);
+  app.get('/sw.js', pwa.serviceWorker as never);
+  app.get('/favicon.ico', pwa.favicon as never);
   // THE SAME SURFACE THE APPLICATION MOUNTS, from the same place it mounts it.
   //
   // This used to list the owner's routers one by one, rebuilding by hand what

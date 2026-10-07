@@ -57,6 +57,10 @@ const PUBLIC = [
   // that file.
   '/manifest.json',
   '/sw.js',
+  // The icon a browser asks for on its own, whatever the page declares
+  // (remediation, 6 October 2026: the walk logged it as a 404 on 64 pages).
+  // The same PNG the shell names; no company data.
+  '/favicon.ico',
   // The deploy has to be able to ask whether a route his screens post to is in
   // the release, and it cannot do that under /foundry: the session middleware
   // answers 401 before routing, so a missing route and a live one are

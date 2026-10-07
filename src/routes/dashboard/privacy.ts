@@ -89,7 +89,7 @@ function logRetentionLabel(days: number): string {
 
 // ─── Toggle Component ─────────────────────────────────────────────────────────
 
-function toggle(name: string, checked: boolean, id: string): HtmlEscapedString | Promise<HtmlEscapedString> {
+function toggle(name: string, checked: boolean, id: string, label: string): HtmlEscapedString | Promise<HtmlEscapedString> {
   // The switch lives in `public/owner.css` now — one rule for this page and the
   // pace control in Controls. What stood here was forty inline declarations
   // drawing the same thing, with an ON colour of #4ecca3 that appears in no
@@ -111,7 +111,7 @@ function toggle(name: string, checked: boolean, id: string): HtmlEscapedString |
   // It returns an `html` fragment now rather than a string handed to `raw()`,
   // because the second is a thing a later edit can drop and this is not.
   return html`<label class="toggle" for="${id}">
-    <input type="checkbox" id="${id}" name="${name}" value="1"${checked ? raw(' checked') : ''} data-submits>
+    <input type="checkbox" id="${id}" name="${name}" value="1"${checked ? raw(' checked') : ''} data-submits aria-label="${label}">
     <span class="toggle-track"></span>
     <span class="toggle-thumb"></span>
   </label>`;
@@ -225,7 +225,7 @@ privacySettings.get('/privacy', async (c) => {
       <form method="POST" action="/privacy/consent" style="display:contents;">
         <input type="hidden" name="consent_type" value="${item.name}" />
         <div style="display:flex;align-items:flex-start;gap:1rem;">
-          ${''}${toggle(item.name, checked, `toggle-${item.name}`)}
+          ${''}${toggle(item.name, checked, `toggle-${item.name}`, item.label)}
           <div style="flex:1;min-width:0;">
             <div style="display:flex;align-items:baseline;gap:0.75rem;flex-wrap:wrap;">
               <span style="font-size:0.9rem;font-weight:600;color:var(--text-primary);">${item.label}</span>
@@ -417,7 +417,6 @@ privacySettings.get('/privacy', async (c) => {
             class="btn"
             style="white-space:nowrap;flex-shrink:0;color:var(--bad);border-color:var(--bad);background:transparent;"
             data-open="delete-modal"
-            aria-label="Delete current product data"
           >
             Delete This Product
           </button>

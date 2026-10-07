@@ -360,7 +360,13 @@ const DOOR_ICON: Record<string, string> = {
 async function needsIndicator(extra = ''): Promise<HtmlEscapedString> {
   const n = await needsYouNow();
   const cls = `needs${n ? ' hot' : ''}${extra ? ` ${extra}` : ''}`;
-  return html`<a class="${cls}" href="${ADDRESSES.decisions}"${n === null ? '' : raw(` aria-label="${n === 0 ? 'Nothing needs you' : `${String(n)} ${n === 1 ? 'thing needs' : 'things need'} you`}"`)}>${raw(ICONS.needs)}<span>${LABELS.decisions}</span>${n ? html`<b>${String(n)}</b>` : ''}</a>` as HtmlEscapedString;
+  // THE NAME IS WHAT IT SAYS. "3 things need you" as an aria-label replaced
+  // the visible "Needs you 3", so the name a voice-control user speaks was not
+  // the one on the screen (axe: label-content-name-mismatch, on every page of
+  // the desk rail). With a count, the text names it — "Needs you 3", the label
+  // clipped but still read on a phone. With none, "Nothing needs you" contains
+  // what is shown, and says more than the bare words.
+  return html`<a class="${cls}" href="${ADDRESSES.decisions}"${n === 0 ? raw(' aria-label="Nothing needs you"') : ''}>${raw(ICONS.needs)}<span>${LABELS.decisions}</span>${n ? html` <b>${String(n)}</b>` : ''}</a>` as HtmlEscapedString;
 }
 
 /** One door, lit when the page underfoot stands beneath it. */
@@ -390,6 +396,7 @@ ${/* ON THE HOME SCREEN, IT IS HIS PRODUCT. The owner's surface was the one
      colour and a generic icon, while the manifest it would have used described
      the commercial product and its dark palette. */ ''}
 <link rel="manifest" href="/manifest.json" />
+<link rel="icon" type="image/png" href="/static/icon-192.png" />
 <link rel="apple-touch-icon" href="/static/icon-192.png" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-title" content="Foundry" />

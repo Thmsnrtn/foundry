@@ -14,6 +14,7 @@
 // the public record and the contact path carry on, because a customer's claim
 // on the Workshop does not depend on whether the owner is paying attention.
 // =============================================================================
+import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 
 export interface PublicWorkshop {
@@ -176,16 +177,66 @@ export async function setAbout(founderId: string, about: string): Promise<void> 
   await query(`UPDATE public_workshop SET about = ?, updated_at = datetime('now') WHERE founder_id = ?`, [about.trim(), founderId]);
 }
 
-export async function pauseNewEconomicActivity(input: { founderId: string; reason: string }): Promise<void> {
+export async function pauseNewEconomicActivity(input: {
+  founderId: string; reason: string;
+  /** False when the caller records the act itself — Stop everything does. */
+  record?: boolean;
+}): Promise<void> {
   const reason = input.reason.trim();
   if (!reason) throw new WorkshopRefused('reason_required');
-  await query(
+  const principal = `founder:${input.founderId}`;
+  const r = await query(
     `UPDATE public_workshop SET economic_pause_at = datetime('now'), economic_pause_reason = ?, economic_pause_by = ?, updated_at = datetime('now')
-      WHERE founder_id = ? AND economic_pause_at IS NULL`, [reason, `founder:${input.founderId}`, input.founderId]);
+      WHERE founder_id = ? AND economic_pause_at IS NULL`, [reason, principal, input.founderId]);
+  // ONLY A PAUSE THAT BEGAN IS A PAUSE: pressing it again while paused changes nothing.
+  if ((r.rowsAffected ?? 0) > 0 && input.record !== false) {
+    await query(`INSERT INTO estate_pause_events (id, founder_id, kind, principal, reason) VALUES (?,?,'paused',?,?)`,
+      [nanoid(), input.founderId, principal, reason]);
+  }
 }
 
+/**
+ * KEEP THAT THE ESTATE WAS STOPPED (remediation 1.3): who, why, and what the
+ * stop lowered. Written here, beside the pause and resume it belongs with, so
+ * `control/stop.ts` stays a file that only ever lowers.
+ */
+export async function recordEstateStopped(input: { founderId: string; reason: string; stopped: string }): Promise<void> {
+  await query(`INSERT INTO estate_pause_events (id, founder_id, kind, principal, reason, detail) VALUES (?,?,'stopped_everything',?,?,?)`,
+    [nanoid(), input.founderId, `founder:${input.founderId}`, input.reason, input.stopped]);
+}
+
+/**
+ * APPROVED AND STILL UNWRITTEN: every business he approved for one of his
+ * tests that nothing has been sent to. What a pause held back is this, read
+ * when it ends.
+ */
+export async function approvedStillUnwritten(founderId: string): Promise<number> {
+  const r = (await query(
+    `SELECT COUNT(*) AS n FROM experiment_recipients r JOIN venture_experiments e ON e.id = r.experiment_id
+      WHERE e.founder_id = ? AND r.review_status = 'approved'
+        AND NOT EXISTS (SELECT 1 FROM outbound_actions o WHERE o.experiment_id = r.experiment_id AND o.recipient_id = r.id)`,
+    [founderId])).rows[0] as Record<string, unknown> | undefined;
+  return Number(r?.n ?? 0);
+}
+
+/**
+ * RESUME, AND REMEMBER WHAT IS RESUMED FROM (remediation 1.3). The pause's
+ * own columns are cleared, as before, so nothing reads the estate as paused;
+ * the act of resuming is kept, with when the pause began, how long it lasted
+ * and how many approved businesses were still unwritten.
+ */
 export async function resumeEconomicActivity(founderId: string): Promise<void> {
-  await query(`UPDATE public_workshop SET economic_pause_at = NULL, economic_pause_reason = NULL, economic_pause_by = NULL, updated_at = datetime('now') WHERE founder_id = ?`, [founderId]);
+  const was = (await query(`SELECT economic_pause_at FROM public_workshop WHERE founder_id = ? AND economic_pause_at IS NOT NULL`, [founderId]))
+    .rows[0] as Record<string, unknown> | undefined;
+  const r = await query(`UPDATE public_workshop SET economic_pause_at = NULL, economic_pause_reason = NULL, economic_pause_by = NULL, updated_at = datetime('now')
+    WHERE founder_id = ? AND economic_pause_at IS NOT NULL`, [founderId]);
+  if (!was || (r.rowsAffected ?? 0) === 0) return;
+  const since = String(was.economic_pause_at);
+  const seconds = Number(((await query(`SELECT MAX(0, CAST(strftime('%s','now') - strftime('%s', ?) AS INTEGER)) AS s`, [since])).rows[0] as Record<string, unknown>).s);
+  await query(
+    `INSERT INTO estate_pause_events (id, founder_id, kind, principal, reason, paused_since, paused_seconds, unwritten)
+     VALUES (?,?,'resumed',?,?,?,?,?)`,
+    [nanoid(), founderId, `founder:${founderId}`, 'the owner resumed new activity', since, seconds, await approvedStillUnwritten(founderId)]);
 }
 
 export async function newEconomicActivityPaused(founderId: string): Promise<boolean> {

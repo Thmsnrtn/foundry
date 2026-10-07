@@ -58,7 +58,8 @@ function run(label, args) {
 }
 
 const t0 = Date.now();
-// Vitest 1.6 takes ONE --exclude value, so the files are one brace glob.
+// One --exclude value, a brace glob of every file run on its own (Vitest 1.6
+// took only one; 4 accepts several, and the one glob still reads as one list).
 const EXCLUDE = `tests/unit/{${[GATES, ...PLANTERS].map((p) => p.replace(/^tests\/unit\/|\.test\.ts$/g, '')).join(',')}}.test.ts`;
 const SHARDS = Number(process.env.FOUNDRY_SUITE_SHARDS ?? 2);
 // ONE FILE, THROUGH THE SAME VERDICT. `gates-fail-when-they-should` uses this

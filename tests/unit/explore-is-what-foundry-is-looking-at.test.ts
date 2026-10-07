@@ -137,6 +137,6 @@ describe('the count in every header', () => {
       summary: 'Raise the price to $49', why: 'Buyers asked', expectedEffect: 'More per sale', risk: 'Fewer sales',
       consequence: 'low', proposedBy: 'institution:test' });
     const html = await (await app.request('/foundry/explore')).text();
-    expect(html).toMatch(/<a class="needs hot" href="\/foundry\/needs-you" aria-label="1 thing needs you">/);
+    expect(html).toMatch(/<a class="needs hot" href="\/foundry\/needs-you">[\s\S]*?<span>Needs you<\/span> <b>1<\/b><\/a>/);
   });
 });
