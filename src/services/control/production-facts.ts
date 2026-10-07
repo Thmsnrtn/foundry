@@ -69,6 +69,9 @@ export interface ProductionFacts {
   workshopLacks: string[];
   sending: { status: string; detail: string };
   placementRefused: string[];
+  /** Real offers on a page now, for tests still running; and designs ever made. */
+  onOffer?: number;
+  designed?: number;
 }
 
 export async function productionFacts(founderId: string, env: NodeJS.ProcessEnv = process.env): Promise<ProductionFacts> {
@@ -129,6 +132,11 @@ export async function productionFacts(founderId: string, env: NodeJS.ProcessEnv 
     // A forge test has no asset of its own until it is decided, so the
     // offer's own facts are what readiness reads; so does this.
     placementRefused: await placementRefusedFor(founderId, null, briefFacts()),
+    onOffer: Number(((await query(
+      `SELECT COUNT(*) AS n FROM experiment_exposures p JOIN venture_experiments x ON x.id = p.experiment_id
+        WHERE p.founder_id = ? AND p.evidence_mode = 'real' AND x.what_happened IS NULL AND x.retired_at IS NULL`, [founderId])).rows[0] as Row | undefined)?.n ?? 0),
+    designed: Number(((await query(
+      `SELECT COUNT(*) AS n FROM probe_designs WHERE founder_id = ?`, [founderId])).rows[0] as Row | undefined)?.n ?? 0),
   };
 }
 
@@ -137,7 +145,7 @@ export async function productionFacts(founderId: string, env: NodeJS.ProcessEnv 
  * reaching a buyer at all; costs let it sell but leave minutes per sale with
  * the owner. Each names what clears it. An empty `blockers` is the only "yes".
  */
-export function canSellOnItsOwn(f: ProductionFacts): { yes: boolean; blockers: string[]; costs: string[] } {
+export function canSellOnItsOwn(f: ProductionFacts): { yes: boolean; blockers: string[]; costs: string[]; nothingOnSale: string | null } {
   const blockers: string[] = [];
   const costs: string[] = [];
   if (!f.secrets.find((s) => s.name === 'STRIPE_SECRET_KEY')?.present) blockers.push('no payment provider is configured');
@@ -173,5 +181,11 @@ export function canSellOnItsOwn(f: ProductionFacts): { yes: boolean; blockers: s
   if (!f.moneySwitchOn) costs.push('every refund and cancellation is yours in Stripe until the money switch is on');
   if (f.correspondence === 'off') costs.push('every buyer email is yours until correspondence is at least "drafts"');
   if (f.unplaced.length > 0) costs.push(`${String(f.unplaced.length)} approved test${f.unplaced.length === 1 ? '' : 's'} never reached a page; stop or re-allow ${f.unplaced.length === 1 ? 'it' : 'them'}`);
-  return { yes: blockers.length === 0, blockers, costs };
+  // READY IS NOT SELLING: with every door open but nothing on a page, a bare
+  // "yes" reads to the owner as "it is selling". Say what is actually there.
+  const nothingOnSale = (f.onOffer ?? 0) > 0 ? null
+    : (f.designed ?? 0) === 0
+      ? 'nothing is on sale yet: the forge has not designed anything'
+      : `nothing is on sale yet: the forge has designed ${String(f.designed)} but none has reached a page`;
+  return { yes: blockers.length === 0, blockers, costs, nothingOnSale };
 }

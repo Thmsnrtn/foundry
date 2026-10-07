@@ -7942,7 +7942,8 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
   const facts = await productionFacts(s.ownerId);
   const sell = canSellOnItsOwn(facts);
   const factsHtml = html`<section class="card" id="production-facts" aria-labelledby="production-facts-h">
-    <h2 id="production-facts-h">Can Foundry sell on its own today? <span class="status ${sell.yes ? 'go' : 'wait'}">${sell.yes ? 'Yes' : 'Not yet'}</span></h2>
+    <h2 id="production-facts-h">Can Foundry sell on its own today? <span class="status ${sell.yes && !sell.nothingOnSale ? 'go' : 'wait'}">${sell.yes ? (sell.nothingOnSale ? 'Ready, nothing on sale' : 'Yes') : 'Not yet'}</span></h2>
+    ${sell.nothingOnSale ? html`<p class="quiet">${sell.nothingOnSale[0]!.toUpperCase() + sell.nothingOnSale.slice(1)}.</p>` : ''}
     ${sell.blockers.length ? html`<p class="quiet">What stops it:</p><ul class="mandate-list">${sell.blockers.map((b) => html`<li><span class="mandate-when">${b}.</span></li>`)}</ul>` : ''}
     ${/* WHAT A SALE WOULD STILL COST HIM folds under its count: these are not
          what stops it (those stay open above), and with readiness's gates read

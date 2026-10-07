@@ -141,3 +141,25 @@ describe('each gate readiness refuses for, the verdict refuses for too', () => {
     for (const m of deploymentLevel) expect(verdict.blockers.some((b) => b.startsWith(m))).toBe(true);
   });
 });
+
+// READY IS NOT SELLING (stage-1 audit). Over thirty simulated days with every
+// door open, Controls showed a green "Yes" while the forge had designed nothing
+// and no page was up. The verdict now says, from the real tables, that nothing
+// is on sale, and Controls stops rendering it as a plain "Yes".
+describe('a "yes" with nothing on a page says nothing is on sale', () => {
+  it('reads the designs and live offers from the database, not a constant', async () => {
+    const { productionFacts } = await import('../../src/services/control/production-facts.js');
+    const f = await productionFacts(OWNER);
+    const designs = Number((await query('SELECT COUNT(*) AS n FROM probe_designs WHERE founder_id = ?', [OWNER])).rows[0]!.n);
+    expect(f.designed).toBe(designs);
+    expect(f.onOffer).toBe(0);
+  });
+
+  it('names what is missing: nothing designed, or designed but never placed; quiet once an offer is up', async () => {
+    const { canSellOnItsOwn, productionFacts } = await import('../../src/services/control/production-facts.js');
+    const base = await productionFacts(OWNER);
+    expect(canSellOnItsOwn({ ...base, designed: 0, onOffer: 0 }).nothingOnSale).toMatch(/not designed anything/);
+    expect(canSellOnItsOwn({ ...base, designed: 3, onOffer: 0 }).nothingOnSale).toMatch(/designed 3 but none has reached a page/);
+    expect(canSellOnItsOwn({ ...base, designed: 3, onOffer: 1 }).nothingOnSale).toBeNull();
+  });
+});
