@@ -25,7 +25,7 @@ import { query } from '../../../db/client.js';
 import { BANNED_CLAIMS, DELIVERABLE_MAX_AGE_DAYS, HAND, materialOf, recordMaterial } from '../hand.js';
 import type { Material, OfferShapePlan } from '../hand.js';
 
-export const PRODUCT_KINDS = ['data_brief', 'static_tool', 'template_file', 'directory', 'monitoring_alert'] as const;
+export const PRODUCT_KINDS = ['data_brief', 'static_tool', 'template_file', 'printable_pdf', 'directory', 'monitoring_alert'] as const;
 export type ProductKind = typeof PRODUCT_KINDS[number];
 
 export interface KindFacts {
@@ -46,6 +46,13 @@ export const KINDS: KindFacts[] = [
     // ONE RECIPE EXISTS — the job review (recipes/job-review.ts), checked by hand and by
     // LibreOffice — as a prototype for the owner's decision, not a kind Foundry may make.
     needs: 'a buyer who used the one recipe that exists (the job review) on real jobs, and a check in the spreadsheets buyers use' },
+  // A PRINTABLE FILE (products/printable.ts): the model writes the words inside
+  // an owned layout, Chromium prints it, six gates refuse it or let it go, and
+  // a signed link delivers it. BUILT AND OFF: whether Foundry may make files
+  // itself is the owner's (PENDING 38), read per owner by `mayMakePrintables`
+  // from his own `make_printable_pdf` row, never from this list.
+  { kind: 'printable_pdf', whatItIs: 'a printable PDF whose words a model wrote inside the Workshop\'s own layout, printed and checked before it is sold, delivered by a signed download link after payment', canMake: false,
+    needs: 'the owner\'s yes to Foundry making printable files itself (PENDING 38), and Chromium on the machine that prints them' },
   { kind: 'directory', whatItIs: 'a page of listed items, refreshed on a cycle', canMake: false, needs: 'a page recipe and a steward that refreshes it' },
   { kind: 'monitoring_alert', whatItIs: 'a message when a watched source changes', canMake: false, needs: 'subscribers gathered by the Workshop and a watched source' },
 ];

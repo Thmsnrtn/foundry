@@ -56,6 +56,28 @@ shareRoutes.post('/share/refund/:fulfilmentId/:token', async (c) => {
   return c.html(refundPage('Refund requested', `<h1>Got it</h1><p>Your refund of ${amount} couldn't go through automatically just now. It's been noted and someone will sort it out — you don't need to write again.</p>`));
 });
 
+// ─── A buyer's file, by the signed link in the delivery ──────────────────────
+//
+// NO CAPABILITY IS ASKED HERE ON PURPOSE, for the refund's reason: the signed,
+// expiring token is the whole credential, verified by `downloadFor`, and the
+// only thing this route can do is hand the buyer the version of the file
+// their own payment bought (products/printable.ts). A refunded purchase is
+// not served; an expired link says so and offers the money back.
+shareRoutes.get('/share/download/:fulfilmentId/:expires/:token', async (c) => {
+  const { downloadFor } = await import('../../services/venture/products/printable.js');
+  const r = await downloadFor(c.req.param('fulfilmentId'), c.req.param('expires'), c.req.param('token'));
+  if (r.status === 'not_found') return c.notFound();
+  if (r.status === 'expired') {
+    return c.html(refundPage('Link expired', `<h1>This link has expired</h1>
+<p>The download link for <strong>${esc(r.title)}</strong> has run out. Reply to the email that brought it and ask for a new one.</p>
+<p>Or, if it was no use to you, <a href="${esc(r.refundLink)}">get your money back here</a>.</p>`), 410);
+  }
+  return new Response(new Uint8Array(r.pdf), { status: 200, headers: {
+    'content-type': 'application/pdf', 'content-disposition': `attachment; filename="${r.filename.replace(/[^a-z0-9.-]/gi, '-')}"`,
+    'cache-control': 'private, no-store', 'x-content-sha256': r.sha256,
+  } });
+});
+
 // ─── A subscriber's stop, by the link in every week's delivery ───────────────
 //
 // The same shape as the refund: one signed link per week's delivery, a page

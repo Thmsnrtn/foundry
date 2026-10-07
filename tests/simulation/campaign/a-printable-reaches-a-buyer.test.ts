@@ -143,8 +143,8 @@ beforeAll(async () => {
     const r = await supersedeOriginationPolicy({ founderId: OWNER, requirement, treatment, value, why: `the owner's act this world assumes (${requirement})`, by: `founder:${OWNER}` });
     if ('refused' in r) throw new Error(r.refused);
   }
-  const { openMandate } = await import('../../../src/services/venture/mandate.js');
-  const m = await openMandate({ founderId: OWNER, statement: 'Printable files people keep at home', shape: null, evidenceMode: 'real' });
+  const { currentMandate, openMandate } = await import('../../../src/services/venture/mandate.js');
+  const m = (await currentMandate(OWNER)) ?? await openMandate({ founderId: OWNER, statement: 'Printable files people keep at home', shape: null, evidenceMode: 'real' });
   if ('refused' in m) throw new Error(m.refused);
   X = 'printable_x';
   R = 'printable_r';

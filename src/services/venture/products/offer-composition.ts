@@ -279,7 +279,12 @@ export async function shapeAndMake(experimentId: string): Promise<Made | { refus
     const runnable = await subscriptionsRunnable(record.founderId);
     if (!runnable.ok) return { refused: runnable.because };
   }
-  const reply = await callSonnet(givesATool ? `${SYSTEM}\n${TOOL_SYSTEM}` : givesFirst ? `${SYSTEM}\n${VALUE_SYSTEM}` : recurs ? `${SYSTEM}\n${SUBSCRIPTION_SYSTEM}` : SYSTEM,
+  // A PRINTABLE IS OFFERED ONLY WHERE THE OWNER HAS SAID SO (PENDING 38) AND
+  // SOMETHING HERE CAN PRINT, and only for a file sold once at a fixed price.
+  const { mayMakePrintables } = await import('./printable.js');
+  const printables = exchange === 'upfront_price' ? await mayMakePrintables(record.founderId) : { may: false, because: 'a printable is sold once at a fixed price' };
+  const system = givesATool ? `${SYSTEM}\n${TOOL_SYSTEM}` : givesFirst ? `${SYSTEM}\n${VALUE_SYSTEM}` : recurs ? `${SYSTEM}\n${SUBSCRIPTION_SYSTEM}` : SYSTEM;
+  const reply = await callSonnet(printables.may ? `${system}\n${PRINTABLE_SYSTEM}` : system,
     `<record>${JSON.stringify({ candidate: record.candidate, test: record.experiment, evidence: record.evidence.slice(0, 20), retrievals: record.retrievals, charter: record.charter }, null, 1)}</record>\n<design>${JSON.stringify({
       decides: design.decides, canProve: design.canProve, cannotProve: design.cannotProve, distribution: design.distribution, ifItSucceeds: design.ifItSucceeds }, null, 1)}</design>`,
     givesATool ? 3200 : 1800, institutionSpend('shaping the offer of a designed test for the owner\'s portfolio search, which has no company to charge yet', 'shaping an offer', { kind: 'experiment', id: experimentId }));
@@ -287,7 +292,9 @@ export async function shapeAndMake(experimentId: string): Promise<Made | { refus
   if (from < 0 || to <= from) return { refused: 'the composition was not an offer' };
   let raw: Row;
   try { raw = JSON.parse(reply.content.slice(from, to + 1)) as Row; } catch { return { refused: 'the composition was not an offer' }; }
-  const need = ['title', 'terms', 'coverage', 'price_because', 'product_name', 'sells', 'claims_made', 'collects', 'delivers_by', 'sells_to', 'charges_how', 'lighter', 'offer_subject'];
+  const isPrintable = printables.may && raw.kind === 'printable_pdf';
+  const need = ['title', 'terms', 'coverage', 'price_because', 'product_name', 'sells', 'claims_made', 'collects', 'delivers_by', 'sells_to', 'charges_how', 'lighter', 'offer_subject']
+    .filter((k) => !isPrintable || (k !== 'terms' && k !== 'coverage'));
   const page = (raw.page && typeof raw.page === 'object' ? raw.page : {}) as Row;
   const pageNeed = ['summary', 'who', 'what', 'limits', 'sources', 'note'].filter((k) => str(page, k) === null);
   if (pageNeed.length) return { refused: `the page copy left out ${pageNeed.join(', ')}` };
@@ -321,6 +328,7 @@ export async function shapeAndMake(experimentId: string): Promise<Made | { refus
     const problems = checkToolQuality(tool, BANNED_CLAIMS);
     if (problems.length) return { refused: `the free tool did not pass its gate: ${problems.slice(0, 3).join('; ')}` };
   }
+  if (isPrintable) return shapeAndMakePrintable({ experimentId, founderId: record.founderId, raw, page, price, design: { decides: design.decides, canProve: design.canProve, cannotProve: design.cannotProve } });
   const named = Array.isArray(raw.source_types) ? raw.source_types.map(String) : [];
   const sourceTypes = named.filter((s): s is typeof BRIEF_SOURCES[number] => (BRIEF_SOURCES as readonly string[]).includes(s));
   if (sourceTypes.length === 0) {
@@ -369,6 +377,100 @@ export async function shapeAndMake(experimentId: string): Promise<Made | { refus
     await givePublicIdentity({
       experimentId, founderId: record.founderId, slug: taken ? `${base}-${experimentId.slice(0, 6).toLowerCase().replace(/[^a-z0-9]/g, '')}` : base,
       copy: { title: spec.title, summary: str(page, 'summary')!, who: str(page, 'who')!, what: str(page, 'what')!, limits: str(page, 'limits')!,
+        sources: str(page, 'sources')!, selection: 'Nobody was written to about this. You found this page yourself.', note: str(page, 'note')! },
+    });
+  }
+  return made;
+}
+
+// ─── A printable file (products/printable.ts) ────────────────────────────────
+
+/** Added to the composition only when the owner has allowed printables and something here can print. */
+const PRINTABLE_SYSTEM = [
+  '',
+  'THE HANDS CAN ALSO MAKE A PRINTABLE FILE: a PDF of pages to print and use or fill in by hand, sold once',
+  'at a fixed price and delivered by a download link. If a file serves this design better than a brief,',
+  'add "kind": "printable_pdf" to the JSON and leave out "terms", "source_types" and "coverage"; "title" is',
+  'the file\'s title. Its pages are written afterwards. Otherwise add "kind": "data_brief".',
+].join('\n');
+
+/** The writer of a printable's pages: words only, in the owned vocabulary. */
+export const PRINTABLE_CONTENT_SYSTEM = [
+  'You write the pages of a printable file a small workshop will sell: something a stranger prints and',
+  'uses or fills in by hand. The layout is fixed and not yours: the cover, contents, footers, version and',
+  'closing page are added for you. You write each page\'s heading, a one-line lede, and its body in a',
+  'closed HTML vocabulary. Anything outside it is refused, not repaired:',
+  '  <h3> <p> <p class="small"> <ul> <ul class="check"> (tick boxes) <ol> <li> <strong> <em> <b> <br>',
+  '  <table class="ws"> or <table class="ws tall"> with <thead> <tbody> <tr> <th> <td> <td class="lbl">',
+  '  (empty <td></td> is a box to write in); <div class="box"> / <div class="box green"> (a note);',
+  '  <div class="cols"> / <div class="cols3"> (columns); <div class="lines"><i></i><i></i></div> (writing',
+  '  lines); <div class="field"><span>Label</span><i></i></div> (a labelled blank); <span class="pill">.',
+  '  No other element, no style, no link, no image, no comment; the only attribute is class (and colspan).',
+  'EACH PAGE IS ONE LETTER PAGE: about 300 words, or a table of at most 16 rows. Too much is refused.',
+  'YOU MAY NOT INVENT a fact about the world: no statistics or percentages, no testimonials or quoted',
+  'buyers, no reviews or ratings, no credentials, no "studies show", no claims of results. Instructions,',
+  'prompts and blanks are what a good file is made of. Never tell the reader what to do about their own',
+  'legal, medical or money decision; general information is allowed and a disclaimer is added for you.',
+  'No person is named; the Workshop is the voice. 4 to 14 pages.',
+  'Reply with one JSON object and nothing else:',
+  '{"subtitle": <one sentence>, "kicker": <two to five words>, "pages": [{"heading": <words>, "lede": <one line>, "html": <the body>}]}',
+].join('\n');
+
+/** What a printable is: the brief's facts where they are the same, its own where they differ. */
+export function printableFacts(): OfferShapePlan['facts'] {
+  const b = briefFacts();
+  return {
+    ...b,
+    support_obligation: { present: 0, basis: 'observed',
+      grounds: 'Delivers: one file, once; a refund on request instead of ongoing help. What is owed is bounded and real: '
+        + 'the file itself by a signed link, a refund when a delivery fails or a buyer asks through the signed link, and a '
+        + 'decision for the owner where goods cannot go out at all' },
+    manual_fulfilment: { present: 0, basis: 'observed',
+      grounds: 'Delivers by: the hand emails a signed download link when the payment settles; nobody does anything by hand per sale' },
+    user_generated_content: { present: 0, basis: 'observed',
+      grounds: 'Sells: a file the Workshop made, checked for invented facts before it is sold; nobody\'s words republished' },
+    one_visit_delivery: { present: 1, basis: 'observed', grounds: 'Delivers by: a buyer pays and a link to the file arrives by email' },
+  };
+}
+
+async function shapeAndMakePrintable(input: {
+  experimentId: string; founderId: string; raw: Row; page: Row; price: number;
+  design: { decides: string; canProve: string; cannotProve: string };
+}): Promise<Made | { refused: string }> {
+  const { raw, page, experimentId } = input;
+  const title = str(raw, 'title')!;
+  const plan: OfferShapePlan = {
+    shape: { sells: str(raw, 'sells')!, claimsMade: str(raw, 'claims_made')!, collects: str(raw, 'collects')!, deliversBy: str(raw, 'delivers_by')!, sellsTo: str(raw, 'sells_to')!, chargesHow: str(raw, 'charges_how')! },
+    lighter: str(raw, 'lighter')!,
+    facts: printableFacts(),
+    price: { amountCents: input.price * 100, currency: 'USD', lookupKey: `foundry_printable_${experimentId}_one_time`, productName: str(raw, 'product_name')!,
+      productMetadata: { app_object: 'experiment_deliverable', plan_key: `printable_${experimentId}` }, confirmationMessage: 'Thank you. A link to download the file is on its way by email.' },
+    offerSubject: str(raw, 'offer_subject')!,
+    venue: 'workshop',
+  };
+  const reply = await callSonnet(PRINTABLE_CONTENT_SYSTEM,
+    `<offer>${JSON.stringify({ title, sells: plan.shape.sells, sellsTo: plan.shape.sellsTo, claimsMade: plan.shape.claimsMade, page: { who: str(page, 'who'), what: str(page, 'what'), limits: str(page, 'limits') } }, null, 1)}</offer>\n`
+      + `<design>${JSON.stringify(input.design, null, 1)}</design>`,
+    8000, institutionSpend('writing the pages of a printable the hands will make for a designed test', 'shaping an offer', { kind: 'experiment', id: experimentId }));
+  const from = reply.content.indexOf('{'); const to = reply.content.lastIndexOf('}');
+  let written: Row;
+  try { written = JSON.parse(reply.content.slice(from, to + 1)) as Row; } catch { return { refused: 'the pages written for the file were not a file' }; }
+  const pages = Array.isArray(written.pages) ? (written.pages as Row[]).map((p) => ({ heading: String(p.heading ?? ''), lede: String(p.lede ?? ''), html: String(p.html ?? '') })) : [];
+  const spec = { kind: 'printable_pdf' as const, title, subtitle: String(written.subtitle ?? ''), kicker: String(written.kicker ?? ''), pages };
+  const listing = [`${title}: $${String(input.price)}, one-time.`, str(page, 'summary'), `Who it is for: ${str(page, 'who') ?? ''}`, `What you get: ${str(page, 'what') ?? ''}`, `What it is not: ${str(page, 'limits') ?? ''}`]
+    .filter(Boolean).join('\n');
+  const { makePrintable } = await import('./printable.js');
+  const made = await makePrintable({ founderId: input.founderId, experimentId, spec, plan, listing });
+  if ('refused' in made) return made;
+  // THE LISTING CARRIES THE VERSION, as the file does on every page.
+  const { givePublicIdentity, publicIdentityOf, slugify } = await import('../../public-workshop/identity.js');
+  if (!(await publicIdentityOf(experimentId))) {
+    const base = slugify(title).slice(0, 48) || 'file';
+    const { query } = await import('../../../db/client.js');
+    const taken = (await query('SELECT 1 FROM public_experiments WHERE founder_id = ? AND slug = ?', [input.founderId, base])).rows.length > 0;
+    await givePublicIdentity({
+      experimentId, founderId: input.founderId, slug: taken ? `${base}-${experimentId.slice(0, 6).toLowerCase().replace(/[^a-z0-9]/g, '')}` : base,
+      copy: { title, summary: str(page, 'summary')!, who: str(page, 'who')!, what: `${str(page, 'what')!} Version ${String(made.version)} of the file.`, limits: str(page, 'limits')!,
         sources: str(page, 'sources')!, selection: 'Nobody was written to about this. You found this page yourself.', note: str(page, 'note')! },
     });
   }
