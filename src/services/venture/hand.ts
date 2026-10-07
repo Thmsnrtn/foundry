@@ -328,6 +328,13 @@ export async function deliverableGate(experimentId: string, m: Material, now: Da
     const { checkBriefQuality } = await import('./products/registry.js');
     return checkBriefQuality(e.founderId, m, now);
   }
+  // A PRINTABLE IS HELD TO ITS OWN GATE: the bytes are the bytes that were
+  // checked, the offer sells that version, and the owner has not been left
+  // holding a file the panel was split on (products/printable.ts).
+  if (kind === 'printable_pdf') {
+    const { checkPrintable, printablePlanOf } = await import('./products/printable.js');
+    return checkPrintable(m, printablePlanOf(shape?.body));
+  }
   return checkDeliverableQuality(m, now);
 }
 
@@ -1391,10 +1398,21 @@ export async function planDelivery(input: { experimentId: string; fulfilmentId: 
   const buyer = await buyerAddressFor(String(f.payment_ref));
   if (!buyer) throw new HandRefused('buyer_address_unknown', String(f.payment_ref));
   const replyTo = await replyAddressFor(e.productId, e.founderId);
-  const intro = weekly
+  // A FILE IS SENT AS A LINK, NOT AS A BODY: a signed link that expires, to
+  // the version this buyer paid for, which is written on their fulfilment
+  // once, here, so a later version never silently replaces what they bought.
+  const { printableOf, downloadLinkFor, DOWNLOAD_LINK_DAYS } = await import('./products/printable.js');
+  const file = printableOf(deliverable);
+  if (file) {
+    await query(`UPDATE experiment_fulfilments SET delivered_files_json = ?, delivered_files_seen_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND delivered_files_json IS NULL`,
+      [JSON.stringify([{ filename: file.filename, sizeBytes: file.bytes, sha256: file.sha256, version: file.version }]), String(f.id)]);
+  }
+  const intro = file
+    ? `Thanks for buying ${deliverable.title}. It's a PDF to print, ${String(file.pages)} pages, version ${String(file.version)}: [download ${file.filename}](${downloadLinkFor(String(f.id))}). The link works for ${String(DOWNLOAD_LINK_DAYS)} days; if it has stopped working, reply to this message for a new one. If the file is no use to you, [ask for your money back here](${refundLinkFor(String(f.id))}) and it's refunded in full; replying to this message works just as well.\n`
+    : weekly
     ? `Thanks for subscribing — this week's ${deliverable.title} is below. It's a shortlist with a link to each original notice, not a complete listing of the market. If this week's is no use to you, [ask for this week's money back here](${refundLinkFor(String(f.id))}). To stop the subscription, [cancel it here](${cancelLinkFor(String(f.id))}): nothing is charged after the week you've paid for. Replying to this message works for either.\n\n---\n\n`
     : `Thanks for buying the ${deliverable.title} — it's below. It's a shortlist with a link to each original notice, not a complete listing of the market. If it's no use to you, [ask for your money back here](${refundLinkFor(String(f.id))}) and it's refunded in full; replying to this message works just as well.\n\n---\n\n`;
-  const body = intro + deliverable.body;
+  const body = file ? intro : intro + deliverable.body;
   const id = nanoid();
   await query(
     `INSERT INTO outbound_actions

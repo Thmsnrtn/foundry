@@ -208,6 +208,7 @@ const ROUTE_OVERRIDES: Record<string, Array<Record<string, string>>> = {
   '/foundry/experiments/:id': experiments.map((id) => ({ id })),
   '/foundry/experiments/:id/decide': experiments.map((id) => ({ id })),
   '/foundry/experiments/:id/recipients': experiments.map((id) => ({ id })),
+  '/foundry/experiments/:id/printable.pdf': experiments.map((id) => ({ id })),
   '/foundry/public-workshop/preview/:experimentId': experiments.map((experimentId) => ({ experimentId })),
 };
 // PARAMS WITH NO OWNER ROW IN THIS WORLD, AND WHY. Anything unmapped and not

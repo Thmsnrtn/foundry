@@ -64,6 +64,11 @@ export async function waitingOn(founderId: string): Promise<AttentionItem[]> {
   // or no here, or something of his is missing and the answer is the page
   // where he does it. Read through the same derivation the page uses.
   const tests: AttentionItem[] = [];
+  // A FILE THE STRANGERS WERE SPLIT ON IS ONE QUESTION, asked once below; the
+  // same test is not asked again as an undecided one (products/printable.ts).
+  const { printablesHeld } = await import('../venture/products/printable.js');
+  const held = await printablesHeld(founderId);
+  const heldIds = new Set(held.map((h) => h.experimentId));
   const undecided = await rows(
     `SELECT e.id FROM venture_experiments e WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND e.decision IS NULL AND e.validity = 'valid'
         AND e.retired_at IS NULL AND e.superseded_by IS NULL
@@ -71,6 +76,7 @@ export async function waitingOn(founderId: string): Promise<AttentionItem[]> {
   if (undecided.length) {
     const { getExperimentView } = await import('./experiment-view.js');
     for (const t of undecided) {
+      if (heldIds.has(String(t.id))) continue;
       const v = await getExperimentView(founderId, String(t.id));
       if (!v) continue;
       const open = v.steps.find((s) => s.status === 'todo' && s.key !== 'allow');
@@ -110,6 +116,19 @@ export async function waitingOn(founderId: string): Promise<AttentionItem[]> {
         open: { label: open?.label ?? 'Open the test', href: `/foundry/experiments/${v.id}#listing` },
       });
     }
+  }
+  // WOULD A STRANGER PAY? The panel was split, so it is his to say: he reads
+  // the file and ships it, or does not run it. One item per file.
+  for (const h of held) {
+    tests.push({
+      kind: 'experiment', id: `printable-held:${h.experimentId}`, productId: '', companyName: 'The hands',
+      summary: `Would a stranger pay for "${h.title}"? The panel was split`,
+      detail: `${h.because}. Read the file, then ship it or do not run it.`,
+      yes: { label: 'Ship it', action: `/foundry/experiments/${h.experimentId}/printable/release` },
+      no: { label: 'Do not run it', action: `/foundry/experiments/${h.experimentId}/decline` },
+      why: `/foundry/why/experiment/${h.experimentId}`, href: `/foundry/experiments/${h.experimentId}`,
+      open: { label: 'Read the file', href: `/foundry/experiments/${h.experimentId}/printable.pdf` },
+    });
   }
   // DESIGNS THE FORGE COULD NOT SEAL, AS ONE ITEM (F1.5). Each is a test
   // nothing will run until its facts change or he says; N of them are one

@@ -1212,6 +1212,37 @@ experimentRoutes.post('/foundry/forge/designs-waiting/retire', requireInstitutio
   return c.redirect('/foundry/experiments');
 });
 
+// ─── A printable the strangers were split on: he reads it, and says ──────────
+//
+// The file itself, for him to read before he answers (products/printable.ts):
+// the current deliverable of a test of his, exactly the bytes that were
+// checked. And his answer: ship it, which releases the hold and nothing else.
+experimentRoutes.get('/foundry/experiments/:id/printable.pdf', requireInstitutionOwner(), async (c: any) => {
+  const founderId = await founderOf(c); if (!founderId) return c.redirect('/onboarding');
+  const id = String(c.req.param('id'));
+  const { experimentRow, materialOf } = await import('../../services/venture/hand.js');
+  const e = await experimentRow(id);
+  if (!e || e.founderId !== founderId) return c.notFound();
+  const { printableOf } = await import('../../services/venture/products/printable.js');
+  const file = printableOf(await materialOf(id, 'deliverable'));
+  // A TEST THAT SELLS NO FILE IS STILL A TEST: said so, not a missing page.
+  if (!file) return c.html(page('No file', html`<h1>No file</h1><p class="lede">This test does not sell a printable file, so there is nothing here to read.</p>
+    <p><a href="/foundry/experiments/${id}">Back to the test</a></p>`, 'experiments', where(null, 'test')));
+  return new Response(new Uint8Array(Buffer.from(file.pdfBase64, 'base64')), { status: 200, headers: {
+    'content-type': 'application/pdf', 'content-disposition': `inline; filename="${file.filename}"`, 'cache-control': 'private, no-store' } });
+});
+
+experimentRoutes.post('/foundry/experiments/:id/printable/release', requireInstitutionOwner(), async (c: any) => {
+  const founderId = await founderOf(c); if (!founderId) return c.redirect('/onboarding');
+  const id = String(c.req.param('id'));
+  const { experimentRow } = await import('../../services/venture/hand.js');
+  const e = await experimentRow(id);
+  if (!e || e.founderId !== founderId) return c.notFound();
+  const { releaseHeldPrintable } = await import('../../services/venture/products/printable.js');
+  const r = await releaseHeldPrintable({ founderId, experimentId: id, by: `founder:${founderId}` });
+  return r.released ? back(c, id, 'test', 'released') : back(c, id, 'test', null, r.because);
+});
+
 experimentRoutes.post('/foundry/experiments/:id/decline', requireInstitutionOwner(), async (c: any) => {
   const founderId = await founderOf(c); if (!founderId) return c.redirect('/onboarding');
   const id = String(c.req.param('id'));

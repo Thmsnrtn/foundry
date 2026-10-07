@@ -1,0 +1,74 @@
+/* =============================================================================
+   FOUNDRY — the printable design system (products/printable.ts).
+
+   OWNED, NOT WRITTEN BY A MODEL. A printable's words are the model's; its
+   layout is this file's. The model may use only the elements and classes
+   `ALLOWED` in printable.ts names, never a style attribute, a <style> block
+   or a link, so nothing it writes can move a margin or break a page. Fonts
+   are the two already in src/public (Inter, Newsreader; SIL OFL, licences
+   beside them), embedded at render time so the file needs no network.
+   ============================================================================= */
+@font-face { font-family: "Inter"; src: url(inter-latin-400-normal.woff2) format("woff2"); font-weight: 400; }
+@font-face { font-family: "Inter"; src: url(inter-latin-500-normal.woff2) format("woff2"); font-weight: 500; }
+@font-face { font-family: "Inter"; src: url(inter-latin-600-normal.woff2) format("woff2"); font-weight: 600; }
+@font-face { font-family: "Newsreader"; src: url(newsreader-latin-400-normal.woff2) format("woff2"); font-weight: 400; }
+@font-face { font-family: "Newsreader"; src: url(newsreader-latin-600-normal.woff2) format("woff2"); font-weight: 600; }
+:root {
+  --ink: #1d2b28; --green: #1f3a34; --green-2: #2f5a50; --paper: #fbf8f2;
+  --rule: #d9d2c5; --rule-soft: #e8e2d6; --accent: #b5573b; --muted: #5f5e57; --tint: #f2ede3;
+}
+@page { size: 8.5in 11in; margin: 0; }
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--paper); }
+body { font-family: "Inter", sans-serif; color: var(--ink); font-size: 10.5pt; line-height: 1.45;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact; overflow-wrap: anywhere; }
+.page { width: 8.5in; height: 11in; background: var(--paper); position: relative; overflow: hidden;
+  break-after: page; page-break-after: always; padding: 0.7in 0.75in 0.85in; }
+.page:last-child { break-after: auto; page-break-after: auto; }
+.page > .body { position: relative; }
+h1, h2, h3 { font-family: "Newsreader", serif; font-weight: 600; color: var(--green); margin: 0; }
+h1 { font-size: 34pt; line-height: 1.05; }
+h2 { font-size: 21pt; line-height: 1.12; margin-bottom: 4pt; }
+h3 { font-size: 12.5pt; margin: 13pt 0 5pt; }
+p { margin: 0 0 7pt; }
+ul, ol { margin: 4pt 0 8pt; padding-left: 16pt; }
+li { margin-bottom: 4pt; }
+.kicker { font-size: 8pt; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin-bottom: 6pt; }
+.lede { font-size: 10.5pt; color: var(--muted); max-width: 6in; margin-bottom: 12pt; }
+.foot { position: absolute; left: 0.75in; right: 0.75in; bottom: 0.4in; display: flex; justify-content: space-between;
+  font-size: 7.5pt; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 5pt; }
+.foot b { color: var(--green); font-weight: 600; }
+/* The cover and the colophon are the template's own. */
+.cover { background: var(--green); color: var(--paper); }
+.cover h1 { color: var(--paper); margin-top: 1.2in; max-width: 6in; }
+.cover .kicker { color: #e9a98f; }
+.cover .sub { font-size: 13pt; margin-top: 20pt; max-width: 5.4in; color: #e6efe9; line-height: 1.5; }
+.cover .edition { position: absolute; left: 0.75in; right: 0.75in; bottom: 0.9in; border-top: 1px solid #4d7268;
+  padding-top: 12pt; font-size: 9pt; color: #cfe0d8; }
+.contents div { display: flex; gap: 8pt; padding: 6pt 0; border-bottom: 1px solid var(--rule-soft); }
+.contents span.n { font-family: "Newsreader", serif; color: var(--accent); width: 22pt; }
+.contents span.t { flex: 1; }
+.colophon p { font-size: 9.5pt; }
+/* The vocabulary the model may use inside a page. */
+table.ws { width: 100%; border-collapse: collapse; margin: 4pt 0 8pt; table-layout: fixed; }
+table.ws th { text-align: left; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .08em; color: var(--green-2);
+  font-weight: 600; padding: 4pt 5pt; border-bottom: 1.5px solid var(--green); background: var(--tint); }
+table.ws td { border-bottom: 1px solid var(--rule); height: 0.38in; padding: 3pt 5pt; font-size: 9pt; vertical-align: bottom; color: var(--muted); }
+table.ws td.lbl { color: var(--ink); font-weight: 500; vertical-align: middle; }
+table.ws.tall td { height: 0.5in; }
+div.field { display: flex; align-items: flex-end; gap: 8pt; margin: 0 0 12pt; font-size: 9.5pt; }
+div.field span { white-space: nowrap; font-weight: 500; }
+div.field i { flex: 1; border-bottom: 1px solid var(--rule); height: 17pt; }
+div.lines i { display: block; border-bottom: 1px solid var(--rule); height: 0.38in; }
+div.box { border: 1px solid var(--rule); border-left: 4px solid var(--accent); background: #fff; padding: 9pt 12pt; margin: 8pt 0 10pt; font-size: 9pt; }
+div.box.green { border-left-color: var(--green); }
+div.box b, div.box strong { color: var(--green); }
+ul.check { list-style: none; padding: 0; margin: 4pt 0 8pt; }
+ul.check li { position: relative; padding-left: 20pt; margin-bottom: 5pt; font-size: 9.3pt; }
+ul.check li::before { content: ""; position: absolute; left: 0; top: 1.5pt; width: 10pt; height: 10pt;
+  border: 1.3px solid var(--green); border-radius: 2px; background: #fff; }
+div.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 22pt; }
+div.cols3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 16pt; }
+.small { font-size: 8pt; color: var(--muted); }
+span.pill { display: inline-block; font-size: 7pt; text-transform: uppercase; letter-spacing: .08em; padding: 1pt 6pt;
+  border-radius: 8pt; background: var(--tint); color: var(--green-2); font-weight: 600; margin-right: 4pt; }

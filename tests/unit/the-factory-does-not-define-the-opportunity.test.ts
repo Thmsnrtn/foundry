@@ -39,7 +39,8 @@ describe('the shape of the aperture, derived and not written down', () => {
     // A FREE TOOL BECAME MAKEABLE on 4 October 2026 (PENDING 31, migration 379).
     expect(a.canMake.map((k) => k.kind)).toEqual(['data_brief', 'static_tool']);
     expect(a.cannotMake.map((k) => k.kind).sort())
-      .toEqual(['directory', 'monitoring_alert', 'template_file']);
+      // printable_pdf is built and off until the owner says (PENDING 41): unmakeable here, by his row.
+      .toEqual(['directory', 'monitoring_alert', 'printable_pdf', 'template_file']);
     // AND EACH ONE QUOTES THE REGISTRY'S OWN ACCOUNT OF WHAT IS MISSING,
     // written by whoever decided not to build it. The day somebody builds one,
     // this stops claiming it is missing, without anybody editing this file.

@@ -321,7 +321,16 @@ export async function getExperimentView(founderId: string, experimentId: string,
   } else if (e.decision === 'approved') {
     state = 'running'; stateLabel = 'Running';
     stateDetail = `${delivered === 0 ? 'No businesses have received the offer yet' : `${plural(delivered, 'business has', 'businesses have')} received the offer`}; ${payments.length === 0 ? (moneySoFar.emptyTill ? 'no purchase is recorded' : 'no one has paid yet') : `${plural(payments.length, 'customer has', 'customers have')} paid`}.${daysLeft != null ? ` ${daysLeft} day${daysLeft === 1 ? '' : 's'} left in the window.` : ' The window opens when the offer is placed.'}`;
-  } else if (!ready.ok) { state = 'needs_you'; stateLabel = 'Needs you'; stateDetail = `Before it can run: ${ready.missing.join('; ')}.`; }
+  } else if (!ready.ok) {
+    state = 'needs_you'; stateLabel = 'Needs you'; stateDetail = `Before it can run: ${ready.missing.join('; ')}.`;
+    // WHAT THE HANDS REFUSED TO MAKE, AND WHY, IN THEIR OWN WORDS. Nothing is
+    // attached because the hands' own gate refused what they made; "nothing to
+    // deliver is attached" alone hid the reason he needs (forge_refusals).
+    if (!deliverable) {
+      const refused = (await query(`SELECT because FROM forge_refusals WHERE experiment_id = ? AND stage = 'make' ORDER BY refused_at DESC, rowid DESC LIMIT 1`, [experimentId])).rows[0] as Record<string, unknown> | undefined;
+      if (refused) stateDetail = `The hands refused to make it: ${String(refused.because)}. ${stateDetail}`;
+    }
+  }
   else { state = 'ready'; stateLabel = 'Ready'; stateDetail = 'Everything is in place. It runs when you allow it.'; }
   const concluded = state === 'completed' || state === 'stopped' || state === 'declined' || state === 'invalid' || state === 'retired' || state === 'superseded';
   const concludedAt = !concluded ? null
