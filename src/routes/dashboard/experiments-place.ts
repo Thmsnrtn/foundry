@@ -1225,7 +1225,9 @@ experimentRoutes.get('/foundry/experiments/:id/printable.pdf', requireInstitutio
   if (!e || e.founderId !== founderId) return c.notFound();
   const { printableOf } = await import('../../services/venture/products/printable.js');
   const file = printableOf(await materialOf(id, 'deliverable'));
-  if (!file) return c.notFound();
+  // A TEST THAT SELLS NO FILE IS STILL A TEST: said so, not a missing page.
+  if (!file) return c.html(page('No file', html`<h1>No file</h1><p class="lede">This test does not sell a printable file, so there is nothing here to read.</p>
+    <p><a href="/foundry/experiments/${id}">Back to the test</a></p>`, 'experiments', where(null, 'test')));
   return new Response(new Uint8Array(Buffer.from(file.pdfBase64, 'base64')), { status: 200, headers: {
     'content-type': 'application/pdf', 'content-disposition': `inline; filename="${file.filename}"`, 'cache-control': 'private, no-store' } });
 });
