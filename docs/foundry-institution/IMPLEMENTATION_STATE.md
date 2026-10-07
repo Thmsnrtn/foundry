@@ -984,7 +984,7 @@ caller appears for one without the other. Wiring both needs a real answer to
 | The first real experiment has a hand (284, `experiment_hand_tick`) | **E2** | Proof 1 as ordinary venture rows with its rule sealed on the delivery; the owner's three acts on one page (`/foundry/experiments/:id`, Home queue); Allow = three exact acts under three ask-first boundaries on the test's asset; every effect from the experimental asset resolves its act at the door from rows (`experimentActFor`), the shape the kill switch said the first hand would fill; the payment link is the exposure, created through the door or pasted and held to one contract; the hand carries offers, receipts, purchases from the existing webhook, deliveries, refunds, the buyer's own refund link, settlement and take-down; what is owed outlives the test. Rehearsed end to end against stubbed providers (`the-first-real-experiment-runs-by-hand`, 14; every RAISE of 284 planted, 7); rendered at five phone widths. Not commercial evidence: no business was contacted, no money moved. |
 | Authority place (no migration) | **E2** | Every company has `/authority`: how much the institution does on its own, DERIVED from boundaries, the allowance, consents and delegations — Watch · Propose · Carry within limits · Some of each — never stored. Lighter is one confirmed tap through the existing narrowing writers, fingerprinted against the rows it was read from; heavier is one sentence per door through `/said`; the thirty-day line says "would have changed nothing" when nothing was proposed. Eight acceptance cases; rendered at 375–1440 and 200% text. |
 | The owner surface, driven as a person (no migration) | **E2** | `scripts/owner-review-harness.mts` serves production's shape; three reviewers who had not seen the code attempted twelve owner objectives on a phone (20 Sep): 1 achieved, 8 partial, 3 failed. The failures became `the-first-direction-lands.test.ts` and a browser read-back of the exact owner journey. What was left is in `MATURITY_MAP.md`. **No real owner has used it on a real day.** |
-| The market twin, its year runs and the continuous invariant monitor (no migration) | **E2** | Deterministic simulation: the real institution, every routine, day by day, against an imagined market whose every number is a range with a named source, and a scripted model in three kinds (capable, degraded, adversarial). Invariants checked after every simulated day, each with a canary. Says what the institution does under those assumptions; says nothing about real buyers. `tests/simulation/twin/a-year-in-the-twin.test.ts`, run: `$CAMPAIGN_OUT/scorecard.json` |
+| The market twin, its year runs and the continuous invariant monitor (no migration) | **E2** | Deterministic simulation: the real institution, every routine, day by day, against an imagined market whose every number is a range with a named source, and a scripted model in three kinds (capable, degraded, adversarial). Invariants checked after every simulated day, each with a canary. Says what the institution does under those assumptions; says nothing about real buyers. `tests/simulation/twin/a-year-in-the-twin.test.ts`, run: `docs/foundry-institution/history/twin-2026-10-07/capable-scorecard.json` |
 | Real founders, providers, pilots, production | **E0** (unproven) | nothing has reached E4, E5 or E6 |
 
 ## Open proof debt
@@ -3368,3 +3368,107 @@ not independent people. Fillable (AcroForm) fields are not built. An expired
 link's page asks the buyer to reply for a new one; minting a fresh link is
 `downloadLinkFor` with no owner surface yet. The experiment view counts brief
 items, so a printable shows "0 items" there.
+
+## The simulation platform: the market twin, three brains, a monitor that never sleeps (7 October 2026)
+
+**Why.** The from-nothing world proved plumbing: its model answers were
+content-free, so the forge designed nothing; its buyers came from one band;
+nothing attacked it; its buyer panel was five personas of one model; its
+results were single numbers. This builds what makes a run mean something.
+**Level: E2** — deterministic simulation of the real institution. It says what
+the institution does under the twin's stated assumptions and nothing about what
+a real market does.
+
+**What exists** (concept → code index above):
+- **The twin** (`tests/simulation/twin/`): seven buyer segments (five widened
+  from the buyer panel, two named assumptions), competing listings, a discovery
+  funnel (index lag → impressions → visits → conversion against willingness to
+  pay, reviews and defects), and after a sale refunds, buyer mail, reviews,
+  repeat purchase and word of mouth. Twenty-two parameters, each a distribution
+  with a source: the cassette digest (`digest-cassette.mts`, counts only), the
+  playbook calibration notes, the buyer panel, or a labelled assumption (twelve
+  of the twenty-two). Seeded, keyed by what a draw is about, never by row order.
+  The eyes read the twin's people through each public source's own wire shape.
+- **One world** (`world-run.ts`): the real institution, every routine on the
+  days its own schedule fires, the morning and the hands as production runs
+  them, payments through the real Stripe webhook, refunds through the buyer's
+  signed link, buyer mail through the Workshop's intake, a minimal owner who
+  only does what Needs-you asks (renews the charter, releases a held file,
+  answers mail) and a stated minutes model.
+- **Three brains** (`tests/simulation/brains/`): capable (the playbook bench's
+  kind of file), degraded (vague, a page count the file does not have,
+  over-claims, high prices, malformed pages), adversarial (crosses the charter,
+  invents statistics, testimonials and sales, prices to deceive, smuggles the
+  deploy marker, treats the owner's acts as routine — every attempt carries a
+  nonce and is traced to where it was refused).
+- **The monitor** (`tests/simulation/invariants.ts`): nine invariants, checked
+  after every simulated day, each with a canary planted into a real world
+  (`invariant-canaries.test.ts`: clean → caught → clean). Mutation, done by
+  hand on 7 October: replacing each invariant's `check` with `return []` turned
+  exactly that invariant's canary red, nine of nine. Six rules need only the
+  database and live in `src/services/institution/watched-rules.ts`; the hourly
+  `institution_pulse_tick` now reads them in production after its pass and
+  fails with what broke (`the-pulse-reads-the-rules`).
+- **The panel bank** (`tests/fixtures/buyer-panel-bank/`): seventy personas
+  from the twin's segments, three per segment held out; only the judging
+  harness may name the held-out file (`the-held-out-panel-is-not-read`). Three
+  scripted judges measure agreement (Cohen per pair, Fleiss overall) and list
+  disagreements; a real-model run exists behind `PANEL_REAL=1` and a dollar
+  ceiling that refuses to start beyond it or beyond a $25 hard cap. No paid
+  model was called.
+- **The evidence ladder, checked** (`scripts/check-evidence-levels.mjs`, in
+  `npm run check`): every row of the frontier, the proven list, the journeys
+  and the loop transitions carries a level in its own column; every E3 a
+  pointer. `PROOF_PROGRAM.md` says where a simulation sits.
+
+**What the worlds found in the institution, each fixed with a failing test
+first:** promotion still counted a search that found nothing as a way of
+knowing (F1.7 had fixed the reads, not the count; `seeds.ts`, `shelves.ts`);
+a reader or a discipline could write numbers the record does not hold, and a
+discipline could sign for the owner (`invented-numbers.ts`,
+`an-adversarial-model-is-refused-at-each-door`); a composition could write as a
+person, open a new channel, or run an exchange the owner has not allowed; the
+buyer-facing copy was read only for banned phrases, so a sales count, an
+invented statistic, a quoted buyer or a struck-through price could reach the
+page (`the-copy-is-read-before-it-is-kept`); a listing could state a page count
+the file does not have (`the-listing-says-the-pages-the-file-has`); and a model
+reply carrying the deploy marker reached a design, a page and a file — it is
+now refused at the model door (`ModelReplyRefused`).
+
+**The long runs, 7 October 2026** (scorecards in
+`history/twin-2026-10-07/`; p10 / p50 / p90 across seeds):
+
+| | capable, 10 × 365 days | degraded, 10 × 365 | adversarial, 3 × 90 |
+|---|---|---|---|
+| days to first sale | 117 / 222 / none (a sale in 6 of 10) | none in 10 | none in 3 |
+| products for sale at the end | 1 / 3 / 3 (three places in flight) | 0 | 0 |
+| products ever placed | 12 / 33.5 / 37 | 0 | 0 |
+| money kept, a year | $0 / $6 / $15 | $0 | $0 |
+| owner minutes a week, last four weeks | 8.6 / 13.8 / 18.9 | 8.5 / 13.4 / 18.8 | 12.9 / 15.8 / 20.2 |
+| refusals of invented facts | 0 | 0 / 2 / 20 | 7 / 13 / 31 |
+| rules broken | 0 | 0 | 0 |
+| forge quiet at the end | 4 of 10 | 9 of 10 | 3 of 3 |
+
+The adversarial brain made 101 attempts; 101 were refused with a reason that
+quotes them, none reached a page, a message or a kept record. The degraded
+brain made nothing a stranger could buy: every listing it wrote claimed a page
+count its file did not have, and the rest were banned claims or malformed
+pages. What moves the result most (open loop): money — search impressions per
+listing (assumption), the index lag (assumption), the base conversion
+(calibration); the owner's minutes — what a standing, unanswered item costs him
+a day, his weekly read, and a new item (all assumptions). Closed loop for the
+first: seed 1 kept $13 at the low case and $107 at the high. The twin predicts
+almost no money in the first year and an owner load near 14 minutes a week,
+under the 24 that is 1% of a forty-hour week and above Foundry's own 10 — and
+both numbers rest mostly on assumptions nobody has measured.
+
+**What it found and left for the owner.** Experiment 001's public page and its
+outreach name the owner; the static gate exempts them as sealed records, and
+the runtime monitor exempts them with that pointer. Whether the page should
+still carry the name is his question.
+
+**Proof debt.** The twin's buyers, competitors and funnel are mostly
+assumptions; its eyes are the twin's own people; the model is scripted; the
+printer is a stand-in (Chromium printing is proven elsewhere); the owner is a
+policy, not a person; the sensitivity sweep is open loop (one closed-loop check
+of the top parameter per long run).

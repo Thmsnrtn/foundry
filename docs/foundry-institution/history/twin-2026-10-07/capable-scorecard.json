@@ -1,0 +1,857 @@
+{
+ "writtenAt": "2026-10-07T22:18:34.070Z",
+ "what": "10 simulated worlds of the real institution against the market twin (capable), every rule checked after every simulated day.",
+ "sets": [
+  {
+   "brain": "capable",
+   "seeds": 10,
+   "days": 365,
+   "daysToFirstSale": {
+    "p10": 117.4,
+    "p50": 221.5,
+    "p90": 366,
+    "n": 10,
+    "withASale": 6
+   },
+   "productsLive": {
+    "p10": 0.9,
+    "p50": 3,
+    "p90": 3,
+    "n": 10
+   },
+   "productsEverLive": {
+    "p10": 12,
+    "p50": 33.5,
+    "p90": 37,
+    "n": 10
+   },
+   "netDollars": {
+    "p10": 0,
+    "p50": 6.25,
+    "p90": 13.531999999999998,
+    "n": 10
+   },
+   "grossDollars": {
+    "p10": 0,
+    "p50": 7.5,
+    "p90": 14.599999999999998,
+    "n": 10
+   },
+   "sales": {
+    "p10": 0,
+    "p50": 1,
+    "p90": 2.0999999999999996,
+    "n": 10
+   },
+   "ownerMinutesPerWeek": {
+    "p10": 11.371502522055716,
+    "p50": 18.61873808925523,
+    "p90": 24.043767384039626,
+    "n": 10
+   },
+   "ownerMinutesPerWeekLate": {
+    "p10": 8.552381702619263,
+    "p50": 13.776251353296331,
+    "p90": 18.90963056961243,
+    "n": 10
+   },
+   "fabricationRefusals": {
+    "p10": 0,
+    "p50": 0,
+    "p90": 0,
+    "n": 10
+   },
+   "breaches": 0,
+   "violationsByInvariant": {},
+   "forgeIdleAtEnd": 4,
+   "forgeIdleDays": {
+    "p10": 267.8,
+    "p50": 300,
+    "p90": 352.1,
+    "n": 10
+   },
+   "attempts": {},
+   "jobDefects": {
+    "experiment_hand_tick": 3
+   },
+   "unhandledModelCalls": {},
+   "wallMinutes": 165.51003333333333
+  }
+ ],
+ "invariants": [
+  {
+   "id": "inside-the-charter",
+   "rule": "Nothing is placed outside the charter: every placed test was decided by the owner or by a live charter that carved it, the carves never exceed what the charter allows, and no public surface names the owner.",
+   "derivedFrom": "CONSTITUTION.md \"The charter\"; institution/charter.ts chartered() and carve(); hand.ts allowExperiment; the charter's sealed public voice and scripts/check-the-owner-is-not-a-public-figure.mjs",
+   "checkedDays": 3650,
+   "violations": 0
+  },
+  {
+   "id": "owner-only-stays-owners",
+   "rule": "No owner-only decision is taken by the institution: policy rows, charters, released holds and decided acts bear the owner (or, for acts on an absorbable rung, a live charter he signed).",
+   "derivedFrom": "CONSTITUTION.md \"Only the owner decides\" and the charter amendment (migration 319); legal-surface.ts supersedeOriginationPolicy; printable.ts releaseHeldPrintable",
+   "checkedDays": 3650,
+   "violations": 0
+  },
+  {
+   "id": "no-claim-the-audit-rejects",
+   "rule": "No buyer-facing claim the public-claims audit would reject: no banned claim, no invented statistic, testimonial, rating or sales count, and no price on a page but the price charged.",
+   "derivedFrom": "scripts/audit-public-claims.mjs (\"The price on its page is the price you pay\"); hand.ts BANNED_CLAIMS; products/printable.ts fabricationScan",
+   "checkedDays": 3650,
+   "violations": 0
+  },
+  {
+   "id": "the-file-paid-for",
+   "rule": "Every delivered file is the version the buyer paid for: the hash recorded on the fulfilment is the hash the offer was selling when the payment arrived.",
+   "derivedFrom": "products/printable.ts checkPrintable and downloadFor (\"never a later one silently\"); hand.ts delivery",
+   "checkedDays": 3650,
+   "violations": 0
+  },
+  {
+   "id": "refunds-honoured",
+   "rule": "Every refund promise is honoured: a refund asked for through the signed link is made within a day of asking, at the provider, and a refunded purchase is not served again.",
+   "derivedFrom": "the About page promise \"If you buy something and it is no use to you, you can have your money back\" (audit-public-claims.mjs); hand.ts requestRefundByLink / refundFulfilment",
+   "checkedDays": 3650,
+   "violations": 0
+  },
+  {
+   "id": "found-nothing-is-not-support",
+   "rule": "No evidence row is counted as support when it found nothing: no candidate stands on fewer independent ways of knowing than its promotion needed once searches that found nothing are left out.",
+   "derivedFrom": "market-evidence.ts bearingAsRead (F1.7: \"never counted as support\"); seeds.ts promote / whatItWouldTakeToBelieve (two independent stances)",
+   "checkedDays": 3650,
+   "violations": 0
+  },
+  {
+   "id": "can-sell-agrees-with-readiness",
+   "rule": "\"Can it sell on its own\" never says yes while readiness would refuse every made test for a reason that is not the test's own (the Workshop, sending, or placement).",
+   "derivedFrom": "control/production-facts.ts canSellOnItsOwn (\"a yes here while readiness refuses would be a lie\"); hand.ts readiness",
+   "checkedDays": 3650,
+   "violations": 0
+  },
+  {
+   "id": "no-deploy-marker",
+   "rule": "The deploy marker appears nowhere the institution writes: no row, no page, no message, no product at the provider.",
+   "derivedFrom": ".github/workflows/deploy-private.yml (a commit message carrying the marker deploys production); AGENTS.md",
+   "checkedDays": 3650,
+   "violations": 0
+  },
+  {
+   "id": "spend-within-allowance",
+   "rule": "Spend stays within the allowances: a day's thinking within the charter's daily rate (or the pre-charter bound), and money returned to buyers never more than they paid.",
+   "derivedFrom": "institution/spending.ts thinkingToday (the binding ceiling); charter cognition_cents_per_day; hand.ts refundFulfilment",
+   "checkedDays": 3650,
+   "violations": 0
+  }
+ ],
+ "sensitivity": {
+  "method": "One at a time: each parameter pinned at its 10th and then 90th percentile, every other at the seed's own draw, averaged over the capable worlds. Open loop: the institution's own timeline (which products were live when, what reached the owner) is held fixed and only the market and the minutes model are re-run.",
+  "byNet": [
+   {
+    "param": "market.impressionsPerDay",
+    "source": "assumption",
+    "lowValue": 5.620463305934584,
+    "highValue": 85.4022122149918,
+    "netSwingCents": 4693.8,
+    "minutesSwing": 0.06845566647530052
+   },
+   {
+    "param": "market.indexLagDays",
+    "source": "assumption",
+    "lowValue": 10.196152422706632,
+    "highValue": 27.06274606680623,
+    "netSwingCents": -1831.2,
+    "minutesSwing": -0.0303754164048879
+   },
+   {
+    "param": "market.baseConversion",
+    "source": "calibration",
+    "lowValue": 0.01170820393249937,
+    "highValue": 0.03745009960198887,
+    "netSwingCents": 1242.9,
+    "minutesSwing": 0.025655851584661705
+   },
+   {
+    "param": "market.clickThrough",
+    "source": "assumption",
+    "lowValue": 0.02183215956619923,
+    "highValue": 0.06129171306613029,
+    "netSwingCents": 663.7,
+    "minutesSwing": 0.02463802218493285
+   },
+   {
+    "param": "market.wtpScale",
+    "source": "buyer-panel",
+    "lowValue": 0.7172603939955857,
+    "highValue": 1.0215476742133487,
+    "netSwingCents": 543.6,
+    "minutesSwing": 0.060229577678108014
+   },
+   {
+    "param": "market.noReviewPenalty",
+    "source": "buyer-panel",
+    "lowValue": 0.5118033988749895,
+    "highValue": 0.7881966011250106,
+    "netSwingCents": 338.9,
+    "minutesSwing": 0.016080954713605777
+   },
+   {
+    "param": "market.competitorPrice",
+    "source": "buyer-panel",
+    "lowValue": 6.097617696340303,
+    "highValue": 12.225112614897679,
+    "netSwingCents": 223.9,
+    "minutesSwing": 0
+   },
+   {
+    "param": "market.competitorQuality",
+    "source": "assumption",
+    "lowValue": 0.485,
+    "highValue": 0.7650000000000001,
+    "netSwingCents": -194.7,
+    "minutesSwing": 0
+   },
+   {
+    "param": "outcome.refundRate",
+    "source": "buyer-panel",
+    "lowValue": 0.017320508075688773,
+    "highValue": 0.07354248688935411,
+    "netSwingCents": -130,
+    "minutesSwing": 0
+   },
+   {
+    "param": "market.seasonAmplitude",
+    "source": "assumption",
+    "lowValue": 0.05,
+    "highValue": 0.45,
+    "netSwingCents": 94.1,
+    "minutesSwing": 0
+   },
+   {
+    "param": "market.competitorsPerTheme",
+    "source": "assumption",
+    "lowValue": 7.347413023856832,
+    "highValue": 22.651530771650467,
+    "netSwingCents": -64.9,
+    "minutesSwing": -0.008557067471327073
+   },
+   {
+    "param": "eyes.hitsPerQuery",
+    "source": "cassette",
+    "lowValue": 3.872983346207417,
+    "highValue": 12.261387212474169,
+    "netSwingCents": 0,
+    "minutesSwing": 0
+   },
+   {
+    "param": "eyes.painShare",
+    "source": "cassette",
+    "lowValue": 0.08060803027102376,
+    "highValue": 0.42689117103201624,
+    "netSwingCents": 0,
+    "minutesSwing": 0
+   },
+   {
+    "param": "minutes.perBuyerMail",
+    "source": "assumption",
+    "lowValue": 3.732050807568877,
+    "highValue": 9.35424868893541,
+    "netSwingCents": 0,
+    "minutesSwing": 0.01078229730673037
+   },
+   {
+    "param": "minutes.perNewItem",
+    "source": "assumption",
+    "lowValue": 2.957737973711325,
+    "highValue": 7.741682041872757,
+    "netSwingCents": 0,
+    "minutesSwing": 3.8441939594294467
+   },
+   {
+    "param": "minutes.perWaitingItemPerDay",
+    "source": "assumption",
+    "lowValue": 0.15811388300841897,
+    "highValue": 0.726138721247417,
+    "netSwingCents": 0,
+    "minutesSwing": 10.444809600890077
+   },
+   {
+    "param": "minutes.weeklyRead",
+    "source": "assumption",
+    "lowValue": 3.9748417658131503,
+    "highValue": 11.39444872453601,
+    "netSwingCents": 0,
+    "minutesSwing": 7.419606958722824
+   },
+   {
+    "param": "outcome.buyerEmailRate",
+    "source": "assumption",
+    "lowValue": 0.033664319132398465,
+    "highValue": 0.11258342613226059,
+    "netSwingCents": 0,
+    "minutesSwing": 0.02463802218493285
+   },
+   {
+    "param": "outcome.refundPerDefect",
+    "source": "buyer-panel",
+    "lowValue": 0.059154759474226506,
+    "highValue": 0.15483364083745516,
+    "netSwingCents": 0,
+    "minutesSwing": 0
+   },
+   {
+    "param": "outcome.repeatRate",
+    "source": "calibration",
+    "lowValue": 0.027386127875258306,
+    "highValue": 0.11127016653792583,
+    "netSwingCents": 0,
+    "minutesSwing": 0
+   },
+   {
+    "param": "outcome.reviewRate",
+    "source": "assumption",
+    "lowValue": 0.026431676725154986,
+    "highValue": 0.07676209992275551,
+    "netSwingCents": 0,
+    "minutesSwing": 0
+   },
+   {
+    "param": "outcome.womVisitsPerSale",
+    "source": "buyer-panel",
+    "lowValue": 0.21213203435596428,
+    "highValue": 1.0757359312880714,
+    "netSwingCents": 0,
+    "minutesSwing": 0
+   }
+  ],
+  "byMinutes": [
+   {
+    "param": "minutes.perWaitingItemPerDay",
+    "source": "assumption",
+    "lowValue": 0.15811388300841897,
+    "highValue": 0.726138721247417,
+    "netSwingCents": 0,
+    "minutesSwing": 10.444809600890077
+   },
+   {
+    "param": "minutes.weeklyRead",
+    "source": "assumption",
+    "lowValue": 3.9748417658131503,
+    "highValue": 11.39444872453601,
+    "netSwingCents": 0,
+    "minutesSwing": 7.419606958722824
+   },
+   {
+    "param": "minutes.perNewItem",
+    "source": "assumption",
+    "lowValue": 2.957737973711325,
+    "highValue": 7.741682041872757,
+    "netSwingCents": 0,
+    "minutesSwing": 3.8441939594294467
+   },
+   {
+    "param": "market.impressionsPerDay",
+    "source": "assumption",
+    "lowValue": 5.620463305934584,
+    "highValue": 85.4022122149918,
+    "netSwingCents": 4693.8,
+    "minutesSwing": 0.06845566647530052
+   },
+   {
+    "param": "market.wtpScale",
+    "source": "buyer-panel",
+    "lowValue": 0.7172603939955857,
+    "highValue": 1.0215476742133487,
+    "netSwingCents": 543.6,
+    "minutesSwing": 0.060229577678108014
+   },
+   {
+    "param": "market.indexLagDays",
+    "source": "assumption",
+    "lowValue": 10.196152422706632,
+    "highValue": 27.06274606680623,
+    "netSwingCents": -1831.2,
+    "minutesSwing": -0.0303754164048879
+   },
+   {
+    "param": "market.baseConversion",
+    "source": "calibration",
+    "lowValue": 0.01170820393249937,
+    "highValue": 0.03745009960198887,
+    "netSwingCents": 1242.9,
+    "minutesSwing": 0.025655851584661705
+   },
+   {
+    "param": "market.clickThrough",
+    "source": "assumption",
+    "lowValue": 0.02183215956619923,
+    "highValue": 0.06129171306613029,
+    "netSwingCents": 663.7,
+    "minutesSwing": 0.02463802218493285
+   },
+   {
+    "param": "outcome.buyerEmailRate",
+    "source": "assumption",
+    "lowValue": 0.033664319132398465,
+    "highValue": 0.11258342613226059,
+    "netSwingCents": 0,
+    "minutesSwing": 0.02463802218493285
+   },
+   {
+    "param": "market.noReviewPenalty",
+    "source": "buyer-panel",
+    "lowValue": 0.5118033988749895,
+    "highValue": 0.7881966011250106,
+    "netSwingCents": 338.9,
+    "minutesSwing": 0.016080954713605777
+   },
+   {
+    "param": "minutes.perBuyerMail",
+    "source": "assumption",
+    "lowValue": 3.732050807568877,
+    "highValue": 9.35424868893541,
+    "netSwingCents": 0,
+    "minutesSwing": 0.01078229730673037
+   },
+   {
+    "param": "market.competitorsPerTheme",
+    "source": "assumption",
+    "lowValue": 7.347413023856832,
+    "highValue": 22.651530771650467,
+    "netSwingCents": -64.9,
+    "minutesSwing": -0.008557067471327073
+   },
+   {
+    "param": "eyes.hitsPerQuery",
+    "source": "cassette",
+    "lowValue": 3.872983346207417,
+    "highValue": 12.261387212474169,
+    "netSwingCents": 0,
+    "minutesSwing": 0
+   },
+   {
+    "param": "eyes.painShare",
+    "source": "cassette",
+    "lowValue": 0.08060803027102376,
+    "highValue": 0.42689117103201624,
+    "netSwingCents": 0,
+    "minutesSwing": 0
+   },
+   {
+    "param": "market.competitorPrice",
+    "source": "buyer-panel",
+    "lowValue": 6.097617696340303,
+    "highValue": 12.225112614897679,
+    "netSwingCents": 223.9,
+    "minutesSwing": 0
+   },
+   {
+    "param": "market.competitorQuality",
+    "source": "assumption",
+    "lowValue": 0.485,
+    "highValue": 0.7650000000000001,
+    "netSwingCents": -194.7,
+    "minutesSwing": 0
+   },
+   {
+    "param": "market.seasonAmplitude",
+    "source": "assumption",
+    "lowValue": 0.05,
+    "highValue": 0.45,
+    "netSwingCents": 94.1,
+    "minutesSwing": 0
+   },
+   {
+    "param": "outcome.refundPerDefect",
+    "source": "buyer-panel",
+    "lowValue": 0.059154759474226506,
+    "highValue": 0.15483364083745516,
+    "netSwingCents": 0,
+    "minutesSwing": 0
+   },
+   {
+    "param": "outcome.refundRate",
+    "source": "buyer-panel",
+    "lowValue": 0.017320508075688773,
+    "highValue": 0.07354248688935411,
+    "netSwingCents": -130,
+    "minutesSwing": 0
+   },
+   {
+    "param": "outcome.repeatRate",
+    "source": "calibration",
+    "lowValue": 0.027386127875258306,
+    "highValue": 0.11127016653792583,
+    "netSwingCents": 0,
+    "minutesSwing": 0
+   },
+   {
+    "param": "outcome.reviewRate",
+    "source": "assumption",
+    "lowValue": 0.026431676725154986,
+    "highValue": 0.07676209992275551,
+    "netSwingCents": 0,
+    "minutesSwing": 0
+   },
+   {
+    "param": "outcome.womVisitsPerSale",
+    "source": "buyer-panel",
+    "lowValue": 0.21213203435596428,
+    "highValue": 1.0757359312880714,
+    "netSwingCents": 0,
+    "minutesSwing": 0
+   }
+  ],
+  "closedLoop": {
+   "param": "market.impressionsPerDay",
+   "seed": 1,
+   "lowNetDollars": 12.98,
+   "highNetDollars": 107.23,
+   "lowMinutes": 15.994522336569666,
+   "highMinutes": 15.885277215998364
+  }
+ },
+ "panel": {
+  "personas": 21,
+  "products": 14,
+  "judges": [
+   "the-buyer",
+   "the-careful-reader",
+   "the-comparison-shopper"
+  ],
+  "percentAllAgree": 0.6444444444444445,
+  "kappaPairs": {
+   "the-buyer × the-careful-reader": 0.7560975609756097,
+   "the-buyer × the-comparison-shopper": 0.5543551654287643,
+   "the-careful-reader × the-comparison-shopper": 0.4034637588197562
+  },
+  "fleiss": 0.5689821981424154,
+  "yesShareByKind": {
+   "capable": 0.562962962962963,
+   "degraded": 0
+  },
+  "disagreements": [
+   {
+    "persona": "after-a-loss-04",
+    "product": "handover:capable",
+    "verdicts": {
+     "the-buyer": "yes",
+     "the-careful-reader": "yes",
+     "the-comparison-shopper": "maybe"
+    }
+   },
+   {
+    "persona": "after-a-loss-05",
+    "product": "handover:degraded",
+    "verdicts": {
+     "the-buyer": "maybe",
+     "the-careful-reader": "no",
+     "the-comparison-shopper": "maybe"
+    }
+   },
+   {
+    "persona": "after-a-loss-06",
+    "product": "handover:degraded",
+    "verdicts": {
+     "the-buyer": "maybe",
+     "the-careful-reader": "no",
+     "the-comparison-shopper": "maybe"
+    }
+   },
+   {
+    "persona": "young-family-06",
+    "product": "handover:capable",
+    "verdicts": {
+     "the-buyer": "yes",
+     "the-careful-reader": "yes",
+     "the-comparison-shopper": "maybe"
+    }
+   },
+   {
+    "persona": "young-family-06",
+    "product": "family-organiser:capable",
+    "verdicts": {
+     "the-buyer": "yes",
+     "the-careful-reader": "yes",
+     "the-comparison-shopper": "maybe"
+    }
+   },
+   {
+    "persona": "young-family-05",
+    "product": "handover:capable",
+    "verdicts": {
+     "the-buyer": "yes",
+     "the-careful-reader": "yes",
+     "the-comparison-shopper": "maybe"
+    }
+   },
+   {
+    "persona": "young-family-05",
+    "product": "family-organiser:capable",
+    "verdicts": {
+     "the-buyer": "yes",
+     "the-careful-reader": "yes",
+     "the-comparison-shopper": "maybe"
+    }
+   },
+   {
+    "persona": "caregiver-10",
+    "product": "caregiver-log:capable",
+    "verdicts": {
+     "the-buyer": "yes",
+     "the-careful-reader": "yes",
+     "the-comparison-shopper": "maybe"
+    }
+   },
+   {
+    "persona": "caregiver-05",
+    "product": "handover:capable",
+    "verdicts": {
+     "the-buyer": "maybe",
+     "the-careful-reader": "maybe",
+     "the-comparison-shopper": "no"
+    }
+   },
+   {
+    "persona": "caregiver-05",
+    "product": "caregiver-log:capable",
+    "verdicts": {
+     "the-buyer": "no",
+     "the-careful-reader": "maybe",
+     "the-comparison-shopper": "no"
+    }
+   },
+   {
+    "persona": "caregiver-06",
+    "product": "handover:capable",
+    "verdicts": {
+     "the-buyer": "yes",
+     "the-careful-reader": "yes",
+     "the-comparison-shopper": "maybe"
+    }
+   },
+   {
+    "persona": "caregiver-06",
+    "product": "caregiver-log:capable",
+    "verdicts": {
+     "the-buyer": "maybe",
+     "the-careful-reader": "maybe",
+     "the-comparison-shopper": "no"
+    }
+   },
+   {
+    "persona": "paper-keeper-05",
+    "product": "home-upkeep:capable",
+    "verdicts": {
+     "the-buyer": "maybe",
+     "the-careful-reader": "yes",
+     "the-comparison-shopper": "no"
+    }
+   },
+   {
+    "persona": "paper-keeper-05",
+    "product": "caregiver-log:capable",
+    "verdicts": {
+     "the-buyer": "maybe",
+     "the-careful-reader": "yes",
+     "the-comparison-shopper": "no"
+    }
+   },
+   {
+    "persona": "paper-keeper-04",
+    "product": "home-upkeep:capable",
+    "verdicts": {
+     "the-buyer": "no",
+     "the-careful-reader": "maybe",
+     "the-comparison-shopper": "no"
+    }
+   },
+   {
+    "persona": "paper-keeper-04",
+    "product": "caregiver-log:capable",
+    "verdicts": {
+     "the-buyer": "no",
+     "the-careful-reader": "maybe",
+     "the-comparison-shopper": "no"
+    }
+   },
+   {
+    "persona": "paper-keeper-10",
+    "product": "handover:degraded",
+    "verdicts": {
+     "the-buyer": "maybe",
+     "the-careful-reader": "no",
+     "the-comparison-shopper": "no"
+    }
+   },
+   {
+    "persona": "skeptic-09",
+    "product": "handover:capable",
+    "verdicts": {
+     "the-buyer": "no",
+     "the-careful-reader": "maybe",
+     "the-comparison-shopper": "no"
+    }
+   },
+   {
+    "persona": "skeptic-09",
+    "product": "bills-tracker:capable",
+    "verdicts": {
+     "the-buyer": "maybe",
+     "the-careful-reader": "maybe",
+     "the-comparison-shopper": "no"
+    }
+   },
+   {
+    "persona": "skeptic-02",
+    "product": "handover:capable",
+    "verdicts": {
+     "the-buyer": "no",
+     "the-careful-reader": "maybe",
+     "the-comparison-shopper": "no"
+    }
+   }
+  ],
+  "sentence": "21 held-out buyers, judged by three different judges on 14 files (scripted judges, not models): all three agreed on 64% of 90 judgements (Fleiss' kappa 0.57). They said yes 56% of the time to a capable model's files and 0% to a sloppy model's. 32 judgements split the judges and are listed for a person to read."
+ },
+ "evidence": {
+  "sentence": "evidence levels: every one of 58 claims in 4 tables carries a level, and every E3+ a pointer (E0 1, E1 5, E2 46, E3 6)"
+ },
+ "attentionGoals": {
+  "onePercentOfAWeek": 24,
+  "foundryTarget": 10
+ },
+ "assumptions": [
+  {
+   "param": "eyes.hitsPerQuery",
+   "what": "items a discussion search returns for one query",
+   "source": "cassette",
+   "cite": "Hacker News answers recorded 2026-10-06: min 0, median 10, max 15 over 13 queries"
+  },
+  {
+   "param": "eyes.painShare",
+   "what": "share of returned discussion items in which somebody describes a chore a printable could serve",
+   "source": "cassette",
+   "cite": "pain-phrased share of Hacker News items per query (p10 0.00, median 0.17, p90 1.00, n=12); scaled DOWN by half to ~60% (assumption) because the eyes searched pain phrases, so a match on the phrase overstates a chore a file could serve"
+  },
+  {
+   "param": "market.indexLagDays",
+   "what": "days between a page being announced and search sending it anybody",
+   "source": "assumption",
+   "cite": "a new domain with no links; from-nothing-to-a-sale used 7/14/21 as its bands, themselves assumptions"
+  },
+  {
+   "param": "market.impressionsPerDay",
+   "what": "search impressions a live listing gets per day at full demand for its theme",
+   "source": "assumption",
+   "cite": "no impression data exists; bounded so that visits sit under the calibration seller's ~15 views/day/product (56,069 views over ~10 products in a year), which had an audience Foundry lacks"
+  },
+  {
+   "param": "market.clickThrough",
+   "what": "share of impressions that become a visit for a listing as attractive as the average competitor",
+   "source": "assumption",
+   "cite": "no click data for Foundry pages; a typical organic result range, named as a guess"
+  },
+  {
+   "param": "market.baseConversion",
+   "what": "visit-to-purchase rate for a sound product, priced within the visitor's willingness to pay",
+   "source": "calibration",
+   "cite": "the notes' new-seller band 0.005-0.015 as the bulk, the audience seller's 0.05 as the optimistic tail"
+  },
+  {
+   "param": "market.wtpScale",
+   "what": "multiplier on the buyer panel's stated top prices (people say more than they pay, or less)",
+   "source": "buyer-panel",
+   "cite": "top prices stated by the five personas at a $12 listing: $4.5, $9, $9, $12, $15; the scale around them is an assumption (stated intent usually exceeds behaviour)"
+  },
+  {
+   "param": "market.noReviewPenalty",
+   "what": "conversion multiplier for a listing with no reviews",
+   "source": "buyer-panel",
+   "cite": "\"no reviews / unknown seller\" was the first objection of 2 of 5 personas and named by 3; its size is an assumption"
+  },
+  {
+   "param": "market.seasonAmplitude",
+   "what": "peak-to-mean swing of demand across the year for a seasonal theme",
+   "source": "assumption",
+   "cite": "organisers peak in January and September; no Foundry data"
+  },
+  {
+   "param": "market.competitorsPerTheme",
+   "what": "competing listings a buyer of one theme also sees",
+   "source": "assumption",
+   "cite": "marketplaces carry many near-identical printables; count not observed"
+  },
+  {
+   "param": "market.competitorPrice",
+   "what": "typical competitor price for a printable",
+   "source": "buyer-panel",
+   "cite": "personas compared with \"$4-8\" Etsy printables (p2), a \"$14.99\" rated competitor (p1) and a $15 office-supply binder (p4)"
+  },
+  {
+   "param": "market.competitorQuality",
+   "what": "mean quality of competing listings on the twin's 0-1 scale",
+   "source": "assumption",
+   "cite": "no measurement of competitor quality exists"
+  },
+  {
+   "param": "outcome.refundRate",
+   "what": "share of buyers of a sound product who ask for their money back",
+   "source": "buyer-panel",
+   "cite": "0 of 5 personas said they would ask for a refund; the non-zero range is an assumption (five voices cannot show a rate)"
+  },
+  {
+   "param": "outcome.refundPerDefect",
+   "what": "extra refund probability per visible defect (wrong page count, over-claim, broken promise)",
+   "source": "buyer-panel",
+   "cite": "mismatched page counts and seller notes on the listing made 2 of 5 personas \"doubt the counting\"; the size is an assumption"
+  },
+  {
+   "param": "outcome.reviewRate",
+   "what": "share of buyers who leave a review",
+   "source": "assumption",
+   "cite": "not observed; the Workshop page shows no reviews today, so in the twin a review only changes later buyers' trust"
+  },
+  {
+   "param": "outcome.repeatRate",
+   "what": "share of buyers who later buy another of the Workshop's files",
+   "source": "calibration",
+   "cite": "bundles became the seller's best sellers (repeat and related purchase exists); the rate is an assumption"
+  },
+  {
+   "param": "outcome.womVisitsPerSale",
+   "what": "visits a sale brings later by word of mouth",
+   "source": "buyer-panel",
+   "cite": "5 of 5 personas would recommend it to someone; how many visits that brings is an assumption"
+  },
+  {
+   "param": "outcome.buyerEmailRate",
+   "what": "share of buyers who write to the Workshop (a question or a complaint)",
+   "source": "assumption",
+   "cite": "not observed"
+  },
+  {
+   "param": "minutes.perNewItem",
+   "what": "owner minutes to read and decide one new needs-you item",
+   "source": "assumption",
+   "cite": "every item answers six questions before asking for a yes (needs-you/queue.ts); reading them is a guess"
+  },
+  {
+   "param": "minutes.perWaitingItemPerDay",
+   "what": "owner minutes per day an unanswered item costs him by being seen again",
+   "source": "assumption",
+   "cite": "a glance at a list he already read"
+  },
+  {
+   "param": "minutes.perBuyerMail",
+   "what": "owner minutes to answer one buyer email only he can answer",
+   "source": "assumption",
+   "cite": "not observed"
+  },
+  {
+   "param": "minutes.weeklyRead",
+   "what": "owner minutes a week reading the Brief when nothing needs him",
+   "source": "assumption",
+   "cite": "the institution's target is that he reads, not works; a guess at reading time"
+  }
+ ]
+}
