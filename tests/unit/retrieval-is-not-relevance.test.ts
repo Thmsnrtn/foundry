@@ -117,8 +117,12 @@ describe('absence is not presence', () => {
     // An absence is always worked out, never seen.
     expect(String(obs[0]?.directness)).toBe('inferred');
 
+    // And it is never read as support (F1.7): a search that found nothing has
+    // found nothing.
     const how = await standingOf(claimId);
-    expect(how?.howItStands).toContain('worked out rather than seen');
+    expect(how?.supports).toBe(0);
+    expect(how?.foundNothing).toBe(1);
+    expect(how?.howItStands).toContain('not support');
     vi.restoreAllMocks();
   });
 

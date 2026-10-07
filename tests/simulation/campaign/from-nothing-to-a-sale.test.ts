@@ -41,6 +41,10 @@ process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY ?? '0'.repeat(64);
 process.env.OPENROUTER_BASE_URL = `${STANDIN}/api/v1`;
 process.env.OPENROUTER_API_KEY = 'sk-or-standin';
 process.env.AI_TIMEOUT_MS = process.env.AI_TIMEOUT_MS ?? String(25 * 60_000);
+// A slow local stand-in: the per-call budget and the forge pass deadline (F-DOOR-1)
+// would otherwise cut it off at production's bounds.
+process.env.AI_CALL_BUDGET_MS = process.env.AI_CALL_BUDGET_MS ?? String(75 * 60_000);
+process.env.FORGE_PASS_BUDGET_MS = process.env.FORGE_PASS_BUDGET_MS ?? String(6 * 60 * 60_000);
 
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';

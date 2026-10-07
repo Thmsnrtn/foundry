@@ -1659,6 +1659,11 @@ CREATE TABLE forge_refusals (
   stage TEXT NOT NULL CHECK (stage IN ('deliberate', 'make')),
   because TEXT NOT NULL,
   refused_at TEXT NOT NULL
+, facts TEXT);
+CREATE TABLE forge_rerun_asks (
+  id TEXT PRIMARY KEY,
+  experiment_id TEXT NOT NULL,
+  asked_at TEXT NOT NULL
 );
 CREATE TABLE founder_ai_profile (
   id TEXT PRIMARY KEY,
@@ -4692,6 +4697,7 @@ CREATE INDEX idx_feedback_type ON founder_feedback(feedback_type, created_at DES
 CREATE INDEX idx_fh_founder ON founder_health(founder_id);
 CREATE INDEX idx_fhs_founder_date ON founder_health_snapshots(founder_id, snapshot_date);
 CREATE INDEX idx_forge_refusals_experiment ON forge_refusals(experiment_id, stage, refused_at);
+CREATE INDEX idx_forge_rerun_asks_experiment ON forge_rerun_asks(experiment_id, asked_at);
 CREATE UNIQUE INDEX idx_founder_company_fact
   ON founder_evidence_requests(product_id,predicate) WHERE scope='company';
 CREATE UNIQUE INDEX idx_founder_evidence_request_identity

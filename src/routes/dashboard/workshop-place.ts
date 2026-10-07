@@ -15,7 +15,7 @@ import type { HtmlEscapedString } from 'hono/utils/html';
 import { page } from './foundry-shell.js';
 import type { Where } from './foundry-shell.js';
 import { requireInstitutionOwner } from '../../middleware/rbac.js';
-import { APEX_MICRO, establishPublicWorkshop, pauseNewEconomicActivity, publicPostalLines, publicWorkshopOf, resumeEconomicActivity, setAbout, setPostalAddress, WorkshopRefused } from '../../services/public-workshop/settings.js';
+import { APEX_MICRO, establishPublicWorkshop, pauseHistory, pauseNewEconomicActivity, publicPostalLines, publicWorkshopOf, resumeEconomicActivity, setAbout, setPostalAddress, WorkshopRefused } from '../../services/public-workshop/settings.js';
 import { heldFromPublishing, livePublications, previewExperimentPage, publishSite, verifySite } from '../../services/public-workshop/publication.js';
 import { projectRegistry } from '../../services/public-workshop/projection.js';
 import { cloudflareReceipts, connectWorkshopSending, outstandingObligations, standUpWorkshop, workshopHealth } from '../../services/public-workshop/infrastructure.js';
@@ -79,6 +79,7 @@ workshopRoutes.get('/foundry/public-workshop', async (c: any) => {
   // "and then what".
   const { howThisWouldEnd } = await import('../../services/institution/winding-down.js');
   const ending = await howThisWouldEnd(founderId);
+  const history = await pauseHistory(founderId);
   const receipts = await cloudflareReceipts(founderId, 25);
   const { continuationsFor } = await import('../../services/public-workshop/suppression.js');
   const answers = await continuationsFor(founderId, 50);
@@ -119,6 +120,10 @@ workshopRoutes.get('/foundry/public-workshop', async (c: any) => {
            half is what stopping does not finish, and an owner who has to find
            that out afterwards has been handed a surprise instead of a choice.
            The uncomfortable half leads, whatever else is true. */ ''}
+      ${history.length ? html`<h3>Stops and pauses on record</h3>
+      <ul>${history.map((h) => html`<li>${h.at.slice(0, 16).replace('T', ' ')} &mdash; ${h.kind === 'stopped' ? 'everything stopped' : h.kind === 'paused' ? 'new economic activity paused' : 'resumed'}${h.principal === `founder:${founderId}` ? ' by you' : h.principal ? ` by ${h.principal}` : ''}${h.kind === 'resumed'
+        ? `, after ${h.durationSeconds !== null && h.durationSeconds >= 86_400 ? `${String(Math.round(h.durationSeconds / 86_400))} days` : h.durationSeconds !== null && h.durationSeconds >= 3_600 ? `${String(Math.round(h.durationSeconds / 3_600))} hours` : `${String(Math.max(1, Math.round((h.durationSeconds ?? 0) / 60)))} minutes`}; ${String(h.waitingRecipients ?? 0)} approved recipient${h.waitingRecipients === 1 ? ' was' : 's were'} still waiting to be written to`
+        : h.reason ? `: ${h.reason}` : ''}.</li>`)}</ul>` : ''}
       <h3>If you stopped now</h3>
       <p>${ending.sentence}</p>
       ${ending.itCannotSettle.length ? html`<ul>${ending.itCannotSettle.map((l) => html`<li><strong>${l.what}</strong> &mdash; ${l.because}.</li>`)}</ul>` : ''}

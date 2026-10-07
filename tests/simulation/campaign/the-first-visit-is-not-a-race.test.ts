@@ -8,8 +8,9 @@
 // it is missing; two first visits that overlap (phone and laptop, a link
 // preview, a prefetch) both read "missing" and the second insert throws.
 //
-// FIXED F-WALK-1 (remediation 1.2, 6 October 2026): markVisit inserts with
-// ON CONFLICT(founder_id) DO NOTHING, so overlapping first visits are one.
+// F-WALK-1, FIXED 2026-10-06 (was it.fails): markVisit now inserts with
+// ON CONFLICT(founder_id) DO NOTHING and re-reads, and moves the marker only
+// if nobody moved it since it was read.
 // =============================================================================
 
 process.env.FOUNDRY_INSTANCE_POSTURE = 'private_owner';
@@ -30,8 +31,8 @@ vi.mock('../../../src/services/ai/client.js', async (orig) => ({
 }));
 
 let app: Awaited<ReturnType<typeof ownerApp>>;
-/** What the racing first visits answered — read by the guard below, so a
- *  harness fault cannot hide inside the race test. */
+/** What the racing first visits answered — read by the plain test below, so a
+ *  harness fault cannot hide inside the racing test. */
 let firstVisit: number[] = [];
 
 beforeAll(async () => {
@@ -49,7 +50,7 @@ describe('the first visit', () => {
   }, 30_000);
 
   it('the racing visits failed only as the race fails, and a later visit answers 200', async () => {
-    // Vacuity guard for the race test above: it must have run, and every answer
+    // Vacuity guard for the racing test above: it must have run, and every answer
     // must be a 200 or the race's 503 — a 403/500 would be a harness fault.
     expect(firstVisit).toHaveLength(3);
     expect(firstVisit.every((s) => s === 200 || s === 503)).toBe(true);

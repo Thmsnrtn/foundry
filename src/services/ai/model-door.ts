@@ -116,3 +116,13 @@ export async function doorBehindFailure(lastErrorName: string | null): Promise<s
   return modelDoorBlocker(await modelDoorFacts())
     ?? 'the model door failed on its last attempt: check the OpenRouter credit and key';
 }
+
+/**
+ * IS THE DOOR DOWN NOW, in the one sentence — `modelDoorBlocker` read from the
+ * ledger and the breaker (Stage 1 F1.4, reconciled onto remediation 1.5). For
+ * surfaces that ask about the door itself rather than about one routine's
+ * failure: Home's health card and its pulse when no routine has failed yet.
+ */
+export async function modelDoorDown(): Promise<string | null> {
+  return modelDoorBlocker(await modelDoorFacts());
+}

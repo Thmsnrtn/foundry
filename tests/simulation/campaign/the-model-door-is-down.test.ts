@@ -323,6 +323,36 @@ describe('a hung door is bounded', () => {
     process.stdout.write(`hung door: first call ${String(first.ms)} ms over 3 attempts, second refused in ${String(second.ms)} ms\n`);
   }, 60_000);
 
+  it('a whole call is bounded by its tier\'s budget, attempts and backoffs together (Stage 1 F1.4)', async () => {
+    mode = 'hang'; hits = 0;
+    const { callSonnet, callBudgetMs, attemptTimeoutMs, forgetModelDoorFailures, MODELS } = await import('../../../src/services/ai/client.js');
+    const { institutionSpend } = await import('../../../src/services/ai/what-it-is-for.js');
+    // A budget shorter than one backoff: one attempt, and no waiting to give up.
+    forgetModelDoorFailures();
+    process.env.AI_CALL_BUDGET_MS = '600';
+    const t0 = Date.now();
+    let name = '';
+    try {
+      await callSonnet('You are a lens.', 'Reply with JSON.', 50,
+        institutionSpend('a campaign measuring a call bounded by its budget', 'a lens', { kind: 'experiment', id: X }));
+    } catch (e) { name = e instanceof Error ? e.name : 'Error'; } finally { delete process.env.AI_CALL_BUDGET_MS; }
+    const ms = Date.now() - t0;
+    expect(name).toBe('ModelDoorError');
+    expect(hits).toBe(1);
+    expect(ms).toBeLessThan(1_500);
+    forgetModelDoorFailures();
+    // Production's shape, with neither variable set: no tier's call is the six
+    // minutes three 120 s attempts cost, and the budgets rise with the tier.
+    const none = {} as NodeJS.ProcessEnv;
+    for (const m of [MODELS.HAIKU, MODELS.SONNET, MODELS.OPUS]) {
+      expect(attemptTimeoutMs(m, none)).toBeLessThanOrEqual(callBudgetMs(m, none));
+      expect(callBudgetMs(m, none)).toBeLessThanOrEqual(180_000);
+    }
+    expect(callBudgetMs(MODELS.HAIKU, none)).toBeLessThan(callBudgetMs(MODELS.SONNET, none));
+    expect(callBudgetMs(MODELS.SONNET, none)).toBeLessThan(callBudgetMs(MODELS.OPUS, none));
+    expect(callBudgetMs(MODELS.OPUS, { AI_CALL_BUDGET_MS: '900' } as NodeJS.ProcessEnv)).toBe(900);
+  }, 60_000);
+
   it('a forge pass against a hung door ends after one call\'s waits, however many tests are waiting to be deliberated', async () => {
     for (let i = 0; i < 3; i++) await anUndesignedTest();
     const t0 = Date.now();
@@ -337,7 +367,10 @@ describe('a hung door is bounded', () => {
 
   it('a slow but answering door is bounded by the pass budget: what is left waits for the next pass, said so', async () => {
     const { forgePass, forgePassBudgetMs } = await import('../../../src/services/venture/forge-deliberation.js');
-    expect(forgePassBudgetMs({} as NodeJS.ProcessEnv)).toBe(15 * 60_000);
+    // Four minutes, inside the five-minute lease runScheduledJob holds forge_tick
+    // under (Stage 1 F1.4): no design starts after another instance could take it.
+    expect(forgePassBudgetMs({} as NodeJS.ProcessEnv)).toBe(4 * 60_000);
+    expect(forgePassBudgetMs({} as NodeJS.ProcessEnv)).toBeLessThan(300 * 1000);
     // A budget of nothing: deterministic, where one millisecond raced the clock.
     process.env.FORGE_PASS_BUDGET_MS = '0';
     try {
@@ -354,6 +387,8 @@ describe('a hung door is bounded', () => {
 
 describe('the door is reached for real', () => {
   it('with the door answering, the forge deliberates: the call settles and the routine passes', async () => {
+    // After the breaker's cooldown the door is asked again; the rehearsal does not wait ten minutes.
+    (await import('../../../src/services/ai/client.js')).forgetModelDoorFailures();
     const r = await forgeUnderMode('ok');
     expect(r.hits).toBeGreaterThan(0);
     expect(r.out.state).toBe('ok');

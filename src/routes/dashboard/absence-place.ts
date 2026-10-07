@@ -199,6 +199,12 @@ absenceRoutes.get('/foundry/absence', async (c: any) => {
     door = await doorBehindFailure(l.lastErrorName);
     if (door) break;
   }
+  // A DOOR DOWN WITH NO ROUTINE FAILED ON IT YET is still the door (Stage 1
+  // F1.4): the same sentence, read from the ledger and the breaker.
+  if (!door) {
+    const { modelDoorDown } = await import('../../services/ai/model-door.js');
+    door = await modelDoorDown();
+  }
 
   const anyFailure = readings.some((r) => r.properties.some((p) => p.finding === 'DOES_NOT_HOLD'));
   const lede = anyFailure

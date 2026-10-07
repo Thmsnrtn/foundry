@@ -272,5 +272,11 @@ describe('he resumes', () => {
     const activity = asText(await me.page('/foundry/activity'));
     expect(activity).toMatch(/You stopped everything/);
     expect(activity).toMatch(/You resumed new activity after \d+ days?/);
+    // AND ON THE WORKSHOP PAGE, beside the pause and resume themselves (Stage 1
+    // F1.3's surface, reading the same kept rows).
+    const workshop = asText(await me.page('/foundry/public-workshop'));
+    expect(workshop).toContain('Stops and pauses on record');
+    expect(workshop).toMatch(/everything stopped by you/);
+    expect(workshop).toMatch(/resumed by you, after \d+ days/);
   });
 });

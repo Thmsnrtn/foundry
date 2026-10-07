@@ -43,10 +43,17 @@ export async function givePublicIdentity(input: { experimentId: string; founderI
   const number = input.number ?? await nextExperimentNumber(input.founderId);
   const slug = slugify(input.slug);
   const c = input.copy;
-  await query(
+  const wrote = await query(
     `INSERT INTO public_experiments (experiment_id, founder_id, number, slug, listed, public_title, public_summary, public_who, public_what, public_limits, public_sources, public_selection, public_note, public_sample, supersedes_experiment_id)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(experiment_id) DO NOTHING`,
     [input.experimentId, input.founderId, number, slug, input.listed === false ? 0 : 1, c.title, c.summary, c.who, c.what, c.limits, c.sources, c.selection, c.note, input.copy.sample?.trim() || null, input.supersedesExperimentId ?? null]);
+  // A concurrent call may have given the identity between our read and our
+  // write; the one that stands is the answer, and only its writer created it.
+  if (wrote.rowsAffected === 0) {
+    const standing = await publicIdentityOf(input.experimentId);
+    if (standing) return { number: standing.number, slug: standing.slug, created: false };
+  }
   return { number, slug, created: true };
 }
 

@@ -1791,10 +1791,16 @@ failed. `job_health` records it, and the Brief names the loop. A pass with
 nothing wrong still resolves.
 
 **Maturity.** **`tested`** (`every-watched-loop-says-when-it-failed`, 6). Red
-first: four of the five failure cases resolved as healthy. **Proof debt:** a
-source that is down for one claim now marks the whole evidence loop failing
-for that pass. That is honest, but it may be noisy. The Brief names a loop only
-after consecutive failures, which is the existing damping.
+first: four of the five failure cases resolved as healthy. Since remediation
+1.6 (6 October 2026; Stage 1's F1.7 fixed the same defect and was reconciled
+onto this one) a claim that cannot be looked at is recorded against itself in
+`real_market_evidence_tick` (`claim_look_failures`, migration 389): it waits
+1, 2, 4 days, is left after four, and Controls names what was left. A pass in
+which a claim failed still fails (G3), but the same claim no longer fails it
+every morning (`a-claim-that-cannot-be-read-waits`,
+`the-smaller-truths-of-stage-one`, E2). **Proof debt:** the other two loops
+still fail the pass for any one subject; the Brief's consecutive-failure
+damping is what stands between that and noise.
 
 ### The reserve question comes back at the tenth settled sale (28 September 2026)
 
@@ -2975,8 +2981,13 @@ are never re-asked, so a brief made only from them still cannot recur.
 
 **What changed.** Refusals at designing and making are recorded and backed off
 (1, 2, 4 days), and a test is retired after the fourth; one test's failure no
-longer stops the pass. **Evidence maturity.** E1:
-`the-forge-backs-off-what-it-cannot-do`. **Proof debt.** The back-off schedule
+longer stops the pass. A design the forge composed but could not seal is a
+refusal too, with the facts it was refused on; it is taken up again once when
+those facts change (a charter signed, an exchange runnable, new evidence) or
+the owner asks, and every waiting design is one needs-you item (Stage 1,
+6 October 2026). **Evidence maturity.** E1:
+`the-forge-backs-off-what-it-cannot-do`; E2:
+`a-design-the-forge-could-not-seal-is-taken-up-again`. **Proof debt.** The back-off schedule
 is a judgment, not measured against how often a second attempt succeeds; the
 forge's record of refusals is read by the pass and the retirement reason, not
 yet shown on Explore.
@@ -2986,7 +2997,14 @@ yet shown on Explore.
 **What changed.** Model-door failures are named and reach a routine's recorded
 failure instead of a "could not read it" refusal; the credit left is read once
 a day and Control shows answered/failed calls today and days of credit left.
-**Evidence maturity.** E1: `a-failing-model-door-is-loud`. E2 at the first
+Home's pulse, its health card and the absence page render the same sentence
+Controls does (`modelDoorBlocker`, read through `doorBehindFailure` or
+`modelDoorDown`), so a down door is never blamed on "a routine"; each attempt
+waits by tier, each whole call is bounded by a per-tier budget, and a breaker
+stops asking a door after three failed attempts for ten minutes (remediation
+1.4/1.5 and Stage 1 F1.4, reconciled 7 October 2026).
+**Evidence maturity.** E1: `a-failing-model-door-is-loud`; E2:
+`the-model-door-is-down` (the real client against a local door). E2 at the first
 production reading in `model_door_readings`. **Proof debt.** Which of the
 provider's two account endpoints this key may read is not yet known from
 production (the reader tries the account's credits, then the key's own limit;
@@ -3055,9 +3073,15 @@ name, the payment route, places in flight, unplaced tests, the owner's
 per-sale-minutes row, correspondence). Read from Fly on 5 October 2026 before
 this shipped: `STRIPE_WEBHOOK_SECRET`, the money switch and
 `CLOUDFLARE_ANALYTICS_TOKEN` are not set; the off-machine copy's secrets are.
+Since Stage 1 (6 October 2026) the verdict also reads, through `readiness`'s
+own functions, what the Workshop lacks (none, no postal address, paused),
+whether sending is ready, and what the first-proof policy says of the forge's
+offer — it said "yes" while readiness refused every forge-made test for these.
 
-**Evidence maturity.** E1: `foundry-can-say-whether-it-can-sell`. E2 once the
-owner reads the card in production.
+**Evidence maturity.** E1: `foundry-can-say-whether-it-can-sell`; E2:
+`can-it-sell-says-no-whenever-readiness-would` (each gate broken and mended
+against a real Workshop-shaped test). E2 in production once the owner reads the
+card there.
 
 **Proof debt.** The money-switch refactor into one `moneyToolsOn()` from the
 R26 spec is not done; the direct reads stay.

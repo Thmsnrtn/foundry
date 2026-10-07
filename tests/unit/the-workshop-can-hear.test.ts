@@ -81,6 +81,9 @@ describe('the door', () => {
     }
     // Re-opening the ears does not mint a second key.
     expect((await openTheEars(OWNER)).intakeKey).toBe(INTAKE);
+    // Nor do two openings at once (a double submit): neither throws, both read the one key.
+    const twice = await Promise.all([openTheEars(OWNER), openTheEars(OWNER)]);
+    expect(twice.map((t) => t.intakeKey)).toEqual([INTAKE, INTAKE]);
   });
 
   it('takes a real message through the public route and stores what arrived', async () => {

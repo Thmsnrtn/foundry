@@ -867,6 +867,19 @@ export async function sendingReadiness(founderId: string): Promise<SendingReadin
  */
 export async function placementWouldBeRefused(e: ExperimentRow, plan: OfferShapePlan): Promise<string[]> {
   if (e.evidenceMode !== 'real') return [];
+  return placementRefusedFor(e.founderId, e.productId, plan.facts);
+}
+
+/**
+ * THE SAME READING, FOR AN OFFER BEFORE THERE IS A TEST: the owner's
+ * first-proof policy against the facts an offer would state, on the asset that
+ * would carry it. `placementWouldBeRefused` is this for one test's plan;
+ * "can Foundry sell on its own" is this for the offer the forge makes
+ * (control/production-facts.ts), so the two cannot disagree.
+ */
+export async function placementRefusedFor(founderId: string, productId: string | null, planFacts: OfferShapePlan['facts']): Promise<string[]> {
+  const e = { founderId, productId };
+  const plan = { facts: planFacts };
   const { originationPolicyFor, policyVerdictsFor } = await import('./legal-surface.js');
   const kinds = (await query('SELECT fact, answers_requirement, satisfied_when FROM structural_fact_kinds', []))
     .rows as unknown as Array<{ fact: string; answers_requirement: string | null; satisfied_when: number | null }>;
@@ -955,6 +968,24 @@ async function rearmDelivery(actionId: string, now: Date): Promise<boolean> {
   return (reset.rowsAffected ?? 0) > 0;
 }
 
+/** Readiness's words for a Workshop that is not there, and for sending that is not connected; "can it sell" says the same. */
+export const NO_WORKSHOP = 'there is no public Workshop to carry the page';
+export const SENDING_NOT_CONNECTED = 'email sending is not connected';
+
+/**
+ * WHAT THE WORKSHOP ITSELF LACKS before anything is sold or sent under its
+ * name: no Workshop at all, no postal address for commercial mail, new
+ * economic activity paused. The one reading `readiness` refuses a test by and
+ * "can Foundry sell on its own" (control/production-facts.ts) answers by.
+ */
+export function whatTheWorkshopLacks(w: { postalAddress: string | null; economicPause: unknown } | null): string[] {
+  if (!w) return [NO_WORKSHOP];
+  const missing: string[] = [];
+  if (!w.postalAddress) missing.push('the Workshop has no postal address for commercial mail');
+  if (w.economicPause) missing.push('new economic activity is paused');
+  return missing;
+}
+
 export async function readiness(experimentId: string): Promise<Readiness> {
   const e = await experimentRow(experimentId);
   if (!e) throw new HandRefused('experiment_not_found');
@@ -995,15 +1026,11 @@ export async function readiness(experimentId: string): Promise<Readiness> {
     const { designOf } = await import('./probe-design.js');
     if (!(await designOf(experimentId))) missing.push('the design has not been recorded');
     const sending = await sendingReadiness(e.founderId);
-    if (sending.status !== 'ready') missing.push('email sending is not connected');
+    if (sending.status !== 'ready') missing.push(SENDING_NOT_CONNECTED);
     const { publicWorkshopOfExperiment } = await import('../public-workshop/settings.js');
     const w = await publicWorkshopOfExperiment(experimentId);
-    if (!w) missing.push('there is no public Workshop to carry the page');
-    else {
-      if (!(await one('SELECT experiment_id FROM public_experiments WHERE experiment_id = ?', [experimentId]))) missing.push('the experiment has no public page identity');
-      if (!w.postalAddress) missing.push('the Workshop has no postal address for commercial mail');
-      if (w.economicPause) missing.push('new economic activity is paused');
-    }
+    if (w && !(await one('SELECT experiment_id FROM public_experiments WHERE experiment_id = ?', [experimentId]))) missing.push('the experiment has no public page identity');
+    missing.push(...whatTheWorkshopLacks(w));
     // WHAT PLACING IT WOULD BE REFUSED FOR, before a decision, a carve or a
     // link (R23). Said in the words placeExposure would use.
     for (const why of await placementWouldBeRefused(e, plan)) missing.push(`placing it would be refused: ${why}`);
@@ -1051,7 +1078,7 @@ export async function readiness(experimentId: string): Promise<Readiness> {
   if (approvedReachable.length > 0 && screened === 0) {
     missing.push(`none of the ${approvedReachable.length} approved business${approvedReachable.length === 1 ? '' : 'es'} has a recorded reason for being in the population this design names, so nothing could be sent`);
   }
-  if (sending.status !== 'ready') missing.push('email sending is not connected');
+  if (sending.status !== 'ready') missing.push(SENDING_NOT_CONNECTED);
   if (!(await materialOf(experimentId, 'deliverable'))) missing.push('nothing to deliver is attached');
   if (!(await materialOf(experimentId, 'offer_template'))) missing.push('the offer text is not written');
   if (!plan) missing.push('the offer has no stated shape');
@@ -1062,8 +1089,7 @@ export async function readiness(experimentId: string): Promise<Readiness> {
   const w = await publicWorkshopOfExperiment(experimentId);
   if (w) {
     if (!(await one('SELECT experiment_id FROM public_experiments WHERE experiment_id = ?', [experimentId]))) missing.push('the experiment has no public page identity');
-    if (!w.postalAddress) missing.push('the Workshop has no postal address for commercial mail');
-    if (w.economicPause) missing.push('new economic activity is paused');
+    missing.push(...whatTheWorkshopLacks(w));
   }
   missing.push(...await instrumentMissing());
   return { ok: missing.length === 0, missing, reachable, pending, pendingWebForm: pendingAll.length - pending, struck: rs.filter((r) => r.reviewStatus === 'struck').length, sending };

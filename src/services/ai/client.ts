@@ -342,6 +342,23 @@ export function attemptTimeoutMs(model: string, env: NodeJS.ProcessEnv = process
   return 120_000;
 }
 
+/**
+ * HOW LONG ONE WHOLE CALL MAY TAKE, BY TIER — every attempt and every backoff
+ * together (Stage 1 F1.4, kept when the two model-door fixes were reconciled).
+ * The per-attempt wait alone still let three Opus attempts hold one call for
+ * six minutes before the breaker had heard enough to open. No attempt starts,
+ * and no backoff waits, past the call's deadline; the last attempt's wait is
+ * cut to what is left. A deployment's AI_CALL_BUDGET_MS overrides every tier.
+ */
+export function callBudgetMs(model: string, env: NodeJS.ProcessEnv = process.env): number {
+  const set = Number.parseInt(env.AI_CALL_BUDGET_MS ?? '', 10);
+  if (Number.isFinite(set) && set > 0) return set;
+  const m = model.toLowerCase();
+  if (m.includes('haiku')) return 60_000;
+  if (m.includes('sonnet')) return 150_000;
+  return 180_000;
+}
+
 /** A 200 that carries an error, or no completion, is a failure and not an empty answer. */
 function noCompletion(data: OpenRouterResponse): ModelDoorError | null {
   const e = (data as unknown as { error?: { message?: string; code?: number } }).error;
@@ -607,10 +624,16 @@ export async function callClaude(
   const startedAt = Date.now();
   let lastError: Error | null = null;
   const waitMs = attemptTimeoutMs(config.model);
+  const budgetMs = callBudgetMs(config.model);
+  const deadline = startedAt + budgetMs;
+  let attempts = 0;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    attempts += 1;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), waitMs);
+    const timeout = setTimeout(() => controller.abort(), Math.min(waitMs, remaining));
 
     try {
       const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -693,6 +716,8 @@ export async function callClaude(
 
       if (attempt < MAX_RETRIES) {
         const delay = RETRY_BASE_MS * Math.pow(2, attempt) * (0.5 + Math.random() * 0.5);
+        // No backoff past the call's deadline: waiting to give up is still waiting.
+        if (Date.now() + delay >= deadline) break;
         log.warn('ai_call.retry', {
           model: config.model,
           productId: config.productId,
@@ -709,11 +734,12 @@ export async function callClaude(
   log.error('ai_call.exhausted', lastError, {
     model: config.model,
     productId: config.productId,
-    attempts: MAX_RETRIES + 1,
+    attempts,
+    budgetMs,
   });
   await finishReservation(reservation, { kind: 'ambiguous' });
-  reportError(lastError, { source: 'ai_client', productId: config.productId, meta: { attempts: MAX_RETRIES + 1 } });
-  throw asDoorError(lastError, 'AI call failed after retries');
+  reportError(lastError, { source: 'ai_client', productId: config.productId, meta: { attempts } });
+  throw asDoorError(lastError, `AI call failed after ${String(attempts)} attempt${attempts === 1 ? '' : 's'} within ${String(budgetMs)} ms`);
 }
 
 /**
@@ -772,10 +798,13 @@ export async function callClaudeMultiTurn(
     productId, model, [systemPrompt, ...messages.map((m) => `${m.role}:${m.content}`)].join('\n'), maxTokens,
   ));
   let lastError: Error | null = null;
+  const deadline = Date.now() + callBudgetMs(model);
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), attemptTimeoutMs(model));
+    const timeout = setTimeout(() => controller.abort(), Math.min(attemptTimeoutMs(model), remaining));
 
     try {
       const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -838,6 +867,7 @@ export async function callClaudeMultiTurn(
       if (tripped) break;
       if (attempt < MAX_RETRIES) {
         const delay = RETRY_BASE_MS * Math.pow(2, attempt) * (0.5 + Math.random() * 0.5);
+        if (Date.now() + delay >= deadline) break;
         await new Promise((r) => setTimeout(r, delay));
       }
     }

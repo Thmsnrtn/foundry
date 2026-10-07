@@ -1388,6 +1388,7 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   job_locks: 'scheduler leases',
   forge_refusals: 'the forge\'s record of which of its own design or making attempts were refused, and when; names a test, no person (R27)',
   claim_look_failures: 'which market claims the evidence pass could not look at, when, and the source\'s reason; names a claim, no person (remediation 1.6)',
+  forge_rerun_asks: 'the owner\'s asks that the forge take up again the designs it could not seal, and when; names a test, no person (Stage 1)',
   model_door_readings: 'the model account\'s remaining credit, read once a day; a balance and a date, no company or person in it (R33)',
   leading_indicators: 'indicator definitions per sector',
   network_benchmarks: 'benchmark aggregates, naming no contributor',
