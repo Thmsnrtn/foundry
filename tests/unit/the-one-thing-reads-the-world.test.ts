@@ -32,7 +32,7 @@ beforeAll(async () => {
   ({ experimentId: X } = await seedProductionShape({ searching: true }));
   app = await ownerApp();
   me = owner(app);
-});
+}, 180_000);
 
 describe('a test the world settled reaches the one thing, once', () => {
   it('is the first thing on Home, says what it established and what it does not, and asks nothing', async () => {

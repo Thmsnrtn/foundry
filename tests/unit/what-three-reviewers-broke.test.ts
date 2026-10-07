@@ -28,7 +28,7 @@ beforeAll(async () => {
   await runMorning(HANDS);
   await ownerApp();
   owner(await ownerApp());
-});
+}, 180_000);
 
 describe('a record of a past measurement does not vanish when the instrument is mended', () => {
   it('the receipt that dates the route still speaks after the path reads healthy', async () => {

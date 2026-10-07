@@ -1,5 +1,15 @@
 # User-walkthrough simulation — findings
 
+> **Historical (corrected 6 October 2026).** `tests/simulation/walkthrough.ts` and
+> `npm run sim:walkthrough` were deleted with the commercial surface they walked
+> (commit `4ff7a3c5`, "Twenty-two thousand lines the owner could not reach,
+> deleted"); there is no `sim:golden:ai` either. What replaces them: the owner
+> walk (`tests/simulation/campaign/owner-walk.ts`, a browser over every owner
+> route on days 1, 9 and 39), the crawl in `npm run check` (`npm run sim:crawl`,
+> real ids, every mount read from `src/index.ts`), and `npm run sim:golden`, which
+> prints what the owner reads on the production world. The instruction below to
+> run `sim:walkthrough` before a deploy no longer applies.
+
 A simulation harness (`tests/simulation/walkthrough.ts`, run with
 `npm run sim:walkthrough`) boots the **real route handlers** against an
 in-memory database (real migrations, stubbed auth) and drives **15 personas**
@@ -106,4 +116,4 @@ This exercises the **rendered + mutation route/DB/tenant surface** — where mos
 "stranger" gaps live — but not flows that require live external services
 (the audit's GitHub+AI calls, real Stripe checkout redirect, Clerk JWT
 verification). Those still need the staging walkthrough in
-`GO-LIVE-CHECKLIST.md §1–2`. Run `npm run sim:walkthrough` before every deploy.
+`GO-LIVE-CHECKLIST.md §1–2`. ~~Run `npm run sim:walkthrough` before every deploy.~~ (deleted; see the note at the top)

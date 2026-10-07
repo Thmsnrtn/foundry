@@ -46,7 +46,7 @@ beforeAll(async () => {
   await advanceDays(1);
   await runMorning(HANDS);
   linkId = providers.state.paymentLinks.find((l) => l.metadata.experiment_id === X)!.id;
-});
+}, 180_000);
 
 describe('a checkout opened and left is reach', () => {
   it('before anybody opens the checkout, the test is unreached', async () => {

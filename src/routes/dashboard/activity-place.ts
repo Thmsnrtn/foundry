@@ -110,11 +110,13 @@ activityRoutes.get('/foundry/activity', async (c: any) => {
     <p class="lede">${only
     ? `${LABEL.get(only) ?? 'Everything'}, newest first.`
     : 'What actually happened, newest first. Not what I thought, and not that I was running.'}</p>
+    ${/* A dl's groups hold dt and dd and nothing else (axe definition-list):
+         the tile's door rides inside its last dd, and still covers the tile
+         because it is placed against the tile, not the dd. */ ''}
     <dl class="glance act-glance" aria-label="The estate, now">
       <div class="tile door"><dt class="k">${mark('estate')}Health</dt>
         <dd class="v"><span class="state ${healthCls}">${health.word}</span></dd>
-        <dd class="d">${health.failed[0] ?? health.ownerAction ?? 'all responsibilities within their authority'}</dd>
-        <a class="door" href="/foundry/controls" aria-label="Controls"></a></div>
+        <dd class="d">${health.failed[0] ?? health.ownerAction ?? 'all responsibilities within their authority'}<a class="door" href="/foundry/controls" aria-label="Controls"></a></dd></div>
       <div class="tile"><dt class="k">${mark('owner')}Action</dt>
         <dd class="v">${health.ownerAction ? html`<span class="state watch">Required</span>` : html`<span class="state quiet none">None</span>`}</dd>
         <dd class="d">${health.ownerAction ?? (health.recovering === 'automatically' ? 'recovering on its own' : 'nothing is waiting on you here')}</dd></div>

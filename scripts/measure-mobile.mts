@@ -19,10 +19,12 @@
 //   414  iPhone 11 / XR / 8 Plus
 //   430  iPhone 14 Pro Max / 15 Pro Max
 //
-// Deliberately NOT part of `npm run check`. It needs a browser binary, and the
-// CI runner has no reason to carry one; `playwright-core` is a dependency with
-// no download of its own and this reads the Chromium the environment already
-// provides. Run it before shipping anything the owner will open on his phone:
+// Not part of `npm run check` (PENDING 40). It was kept out because it needs a
+// browser binary; the CI runner does carry one (`/usr/bin/google-chrome`), and
+// the browser tests in the suite run there, but this script is not one of
+// them. `playwright-core` is a dependency with no download of its own and this
+// reads the Chromium the environment already provides. Run it before shipping
+// anything the owner will open on their phone:
 //
 //   npx tsx scripts/measure-mobile.mts
 // =============================================================================
@@ -39,6 +41,9 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { runMigrations } from '../src/db/migrate.js';
 import { query } from '../src/db/client.js';
+
+/** The addresses whose place stands under no door: read from the shell, not restated. */
+let LIGHTS_NOTHING = new Set<string>();
 
 const WIDTHS = [375, 390, 393, 414, 430];
 // TWO CANVASES, NEITHER A VERSION OF THE OTHER. The desktop widths are measured
@@ -325,6 +330,21 @@ async function main(): Promise<void> {
   app.route('/', absenceRoutes as never);
   const { activityRoutes } = await import('../src/routes/dashboard/activity-place.js');
   app.route('/', activityRoutes as never);
+  // MISSIONS AND EXPLORE, mounted as production mounts them (through
+  // letter.ts). Without them `/foundry/missions` and `/foundry/explore` were
+  // measured as 404 pages since 30 September and failed as overflows of an
+  // error page, so the gate was red on the frontier for a reason that had
+  // nothing to do with a phone (remediation, 7 October 2026).
+  const { missionRoutes } = await import('../src/routes/dashboard/missions-place.js');
+  app.route('/', missionRoutes as never);
+  const { exploreRoutes } = await import('../src/routes/dashboard/explore-place.js');
+  app.route('/', exploreRoutes as never);
+  {
+    const { DOOR_OF } = await import('../src/views/owner/shell.js');
+    const { ADDRESSES } = await import('../src/views/owner/labels.js');
+    LIGHTS_NOTHING = new Set(Object.entries(ADDRESSES)
+      .filter(([place]) => DOOR_OF[place as keyof typeof DOOR_OF] === null).map(([, href]) => href));
+  }
 
   const server = serve({ fetch: app.fetch, port: 4317 });
   const base = 'http://127.0.0.1:4317';
@@ -496,7 +516,12 @@ async function main(): Promise<void> {
           const sheet = grid && grid.getBoundingClientRect().height > 0 && getComputedStyle(grid).display !== 'none'
             ? { rows: [...grid.querySelectorAll('a')].map((a) => ({ label: (a.textContent ?? '').trim(), h: a.getBoundingClientRect().height })) }
             : null;
-          return { n: all.length, clipped: all.filter((d) => d.clipped).map((d) => d.label), overlaps,
+          // Inside a company the bar is the company's — Portfolio, three
+          // dimensions and More (f97f3036) — and holds five; the four doors
+          // are the rule everywhere else.
+          const companyBar = document.querySelector('nav.places.company');
+          const limit = companyBar && companyBar.getBoundingClientRect().height > 0 && getComputedStyle(companyBar).display !== 'none' ? 5 : 4;
+          return { n: all.length, limit, clipped: all.filter((d) => d.clipped).map((d) => d.label), overlaps,
             small: all.filter((d) => d.w < 44 || d.h < 44).map((d) => d.label), lit: all.filter((d) => d.lit).length, sheet };
         })(),
         // HOW FAR DOWN THE FIRST THING HE CAN DO IS.
@@ -613,9 +638,12 @@ async function main(): Promise<void> {
       // list and is not held to them. Control must show "Everywhere else",
       // with every row a thumb's height.
       const wantsSheet = path === '/foundry/controls';
-      const doorFault = desktop ? '' : m.doors.n > 4 ? `${String(m.doors.n)} doors` : m.doors.clipped.length ? `clipped: ${m.doors.clipped.join(', ')}`
+      // A place the shell maps to no door (DOOR_OF: Needs you, the Letter)
+      // lights none; every other page lights exactly one.
+      const wantLit = LIGHTS_NOTHING.has(path.split('?')[0]!) ? 0 : 1;
+      const doorFault = desktop ? '' : m.doors.n > m.doors.limit ? `${String(m.doors.n)} doors (at most ${String(m.doors.limit)})` : m.doors.clipped.length ? `clipped: ${m.doors.clipped.join(', ')}`
         : m.doors.overlaps.length ? `overlapping: ${m.doors.overlaps.join(', ')}` : m.doors.small.length ? `under 44px: ${m.doors.small.join(', ')}`
-          : m.doors.lit !== 1 ? `${String(m.doors.lit)} doors lit` : wantsSheet && !m.doors.sheet ? 'Everywhere else is not on Control'
+          : m.doors.lit !== wantLit ? `${String(m.doors.lit)} doors lit (want ${String(wantLit)})` : wantsSheet && !m.doors.sheet ? 'Everywhere else is not on Control'
             : wantsSheet && m.doors.sheet && m.doors.sheet.rows.some((r) => r.h < 44) ? `sheet rows under 44px: ${m.doors.sheet.rows.filter((r) => r.h < 44).map((r) => r.label).join(', ')}` : '';
       const verdict = status === 200 && overflow <= 0 && m.covered <= 0 && !doorFault ? 'ok'
         : status === 200 && overflow <= 0 && m.covered <= 0 ? 'DOORS'
@@ -727,7 +755,7 @@ async function main(): Promise<void> {
     console.log('\nWHAT FAILED:\n' + failures.map((f) => '  ' + f).join('\n'));
     process.exit(1);
   }
-  console.log(`\nNo horizontal overflow, nothing under the bars, and five doors that fit, at ${WIDTHS.join(', ')} px, at 100% and 200% text, `
+  console.log(`\nNo horizontal overflow, nothing under the bars, and doors that fit (four, or a company's five), at ${WIDTHS.join(', ')} px, at 100% and 200% text, `
     + `nor overflow at ${DESKTOP_WIDTHS.join(', ')} px on a desktop. Screenshots in ${dir}/ and ${desk}/.`);
   process.exit(0);
 }

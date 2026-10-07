@@ -22,7 +22,7 @@
 // =============================================================================
 
 import { Hono } from 'hono';
-import { html, raw } from 'hono/html';
+import { html } from 'hono/html';
 import { count, page } from './foundry-shell.js';
 import type { Where } from './foundry-shell.js';
 import {
@@ -59,7 +59,7 @@ function property(p: PropertyReading) {
     <p>${p.sentence}</p>
     ${p.evidence.length === 0 ? '' : html`<details>
       <summary class="quiet">What I read</summary>
-      <ul>${raw(p.evidence.map((e) => `<li>${e}</li>`).join(''))}</ul>
+      <ul>${p.evidence.map((e) => html`<li>${e}</li>`)}</ul>
     </details>`}
     ${p.wouldFixIt.length === 0 ? '' : html`<p class="quiet">What would fix it:
       ${p.wouldFixIt.join('; ')}.</p>`}
@@ -127,7 +127,18 @@ const says = (p: PropertyReading): string => `${p.finding}|${p.sentence}`;
 // others are differences from, and nothing is hidden anywhere: a property
 // that stops holding at ninety days appears at ninety days, open, with what
 // would fix it.
-function horizon(r: AbsenceReading, prev: AbsenceReading | null) {
+/** Whether a longer horizon brings a failure the shorter one did not show. A
+ *  horizon that does stays open: a failing property carries what would fix it,
+ *  and that is never folded (`a-fold-never-hides-what-would-fix-it`). */
+function addsAFailure(r: AbsenceReading, prev: AbsenceReading | null): boolean {
+  return r.properties.some((p) => {
+    if (p.finding !== 'DOES_NOT_HOLD') return false;
+    const before = prev?.properties.find((q) => q.property === p.property);
+    return before === undefined || says(before) !== says(p);
+  });
+}
+
+function horizon(r: AbsenceReading, prev: AbsenceReading | null, folded = false) {
   const moved = prev === null ? r.properties : r.properties.filter((p) => {
     const before = prev.properties.find((q) => q.property === p.property);
     return before === undefined || says(before) !== says(p);
@@ -137,7 +148,7 @@ function horizon(r: AbsenceReading, prev: AbsenceReading | null) {
   const unsure = moved.filter((p) => p.finding === 'CANNOT_ESTABLISH');
   const holds = moved.filter((p) => p.finding === 'HOLDS');
   return html`<div class="know horizon horizon-${String(r.days)}" id="h${String(r.days)}">
-    <h2>${String(r.days)} days — back on ${r.returnsOn}</h2>
+    ${folded ? '' : html`<h2>${String(r.days)} days — back on ${r.returnsOn}</h2>`}
     <p class="lede">${r.verdict}</p>
     ${prev === null || moved.length > 0 ? '' : html`<p class="quiet">Nothing changes between
       ${String(prev.days)} days and ${String(r.days)}: all five read exactly as they do above.</p>`}
@@ -175,6 +186,20 @@ absenceRoutes.get('/foundry/absence', async (c: any) => {
   const { howLongCouldItBeGone } = await import('../../services/deployment/self-check.js');
   const gone = await howLongCouldItBeGone(founderId);
 
+  // THE DOOR, NOT THE ROUTINE (remediation 1.5). The readings below say a loop
+  // failed; when what failed is the model door, the page says so in the same
+  // sentence Controls reads — the credit and the key are what he would fix.
+  // Read here, beside the kernel's reading, because the absence test itself
+  // reaches nothing under ai/ (institutional-cognition-gate).
+  const { getFailingInstitutionLoops } = await import('../../services/institution/loop-health.js');
+  const { doorBehindFailure } = await import('../../services/ai/model-door.js');
+  let door: string | null = null;
+  for (const l of await getFailingInstitutionLoops()) {
+    if (l.stoppedRunning) continue;
+    door = await doorBehindFailure(l.lastErrorName);
+    if (door) break;
+  }
+
   const anyFailure = readings.some((r) => r.properties.some((p) => p.finding === 'DOES_NOT_HOLD'));
   const lede = anyFailure
     ? 'A week is one question and three months is another. Where the answer changes with the '
@@ -185,11 +210,20 @@ absenceRoutes.get('/foundry/absence', async (c: any) => {
   const body = html`
     <h1>If you stepped away</h1>
     <p class="lede">${lede}</p>
+    ${door ? html`<p class="state warn" role="status">Right now, ${door}.</p>` : ''}
 
     ${horizonStrip(readings)}
 
-    <div class="absence-horizons">${readings.map((r, i) =>
-    horizon(r, i === 0 ? null : (readings[i - 1] ?? null)))}</div>
+    ${/* THE WEEK OPEN, THE LONGER ABSENCES ONE TAP AWAY (remediation,
+         6 October 2026). Three horizons drawn in full were 788 of the page's
+         1,167 words on a phone. The strip above states all three at a glance;
+         the first is the absence the owner is most likely to take and stays open;
+         a longer one folds under its length and return date — unless it
+         brings a failure the shorter one did not, which stays in front of
+         the owner with what would fix it. */ ''}
+    <div class="absence-horizons">${readings.map((r, i) => i === 0 || addsAFailure(r, readings[i - 1] ?? null)
+    ? horizon(r, i === 0 ? null : (readings[i - 1] ?? null))
+    : html`<details class="fold" id="fold-h${String(r.days)}"><summary><h2>${String(r.days)} days</h2><span class="gist">back on ${r.returnsOn}</span></summary>${horizon(r, readings[i - 1] ?? null, true)}</details>`)}</div>
 
     ${/* AND THE ONE THING NONE OF THE FIVE PROPERTIES CAN ANSWER. Every
          horizon above is read from records this process wrote; none of them
@@ -208,6 +242,7 @@ absenceRoutes.get('/foundry/absence', async (c: any) => {
     <div class="know cognition-economics">
       <h2>What thinking costs</h2>
       <p class="lede">${thinking.sentence}</p>
+      <details class="fold"><summary><h3>By model, by purpose, and what was not spent</h3><span class="gist">the ledger behind that sentence</span></summary>
       ${thinking.byModel.length === 0 ? html`<p class="quiet">Nothing settled in the last
         ${String(thinking.days)} days.</p>` : html`<ul>
         ${thinking.byModel.map((m) => html`<li>${m.model.replace('anthropic/claude-', '')} —
@@ -261,6 +296,7 @@ absenceRoutes.get('/foundry/absence', async (c: any) => {
         how often it is asked — and the build refuses a new one without both. In the fortnight to
         14 September 2026 it was two per cent of this bill, so the saving that matters here is not
         the model: it is the calls not made.</p>
+      </details>
     </div>
 
     <div class="know">

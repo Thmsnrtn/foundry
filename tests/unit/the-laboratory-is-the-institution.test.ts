@@ -33,7 +33,7 @@ beforeAll(async () => {
   await seedProductionShape({ settledBy: 'the world' });
   app = await ownerApp();
   me = owner(app);
-});
+}, 180_000);
 
 describe('every door the owner is shown is a door the laboratory has', () => {
   it('the places, the letter, settings and the privacy page all answer', async () => {

@@ -366,14 +366,15 @@ export async function verifySite(founderId: string, fetchImpl?: typeof fetch): P
 }
 
 /** The preview of an experiment's page, rendered from the rows now, whether or not it is published. */
-export async function previewExperimentPage(experimentId: string): Promise<{ html: string; path: string } | null> {
+export async function previewExperimentPage(experimentId: string): Promise<{ html: string; path: string; origin: string } | null> {
   const w = await publicWorkshopOfExperiment(experimentId);
   const x = await projectExperiment(experimentId);
   if (!w || !x) return null;
   const { renderExperiment } = await import('./site.js');
   const { replyRouteEvidence } = await import('./reply-probe.js');
   const proven = (await replyRouteEvidence(w.founderId)).grade.startsWith('proven');
-  return { html: renderExperiment(workshopFacts(w, { replyRouteProven: proven }), x), path: x.path };
+  const facts = workshopFacts(w, { replyRouteProven: proven });
+  return { html: renderExperiment(facts, x), path: x.path, origin: facts.origin };
 }
 
 // ─── The gate ────────────────────────────────────────────────────────────────

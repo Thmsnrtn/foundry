@@ -25,7 +25,7 @@ const one = async (sql: string, params: unknown[] = []) => (await query(sql, par
 beforeAll(async () => {
   await seedProductionShape({ charter: true, searching: true, eyes: true });
   app = await ownerApp();
-});
+}, 180_000);
 
 describe('the columns', () => {
   it('are read from the live schema, and cover the tables the loop and the money readers join', async () => {

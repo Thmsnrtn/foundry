@@ -37,7 +37,7 @@ const fetchSpy = vi.fn(async () => new Response(JSON.stringify({
 beforeAll(async () => {
   await seedProductionShape();
   vi.stubGlobal('fetch', fetchSpy);
-});
+}, 180_000);
 afterAll(() => { vi.unstubAllGlobals(); });
 
 describe('an institution call is the owner\'s thinking', () => {

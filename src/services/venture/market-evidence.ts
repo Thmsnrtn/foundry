@@ -501,3 +501,30 @@ export function matchRealityOnly(
   const q = question.toLowerCase();
   return patterns.find((p) => q.includes(p.pattern)) ?? null;
 }
+
+// ─── A claim that cannot be looked at waits (remediation 1.6) ──────────────
+
+/** After this many failed looks, a claim is not looked at again. */
+export const CLAIM_LOOK_GIVES_UP_AFTER = 4;
+const LOOK_DAY_MS = 86_400_000;
+
+/**
+ * MAY THIS CLAIM BE LOOKED AT NOW? After its n-th failure a claim waits
+ * 2^(n-1) days, and after the fourth it is not tried again: one claim no source
+ * can answer must not fail the market-evidence routine every morning.
+ */
+export async function claimMayBeLookedAt(claimId: string, now: Date): Promise<{ may: boolean; failed: number; from: Date | null }> {
+  const r = (await query(`SELECT COUNT(*) AS n, MAX(failed_at) AS last FROM claim_look_failures WHERE claim_id = ?`, [claimId]))
+    .rows[0] as Record<string, unknown> | undefined;
+  const n = Number(r?.n ?? 0);
+  if (n === 0 || r?.last == null) return { may: true, failed: 0, from: null };
+  const last = Date.parse(String(r.last));
+  const from = new Date(last + 2 ** (n - 1) * LOOK_DAY_MS);
+  return { may: n < CLAIM_LOOK_GIVES_UP_AFTER && now.getTime() >= from.getTime(), failed: n, from };
+}
+
+/** Keep one failed look at a claim, with the source's reason. */
+export async function recordClaimLookFailure(claimId: string, because: string, now: Date): Promise<void> {
+  await query(`INSERT INTO claim_look_failures (id, claim_id, because, failed_at) VALUES (?,?,?,?)`,
+    [nanoid(), claimId, because.slice(0, 500), now.toISOString()]);
+}

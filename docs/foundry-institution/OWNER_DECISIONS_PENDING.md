@@ -13,9 +13,9 @@ around each item.
 ---
 
 <!-- status:begin — generated from the headings below by node scripts/check-record-matches-code.mjs --write -->
-# 17 WAITING ON THE OWNER, 3 WITH COUNSEL, 7 DECIDED IN PLACE
+# 21 WAITING ON THE OWNER, 3 WITH COUNSEL, 7 DECIDED IN PLACE
 
-- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 19, 21, 25, 26, 27, 29, 30, 32, 33, 34, 35, 36.
+- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 19, 21, 25, 26, 27, 29, 30, 32, 33, 34, 35, 36, 37, 38, 39, 40.
 - **Waiting on counsel:** PENDING 9, 13, 15 (interim positions in force; see below).
 - **Decided, and kept where they were asked:** PENDING 16, 20, 22, 23, 24, 28, 31.
 - **Answered and recorded as RESOLVED:** 15.
@@ -2188,4 +2188,106 @@ file is what buyers already buy.
 until then, free tool beside a paid brief), or keep briefs as the default.
 
 **Recommendation.** Adopt it.
+
+---
+
+## PENDING 37 — What a failed model call counts against your daily thinking: **OWNER** (2026-10-06)
+
+**What is true.** A call that reaches the model door and gets no answer ends
+"ambiguous": the provider may or may not have charged. Today the full amount
+reserved for it counts against the day's thinking cap until the reservation
+expires. In the campaign, twenty failures held 20¢ of the $1 pre-charter cap;
+since remediation 1.4's breaker, a failing door is asked once and the same
+morning holds about 16¢. Bounded either way.
+
+**Your choice.**
+- **(a)** Keep counting an ambiguous call at its full reservation. Safe: the cap
+  can never be exceeded by a charge we did not see. Cost: a bad morning eats
+  thinking budget for work that did not happen.
+- **(b)** Reconcile ambiguous calls against the provider's own usage reading
+  (OpenRouter reports what it charged) and release what it did not charge.
+  Truer, and a failing morning costs nothing; it needs one more read of the
+  provider each day, and until that read the reservation still counts.
+
+**Recommendation.** (a) now, (b) when the daily credit read (R33) is extended to
+usage — the breaker has already made the cost small.
+
+## PENDING 38 — How much of "Before you decide" is open before you press Allow: **OWNER** (2026-10-06)
+
+**What is true.** The page you read before allowing a test that writes to
+strangers was 2,444 words on a phone. Remediation 2 folded the reasoning — why
+this question, why this exchange, what each discipline said, what each answer
+would mean, the public name's costs, the readiness legs (a blocked leg is still
+said outside its fold) — and left open the case for running it, who it reaches
+and what it spends, where it stops itself, and the decision. It is now about
+1,500 words, over the 700-word line; the gate names it as an exception (the
+other is the absence page, long whenever a failure is open, by doctrine).
+
+**Your choice.**
+- **(a)** Keep the terms open. Nothing you agree to is behind a tap; the page
+  stays long.
+- **(b)** Fold "who it reaches" and "where it stops" too, leaving their
+  one-line totals (how many businesses, the money ceiling, the first stop) in
+  the summaries. About 600 words; every term one tap away.
+
+**Recommendation.** (a). It is the only decision that reaches a stranger, and
+"a term behind a tap is not consent" is the same rule the Home card keeps.
+
+## PENDING 39 — The four company tabs that appear only with rows: **OWNER** (2026-10-06)
+
+**What is true.** Economics, Customers, Experiments and Evidence appear on a
+company only when it has rows for them; their addresses answer an old link by
+returning to the overview. The walk reached them through the route table, on
+companies that had no such rows, and reported "bounces". No page links to an
+absent one: the company's tabs are built from the dimensions that have rows
+(`services/founder/place.ts`).
+
+**Your choice.** (a) keep them conditional; (b) always show all four, with an
+empty state that says what would fill each.
+
+**Recommendation.** (a): a tab with nothing behind it is the dead end the walk
+was looking for.
+
+## PENDING 40 — `measure-mobile` in the release chain: **OWNER** (2026-10-06)
+
+**What is true.** *Corrected the same day, after the remediation's independent
+audit: the first version of this entry said the CI runner has no Chromium and
+the browser tests skip there. It has one (`/usr/bin/google-chrome` on
+`ubuntu-latest`), and both shards' totals on the CI log show nothing skipped
+(2,925 and 2,983 passed on `ce7e000a`).* The browser tests in the suite — the
+one thing on the first screen, axe and the 24px floor, the four doors, the
+twelve journeys, the three journeys, the phone fit — run in `npm run check`,
+which gates every deploy. One of them, `the-three-journeys-the-plan-names`,
+did not name the runner's Chrome; since nothing skipped, it found a browser at
+another of its paths. *A second correction:* this entry first said it had been
+skipping on CI, which the same totals refute. It now names the runner's Chrome
+too, and `a-browser-gate-runs-where-the-release-is-decided` fails if any
+browser test cannot see the runner's browser, or if a CI runner has none. What is still outside the chain is `scripts/measure-mobile.mts` —
+the gate made after the first prototype overflowed on your iPhone: five
+widths, every owner route, no horizontal scroll by a single pixel. The phone-
+fit and four-doors tests cover part of it, not all of its routes and widths.
+
+*Measured 7 October 2026, before you decide:* run by hand, `measure-mobile` had
+been red on the frontier since 30 September, 40 failures out of 378, and nobody
+had run it to see. Thirty were its own: it never mounted Explore or Missions
+(so it measured two 404 pages), it held the company bar to the four doors
+although the bar was built to carry five, and it expected Needs you to light a
+door although the shell says Needs you lights none. Ten were real: inside a
+company with more than three dimensions, the phone bar's four-track grid
+wrapped More under Portfolio and grew the bar over the page's last lines.
+Both are fixed (the script reads the door rules from the shell; the company
+bar has five tracks, held in CI by `four-doors-do-not-collide`), and it now
+passes all 378 in about three minutes. That is the cost of (a), and the ten
+real failures are what (b) cost while it went unrun.
+
+**Your choice.**
+- **(a)** Run `measure-mobile` in `npm run check` (CI already has the browser;
+  it adds about three minutes), so a deploy cannot pass with a page wider than
+  your phone.
+- **(b)** Keep it by hand, before anything you will open on your phone, as its
+  own header says.
+
+**Recommendation.** (a). Every regression this remediation found on Home was
+one a browser sees and a DOM test does not, the browser is already there, and
+left by hand it went red for a week without anyone running it.
 

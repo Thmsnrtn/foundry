@@ -1502,6 +1502,9 @@ main[data-place="money"] .mline.total{margin:.25rem -.65rem 0;padding:.95rem .65
      token that exists for exactly this and is declared for all three. */
   nav.places{background:var(--os-mobile-chrome);border-color:var(--v3-line);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);padding:5px 4px calc(5px + env(safe-area-inset-bottom))}
   nav.places div{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));max-width:none;margin:0}
+  /* INSIDE A COMPANY THE BAR HOLDS FIVE: Portfolio, three dimensions, More.
+     Four tracks wrapped More under Portfolio and grew the bar over the page. */
+  nav.places.company div{grid-template-columns:repeat(5,minmax(0,1fr))}
   nav.places a{min-height:52px;padding:4px 2px;gap:3px;font-size:clamp(9px,2.85vw,12px);line-height:1.1;color:var(--ink-3);white-space:nowrap;overflow:hidden}
   nav.places a svg{width:20px;height:20px;flex:0 0 auto}
   nav.places a.on{color:var(--accent)}
@@ -1747,7 +1750,12 @@ main[data-place="foundry"]>.glance::before{top:-1.25rem}
 .decisions-head a.chip{display:inline-flex;align-items:center;gap:.4rem;font-size:.8rem;padding:6px 12px}
 .decisions-head a.chip b{font-weight:600;color:var(--ink);background:rgba(255,255,255,.06);border-radius:999px;padding:0 7px;font-size:.74rem;line-height:20px}
 .decisions-head a.chip.hot b{background:rgba(236,118,108,.22);color:var(--v3-red)}
-.decisions-head a.chip.on{border-color:var(--v3-mint);color:var(--v3-mint)}
+/* THE SELECTED FILTER KEEPS ITS OWN GROUND. `.chip.on` inverts to an ink
+   background; this rule, more specific, set the text to mint and left that
+   background, so the selected Inbox filter read mint on near-white and its
+   count ink on ink (axe color-contrast, on all three Inbox views). The border
+   and the mint mark the state; the ground stays the card's. */
+.decisions-head a.chip.on{border-color:var(--v3-mint);color:var(--v3-mint);background:var(--os-panel-raised)}
 h2.rank{display:flex;align-items:center;gap:.55rem;margin:1.4rem 0 .6rem;font-family:var(--display);font-size:1rem;font-weight:600;letter-spacing:-.01em;text-transform:none;color:var(--ink)}
 h2.rank i{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;font:600 .7rem/1 var(--sans);font-style:normal;color:#07100d;background:var(--v3-mint)}
 h2.rank i.hot{background:var(--v3-red)}
@@ -2226,7 +2234,7 @@ a.know:hover{background:var(--card-2)}
    the whole point of there being one component system rather than thirteen
    pages that each solved this. */
 main button,main .btn,main input:not([type="checkbox"]):not([type="radio"]),
-main select{min-height:40px}
+main select{min-height:44px}
 main button,main .btn{padding-inline:.85rem}
 
 /* THE ONE THAT WAS ON EVERY PAGE. The shell's footer link out to the Letter
@@ -2241,10 +2249,24 @@ main footer a{display:inline-flex;align-items:center;min-height:40px}
    grows, and the label around it becomes the target, which is what makes the
    difference on a phone. */
 main input[type="checkbox"],main input[type="radio"]{
-  width:20px;height:20px;accent-color:var(--accent)}
+  width:24px;height:24px;accent-color:var(--accent)}
 main label:has(> input[type="checkbox"]),
 main label:has(> input[type="radio"]){
-  display:inline-flex;align-items:center;gap:.55rem;min-height:40px}
+  display:inline-flex;align-items:center;gap:.55rem;min-height:44px}
+/* A SWITCH'S CHECKBOX IS THE WHOLE SWITCH. The rule above, more specific than
+   `.toggle input`, shrank the invisible checkbox inside every switch to a
+   20px square in its corner, so the part that takes the tap was smaller than
+   the part that is drawn (Privacy's three consent switches, Settings' pace). */
+main .toggle input[type="checkbox"]{width:100%;height:100%}
+
+/* EVERY CONTROL ON THE OWNER'S PAGES, NOT ONLY THE ONES WITH A CLASS
+   (remediation, 6 October 2026). The rules above size components; a bare link
+   — "Look at that" on a company, "All work" and "The search" under Explore,
+   "the record" on Home — kept the height of its line of text, 16–20px, under
+   WCAG 2.2's 24px floor on every walked phone. Padding on an inline box
+   enlarges what takes the tap without moving a line of the text around it, so
+   a link inside a sentence still wraps like the sentence. */
+main a:not([class]){padding-block:4px}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    EVENTIDE — THE COMPOSITION VOCABULARY

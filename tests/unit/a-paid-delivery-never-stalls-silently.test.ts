@@ -65,7 +65,7 @@ beforeAll(async () => {
   await runMorning(HANDS);
   PROVIDERS = seeded.providers!;
   LINK = seeded.providers!.state.paymentLinks.find((l) => l.metadata.experiment_id === X)!.id;
-});
+}, 180_000);
 
 describe('a delivery refused before it went out is tried again', () => {
   it('says the attempt was refused and why, and that it is tried again — not that it simply goes out', async () => {

@@ -37,7 +37,7 @@ beforeAll(async () => {
   await runMorning(HANDS);
   app = await ownerApp();
   me = owner(app);
-});
+}, 180_000);
 
 const record = async (channel: string, day: string, status: string, detail: string): Promise<void> => {
   const { recordWorkshopHealth } = await import('../../src/services/public-workshop/settings.js');

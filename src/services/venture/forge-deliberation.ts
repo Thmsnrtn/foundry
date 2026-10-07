@@ -618,12 +618,31 @@ export async function recordForgeRefusal(experimentId: string, stage: ForgeStage
 
 const timesWord = (n: number): string => (n === 1 ? 'once' : n === 2 ? 'twice' : `${String(n)} times`);
 
+/**
+ * HOW LONG ONE FORGE PASS MAY TAKE, by the wall clock (remediation 1.4). The
+ * door breaker bounds a door that is down; this bounds one that is merely
+ * slow, so a pass of lenses and compositions cannot hold `forge_tick` for the
+ * best part of an hour. What is left over waits for the next pass, said so.
+ * FORGE_PASS_BUDGET_MS overrides it; measured on the monotonic clock, so
+ * simulated time never trips it.
+ */
+export function forgePassBudgetMs(env: NodeJS.ProcessEnv = process.env): number {
+  // Zero is a budget too: a pass that may begin no design (used to prove the
+  // budget without racing the clock).
+  const set = Number.parseInt(env.FORGE_PASS_BUDGET_MS ?? '', 10);
+  return Number.isFinite(set) && set >= 0 ? set : 15 * 60_000;
+}
+
 /** THE MOST DESIGNS IN A DAY. Two compositions and two attacks on the frontier
  *  model is about a dollar; the charter's thinking is the hard stop beneath it. */
 export const MOST_DESIGNS_PER_PASS = 2;
 
 export async function forgePass(founderId: string, now: Date = new Date()): Promise<ForgePass> {
   const out: ForgePass = { proposed: 0, deliberated: [], allowed: [], notAllowed: [], skipped: null, failed: [], waiting: [] };
+  const startedAt = performance.now();
+  const budgetMs = forgePassBudgetMs();
+  const outOfTime = (): boolean => performance.now() - startedAt >= budgetMs;
+  const minutes = budgetMs < 60_000 ? 'time' : `${String(Math.round(budgetMs / 60_000))} minutes`;
   const { envelopeReading } = await import('../institution/charter.js');
   const envelope = await envelopeReading(founderId);
   // THE CHARTER'S THINKING FOR TODAY. Read from the same ledger the door writes,
@@ -662,6 +681,7 @@ export async function forgePass(founderId: string, now: Date = new Date()): Prom
   for (const e of undesigned) {
     if (attempted >= MOST_DESIGNS_PER_PASS) break;
     const id = String(e.id);
+    if (outOfTime()) { out.waiting.push(`${id}: this pass used its ${minutes}; it is deliberated on the next`); continue; }
     // REFUSED RECENTLY, IT WAITS (R27): the same question asked again the
     // next morning costs another five readings and comes back the same.
     const may = await forgeMayTry(id, 'deliberate', now);
@@ -696,6 +716,7 @@ export async function forgePass(founderId: string, now: Date = new Date()): Prom
       // THE HANDS MAKE THE THING FIRST, when nothing has been made: the offer
       // shape, the deliverable and the offer text, or the reason none could be.
       if (!(await materialOf(id, 'deliverable'))) {
+        if (outOfTime()) { out.waiting.push(`${id}: this pass used its ${minutes}; the hands make it on the next`); continue; }
         const may = await forgeMayTry(id, 'make', now);
         if (!may.may) { out.waiting.push(`${id}: the hands were refused ${timesWord(may.refused)}; tried again from ${may.from!.toISOString().slice(0, 10)}`); continue; }
         let made: Awaited<ReturnType<typeof shapeAndMake>>;

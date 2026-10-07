@@ -2,7 +2,6 @@ process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { execSync } from 'node:child_process';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { ratePoints } from '../../src/services/ai/measured.js';
@@ -69,20 +68,19 @@ describe('the convention, stated once', () => {
 });
 
 describe('the columns that were never there', () => {
-  const columnsOf = (table: string): Set<string> => {
-    const db = `/tmp/_units_${process.pid}.db`;
-    execSync(`rm -f ${db}`);
-    const files = execSync('ls src/db/migrations/*.sql | sort').toString().trim().split('\n');
-    for (const f of files) {
-      try { execSync(`sqlite3 ${db} < ${f} 2>/dev/null`); } catch { /* later migrations may not apply standalone */ }
-    }
-    const out = execSync(`sqlite3 ${db} "PRAGMA table_info('${table}')"`).toString();
-    execSync(`rm -f ${db}`);
-    return new Set(out.trim().split('\n').map((l) => l.split('|')[1]).filter(Boolean));
+  // THE SCHEMA THE APPLICATION BUILDS, read where it builds it. This replayed
+  // every migration through one sqlite3 process per file — 423 of them,
+  // seventeen seconds — and vitest 4 fails a synchronous test that overruns
+  // its timeout where vitest 1 let it finish. `runMigrations` is the schema
+  // every other test and production read.
+  const columnsOf = async (table: string): Promise<Set<string>> => {
+    await runMigrations();
+    const r = await query(`PRAGMA table_info('${table}')`, []);
+    return new Set((r.rows as unknown as Array<Record<string, unknown>>).map((c) => String(c.name)));
   };
 
-  it('confirms mrr_growth_pct, customer_count and d30_retention do not exist', () => {
-    const cols = columnsOf('metric_snapshots');
+  it('confirms mrr_growth_pct, customer_count and d30_retention do not exist', async () => {
+    const cols = await columnsOf('metric_snapshots');
     expect(cols.size, 'the schema built at all').toBeGreaterThan(10);
     for (const ghost of ['mrr_growth_pct', 'customer_count', 'd30_retention']) {
       expect(cols.has(ghost), `${ghost} was read off a SELECT * row`).toBe(false);

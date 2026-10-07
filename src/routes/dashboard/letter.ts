@@ -1143,8 +1143,10 @@ async function whatItCanDoNow(): Promise<HtmlEscapedString | ''> {
     degraded: 'working, but not well',
   };
 
-  return html`<section style="margin-top:1.75rem;">
-    <h2 style="font-size:0.95rem;margin:0 0 0.5rem;">What I can do, and how I know</h2>
+  // FOLDED, with the count in its summary (remediation, 6 October 2026: 413 of
+  // the Letter's 832 words on a phone, under everything the Letter is for).
+  return html`<section style="margin-top:1.75rem;"><details class="fold"><summary>
+    <h2 style="font-size:0.95rem;margin:0 0 0.5rem;">What I can do, and how I know</h2><span class="gist">${String(rows.length)} proven</span></summary>
     <p style="font-size:0.78rem;opacity:0.7;margin:0 0 0.6rem;">Only what has actually
       been proven. A capability that has merely been wired up is not here.</p>
     ${raw(rows.map((r) => `<div style="margin:0 0 0.6rem;font-size:0.8rem;">
@@ -1154,7 +1156,7 @@ async function whatItCanDoNow(): Promise<HtmlEscapedString | ''> {
   ? `, witnessed by ${String(r.witnessed_by)}` : ''}</div>
       ${r.evidence ? `<div style="opacity:0.6;">${String(r.evidence)}</div>` : ''}
     </div>`).join(''))}
-  </section>`;
+  </details></section>`;
 }
 
 letterRoutes.get('/letter', async (c) => {

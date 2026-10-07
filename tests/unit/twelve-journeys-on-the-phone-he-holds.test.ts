@@ -121,7 +121,14 @@ phones('the estate, journey by journey', () => {
     await query(`INSERT INTO job_health (job_name, consecutive_failures, last_failure_at, last_error_name, last_success_at)
       VALUES ('institutional_judgment_tick', 3, datetime('now'), 'TypeError', datetime('now','-2 days'))`);
     const seen = await onThePhone('/foundry');
-    expect(seen.firstScreen).toMatch(/Health \| 1 thing needs looking at/);
+    // THE CARD FIRST, THE GLANCE BENEATH IT (remediation, 6 October 2026).
+    // On a day something is the one thing, Home draws it before the glance —
+    // the glance had pushed the card under the first screen on every phone
+    // the owner walk holds. So the state and its rows are what the first
+    // screen shows, and the glance still says the same reading below.
+    expect(seen.firstScreen).toContain('System degraded');
+    expect(seen.firstScreen).toContain('Owner action | none');
+    expect(seen.text).toMatch(/1 thing needs looking at/);
     expect(seen.text).toMatch(/system degraded/i);
     expect(seen.text).toContain('Recovering');
     expect(seen.text).toContain('automatically');
@@ -138,7 +145,10 @@ phones('the estate, journey by journey', () => {
     await query(`INSERT OR REPLACE INTO job_health (job_name, consecutive_failures, last_failure_at, last_error_name, last_success_at)
       VALUES ('institutional_judgment_tick', 3, datetime('now'), 'TypeError', datetime('now','-2 days'))`);
     const seen = await onThePhone('/foundry');
-    expect(seen.firstScreen).toContain('Needs you | 1');
+    // The decision itself is on the first screen; the glance that counted it
+    // ("Needs you | 1") sits beneath the decision now, and still counts it.
+    expect(seen.firstScreen).toContain('Email the six customers whose renewals lapse this month');
+    expect(seen.text).toMatch(/Needs you\s+1\b/);
     expect(seen.oneThingTop).not.toBeNull();
     expect(seen.oneThingTop as number).toBeLessThan(844);
     expect(seen.text).toContain('Email the six customers whose renewals lapse this month');

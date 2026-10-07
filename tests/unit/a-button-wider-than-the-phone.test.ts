@@ -31,8 +31,9 @@ import { resolve } from 'node:path';
 // is written against how THIS sheet is built: mobile-first, with the desk as
 // the `min-width:900px` exception rather than the phone as a breakpoint.
 //
-// The browser probe is the instrument, not the gate: CI has no Chromium. What
-// runs everywhere is this.
+// The browser probe is the instrument; this is the gate that needs no browser,
+// so it runs on a machine without one too. (CI has Chrome, and the browser
+// tests run there: `a-browser-gate-runs-where-the-release-is-decided`.)
 // =============================================================================
 
 const SHEET = resolve(import.meta.dirname, '../../src/public/owner.css');

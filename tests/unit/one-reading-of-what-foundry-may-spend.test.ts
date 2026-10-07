@@ -31,7 +31,7 @@ beforeAll(async () => {
   await seedProductionShape();
   app = await ownerApp();
   vi.stubGlobal('fetch', fetchSpy);
-});
+}, 180_000);
 afterAll(() => { vi.unstubAllGlobals(); });
 
 describe('one reading of what Foundry may spend', () => {

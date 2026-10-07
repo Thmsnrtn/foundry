@@ -15,7 +15,7 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 import { Hono } from 'hono';
-import { staticAssetHandler } from './routes/public/static-assets.js';
+import { pwaHandlers, staticAssetHandler } from './routes/public/static-assets.js';
 import { cors } from 'hono/cors';
 import { logger as honoLogger } from 'hono/logger';
 import { CronJob } from 'cron';
@@ -120,19 +120,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 app.get('/static/:file', staticAssetHandler(__dirname));
 
 // PWA: manifest and service worker must be served from root scope
-app.get('/manifest.json', (c) => {
-  try {
-    const content = readFileSync(resolve(__dirname, 'public', 'manifest.json'), 'utf-8');
-    return c.body(content, 200, { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'public, max-age=3600' });
-  } catch { return c.notFound(); }
-});
-
-app.get('/sw.js', (c) => {
-  try {
-    const content = readFileSync(resolve(__dirname, 'public', 'sw.js'), 'utf-8');
-    return c.body(content, 200, { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-cache' });
-  } catch { return c.notFound(); }
-});
+const pwa = pwaHandlers(__dirname);
+app.get('/manifest.json', pwa.manifest);
+app.get('/sw.js', pwa.serviceWorker);
+app.get('/favicon.ico', pwa.favicon);
 
 // ─── Public Routes ───────────────────────────────────────────────────────────
 
@@ -513,8 +504,9 @@ async function recordWhatIsScheduled(): Promise<void> {
  */
 async function runScheduledJob(name: string, fn: () => Promise<unknown>): Promise<void> {
   // Acquire distributed lock to prevent double-execution during rolling deploys
-  if (!(await acquireJobLock(name))) {
-    logger.info(`Job ${name} skipped (locked by another instance)`, { jobName: name });
+  const lock = await acquireJobLock(name);
+  if (lock === null) {
+    logger.info(`Job ${name} skipped (another run holds its lock)`, { jobName: name });
     return;
   }
   logger.info(`Running: ${name}`, { jobName: name });
@@ -532,7 +524,7 @@ async function runScheduledJob(name: string, fn: () => Promise<unknown>): Promis
     logger.error(`Error in ${name}`, { jobName: name, error: String(err) });
     await recordJobFailure(name, err).catch(() => { /* as above */ });
   } finally {
-    await releaseJobLock(name);
+    await releaseJobLock(name, lock);
   }
 }
 

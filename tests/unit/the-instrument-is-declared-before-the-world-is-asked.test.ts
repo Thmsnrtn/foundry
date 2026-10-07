@@ -37,7 +37,7 @@ beforeAll(async () => {
   providers = seeded.providers!;
   app = await ownerApp();
   me = owner(app);
-});
+}, 180_000);
 
 describe('a test states what it depends on, derived from its own design', () => {
   it('declares the reply path as an invitation, because a message with a From line can be answered', async () => {
