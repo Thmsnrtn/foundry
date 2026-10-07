@@ -1,5 +1,5 @@
 -- =============================================================================
--- 392 — WHETHER THE HANDS MAY MAKE PRINTABLE FILES IS THE OWNER'S (PENDING 38).
+-- 392 — WHETHER THE HANDS MAY MAKE PRINTABLE FILES IS THE OWNER'S (PENDING 41).
 --
 -- The printable_pdf kind (services/venture/products/printable.ts) lets the
 -- forge sell a file whose words a model wrote, inside a design system the
@@ -12,5 +12,5 @@
 -- =============================================================================
 INSERT INTO origination_policy (id, founder_id, requirement, treatment, value, why, set_by) VALUES
   ('fec_make_printable_pdf', NULL, 'make_printable_pdf', 'policy', 'not_yet',
-   'a printable file is made by the hands from a model''s words; whether Foundry may make and sell one without a person making it is the owner''s decision (PENDING 38)',
+   'a printable file is made by the hands from a model''s words; whether Foundry may make and sell one without a person making it is the owner''s decision (PENDING 41)',
    'proof_program:first_economic_closure');

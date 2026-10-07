@@ -39,7 +39,7 @@
 // WHO MAY TURN THIS ON. Making files is the class of decision PENDING 34 asks
 // the owner about for workbooks, and STRATEGY H52 refuses a universal
 // factory. So this kind is off until his own `origination_policy` row says
-// `make_printable_pdf = yes` (PENDING 38), and off on any machine with no
+// `make_printable_pdf = yes` (PENDING 41), and off on any machine with no
 // Chromium to print with. Nothing here decides either.
 // =============================================================================
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
@@ -64,7 +64,7 @@ export async function mayMakePrintables(founderId: string, env: NodeJS.ProcessEn
       WHERE founder_id = ? AND requirement = ? AND superseded_at IS NULL
       ORDER BY set_at DESC, rowid DESC LIMIT 1`, [founderId, PRINTABLE_POLICY])).rows[0] as Row | undefined;
   if (!row || String(row.value ?? '') !== 'yes') {
-    return { may: false, because: 'you have not said Foundry may make printable files itself (PENDING 38)' };
+    return { may: false, because: 'you have not said Foundry may make printable files itself (PENDING 41)' };
   }
   if (!substitute && !chromiumPath(env)) {
     return { may: false, because: 'there is no Chromium on this machine to print a page with' };

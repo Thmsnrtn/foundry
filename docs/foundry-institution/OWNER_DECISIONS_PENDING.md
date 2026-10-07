@@ -2277,3 +2277,45 @@ fit and four-doors tests cover part of it, not all of its routes and widths.
 **Recommendation.** (a). Every regression this remediation found on Home was
 one a browser sees and a DOM test does not, and the browser is already there.
 
+
+---
+
+## PENDING 41 — May Foundry make printable files itself, and print them in production: **OWNER** (2026-10-07)
+
+**What is true.** A new product kind, `printable_pdf`, is built and off
+(`services/venture/products/printable.ts`, migration 392). A model writes a
+file's words inside a design system the repository owns (`src/public/printable.css`,
+the Inter and Newsreader fonts already here); headless Chromium prints it; six
+gates refuse it or let it go: the owned vocabulary, invented statistics,
+testimonials, reviews and credentials (a deterministic scan, then a model
+check that fails closed), a general-education disclaimer on legal, medical and
+money topics with personal regulated advice refused, page count and overflow
+read from the printed file, a panel of four stranger personas, and a version on
+the file and the listing. A paid buyer gets a signed link that expires after 30
+days; the refund link still works, and a refunded purchase is not served.
+
+It is the same class of decision as PENDING 34 (workbooks), and STRATEGY H52
+refuses a universal factory, so nothing turns it on but your own
+`make_printable_pdf` row. Controls shows it as an open decision.
+
+**Your choices.**
+- **(a)** Allow it, so the forge may design and sell printables under the charter.
+- **(b)** Not yet.
+- **And, separately, the renderer.** Production has no Chromium: the image is
+  `node:22-slim`, and on a machine with none the kind stays off whatever you
+  say. Adding it grows the image by roughly 300–450 MB (the Chromium builds in
+  this container measure 323 MB for the headless shell and 442 MB for full
+  Chromium on disk; Debian's `chromium` package with its libraries and fonts
+  is in the same range — an estimate, not measured on the Fly image). The
+  Dockerfile is unchanged; `FOUNDRY_CHROMIUM_PATH` names the binary when one
+  is installed. `playwright-core` already ships in the image (the runner
+  copies all of `node_modules`) but is listed as a dev dependency.
+- **And the panel's thresholds** (`PANEL` in printable.ts): yes counts 1, maybe
+  ½, no 0; a mean ≥ 0.6 with a median top price at or above the asking price
+  ships, a mean < 0.3 or a median under half the price is refused, the middle
+  is held for you as one item. The bench's real result (0 yes, 4 maybe, 1 no,
+  median about $9) would be held. These are a proposal.
+
+**Recommendation.** (a) in shadow first: let the forge make printables and hold
+every one for you, whatever the panel says, until you have read three; then
+let the panel decide. Add Chromium only once you have said yes.

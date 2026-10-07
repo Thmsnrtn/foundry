@@ -10,7 +10,7 @@ import { PRINTABLE_CONTENT_HONEST, PRINTABLE_OFFER } from '../fixtures/printable
 // =============================================================================
 // A SPLIT PANEL WAITS FOR THE OWNER, AS ONE ITEM (Stage 2, C2).
 //
-// The printable kind is the owner's to turn on (PENDING 38): without his own
+// The printable kind is the owner's to turn on (PENDING 41): without his own
 // row the forge is never offered it. When it is on and the strangers are
 // split — the bench's own result, no yes, four maybes, one no — the file is
 // made and kept, and it does not ship: readiness says it is held, and he is
@@ -117,7 +117,7 @@ describe('the kind is the owner\'s to turn on', () => {
 describe('a split panel', () => {
   it('makes and keeps the file, holds it, and readiness says why', async () => {
     const { supersedeOriginationPolicy } = await import('../../src/services/venture/legal-surface.js');
-    await supersedeOriginationPolicy({ founderId: OWNER, requirement: 'make_printable_pdf', treatment: 'policy', value: 'yes', why: 'PENDING 38: yes', by: `founder:${OWNER}` });
+    await supersedeOriginationPolicy({ founderId: OWNER, requirement: 'make_printable_pdf', treatment: 'policy', value: 'yes', why: 'PENDING 41: yes', by: `founder:${OWNER}` });
     calls.length = 0;
     const { shapeAndMake } = await import('../../src/services/venture/products/offer-composition.js');
     const made = await shapeAndMake(X);

@@ -137,7 +137,7 @@ beforeAll(async () => {
   await standUpWorkshop(OWNER, fetchStub as unknown as typeof fetch);
   await giveTheWorkshopEars(OWNER);
   // THE OWNER'S ACTS THIS WORLD ASSUMES, each his own row: offers that still
-  // take minutes per sale (PENDING 32) and Foundry making printables (PENDING 38).
+  // take minutes per sale (PENDING 32) and Foundry making printables (PENDING 41).
   const { supersedeOriginationPolicy } = await import('../../../src/services/venture/legal-surface.js');
   for (const [requirement, treatment, value] of [['front_loaded_attention', 'prefer', null], ['make_printable_pdf', 'policy', 'yes']] as const) {
     const r = await supersedeOriginationPolicy({ founderId: OWNER, requirement, treatment, value, why: `the owner's act this world assumes (${requirement})`, by: `founder:${OWNER}` });
@@ -255,6 +255,15 @@ world('a printable made by the hands reaches a buyer', () => {
     const f = await one('SELECT status, delivered_files_json FROM experiment_fulfilments WHERE experiment_id = ?', [X]);
     expect(['sent', 'delivered']).toContain(String(f.status));
     expect(JSON.parse(String(f.delivered_files_json))[0]).toMatchObject({ sha256: file.sha256, version: 1 });
+    expect(await n(`SELECT COUNT(*) AS n FROM outbound_actions WHERE experiment_id = ? AND experiment_act = 'delivery'`, [X])).toBe(1);
+  });
+
+  it('a pass that died after the send and before marking it sends nothing again: the delivery is keyed to the payment', async () => {
+    // The crash R31 names: the email went out, the fulfilment still reads owed.
+    await query(`UPDATE experiment_fulfilments SET status = 'owed' WHERE experiment_id = ?`, [X]);
+    await runMorning(HANDS);
+    expect(state.sends.filter((s) => s.to.includes(buyer))).toHaveLength(1);
+    expect(String((await one('SELECT status FROM experiment_fulfilments WHERE experiment_id = ?', [X])).status)).toBe('sent');
     expect(await n(`SELECT COUNT(*) AS n FROM outbound_actions WHERE experiment_id = ? AND experiment_act = 'delivery'`, [X])).toBe(1);
   });
 

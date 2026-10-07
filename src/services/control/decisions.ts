@@ -123,7 +123,7 @@ export async function yourDecisions(founderId: string, env: NodeJS.ProcessEnv = 
       ? `${attention.allowed ? 'allowed' : 'refused'} by you on ${attention.on ?? 'a recorded date'}${attention.conditionsChanged ? ', decided when ' + (attention.decidedUnder ?? 'conditions were different') + '; they differ now' : ''}`
       : 'the first-proof rule still refuses them, so no forge-made offer can be placed'}. Per sale today: ${attention.now}` });
 
-  // PRINTABLE FILES MADE BY THE HANDS (PENDING 38). Built and off: only his
+  // PRINTABLE FILES MADE BY THE HANDS (PENDING 41). Built and off: only his
   // own `make_printable_pdf` row turns it on, and a machine with no Chromium
   // cannot print whatever he says (products/printable.ts).
   const { mayMakePrintables } = await import('../venture/products/printable.js');

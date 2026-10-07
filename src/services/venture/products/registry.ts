@@ -49,10 +49,10 @@ export const KINDS: KindFacts[] = [
   // A PRINTABLE FILE (products/printable.ts): the model writes the words inside
   // an owned layout, Chromium prints it, six gates refuse it or let it go, and
   // a signed link delivers it. BUILT AND OFF: whether Foundry may make files
-  // itself is the owner's (PENDING 38), read per owner by `mayMakePrintables`
+  // itself is the owner's (PENDING 41), read per owner by `mayMakePrintables`
   // from his own `make_printable_pdf` row, never from this list.
   { kind: 'printable_pdf', whatItIs: 'a printable PDF whose words a model wrote inside the Workshop\'s own layout, printed and checked before it is sold, delivered by a signed download link after payment', canMake: false,
-    needs: 'the owner\'s yes to Foundry making printable files itself (PENDING 38), and Chromium on the machine that prints them' },
+    needs: 'the owner\'s yes to Foundry making printable files itself (PENDING 41), and Chromium on the machine that prints them' },
   { kind: 'directory', whatItIs: 'a page of listed items, refreshed on a cycle', canMake: false, needs: 'a page recipe and a steward that refreshes it' },
   { kind: 'monitoring_alert', whatItIs: 'a message when a watched source changes', canMake: false, needs: 'subscribers gathered by the Workshop and a watched source' },
 ];

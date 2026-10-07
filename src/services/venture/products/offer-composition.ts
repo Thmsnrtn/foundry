@@ -279,7 +279,7 @@ export async function shapeAndMake(experimentId: string): Promise<Made | { refus
     const runnable = await subscriptionsRunnable(record.founderId);
     if (!runnable.ok) return { refused: runnable.because };
   }
-  // A PRINTABLE IS OFFERED ONLY WHERE THE OWNER HAS SAID SO (PENDING 38) AND
+  // A PRINTABLE IS OFFERED ONLY WHERE THE OWNER HAS SAID SO (PENDING 41) AND
   // SOMETHING HERE CAN PRINT, and only for a file sold once at a fixed price.
   const { mayMakePrintables } = await import('./printable.js');
   const printables = exchange === 'upfront_price' ? await mayMakePrintables(record.founderId) : { may: false, because: 'a printable is sold once at a fixed price' };
