@@ -14,6 +14,20 @@ FROM base AS runner
 ARG FOUNDRY_COMMIT=unknown
 ENV FOUNDRY_COMMIT=$FOUNDRY_COMMIT
 ENV NODE_ENV=production
+# A PRINTER FOR THE PRINTABLE KIND (owner decision, 8 October 2026: Chromium in
+# the production image, yes). Debian's headless shell — no X, no GUI browser —
+# with no recommended packages and no fonts: printable.css carries its own
+# Inter and Newsreader, inlined as data: URLs, and the renderer refuses every
+# network request. Measured by building this layer on node:22-slim: +542 MB on
+# disk, +210 MB compressed (most of it Mesa/LLVM pulled in by chromium-common's
+# x11-utils dependency, which apt cannot drop without breaking the package).
+# FOUNDRY_CHROMIUM_PATH names the ELF itself, not the /usr/bin sh wrapper, so
+# Playwright's pipe and signals reach Chromium. `the-image-prints-where-the-
+# code-looks` reads this stage and fails if the package or path drift apart.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends chromium-headless-shell \
+ && rm -rf /var/lib/apt/lists/*
+ENV FOUNDRY_CHROMIUM_PATH=/usr/lib/chromium/chromium-headless-shell
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/src/db/migrations ./src/db/migrations

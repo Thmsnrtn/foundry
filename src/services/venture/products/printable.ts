@@ -39,8 +39,10 @@
 // WHO MAY TURN THIS ON. Making files is the class of decision PENDING 34 asks
 // the owner about for workbooks, and STRATEGY H52 refuses a universal
 // factory. So this kind is off until his own `origination_policy` row says
-// `make_printable_pdf = yes` (PENDING 41), and off on any machine with no
-// Chromium to print with. Nothing here decides either.
+// `make_printable_pdf = yes` (PENDING 41: he decided yes on 8 October 2026,
+// and the row is written only by his own press of Control's button), and off
+// on any machine with no Chromium to print with (the production image carries
+// Debian's headless shell at FOUNDRY_CHROMIUM_PATH). Nothing here decides either.
 // =============================================================================
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
@@ -57,19 +59,25 @@ type Row = Record<string, unknown>;
 /** The `origination_policy` requirement his row answers (migration 392). */
 export const PRINTABLE_POLICY = 'make_printable_pdf';
 
-/** Whether the hands may make printables for him: his own row says yes, and a renderer exists here. */
-export async function mayMakePrintables(founderId: string, env: NodeJS.ProcessEnv = process.env): Promise<{ may: boolean; because: string }> {
+/** His answer, read from his own live row only: allowed means value `yes`. */
+export async function printablesChoice(founderId: string): Promise<{ allowed: boolean; on: string | null }> {
   const row = (await query(
     `SELECT value, set_at FROM origination_policy
       WHERE founder_id = ? AND requirement = ? AND superseded_at IS NULL
       ORDER BY set_at DESC, rowid DESC LIMIT 1`, [founderId, PRINTABLE_POLICY])).rows[0] as Row | undefined;
-  if (!row || String(row.value ?? '') !== 'yes') {
+  return { allowed: !!row && String(row.value ?? '') === 'yes', on: row ? String(row.set_at).slice(0, 10) : null };
+}
+
+/** Whether the hands may make printables for him: his own row says yes, and a renderer exists here. */
+export async function mayMakePrintables(founderId: string, env: NodeJS.ProcessEnv = process.env): Promise<{ may: boolean; because: string }> {
+  const choice = await printablesChoice(founderId);
+  if (!choice.allowed) {
     return { may: false, because: 'you have not said Foundry may make printable files itself (PENDING 41)' };
   }
   if (!substitute && !chromiumPath(env)) {
-    return { may: false, because: 'there is no Chromium on this machine to print a page with' };
+    return { may: false, because: `you allowed it on ${choice.on ?? 'a recorded date'}, but there is no Chromium on this machine to print a page with` };
   }
-  return { may: true, because: `you allowed it on ${String(row.set_at).slice(0, 10)}` };
+  return { may: true, because: `you allowed it on ${choice.on ?? 'a recorded date'}` };
 }
 
 // ─── The vocabulary the model may write in ───────────────────────────────────
@@ -292,8 +300,9 @@ export interface PanelAnswer { persona: string; verdict: 'yes' | 'maybe' | 'no';
  * THE PANEL'S THRESHOLDS. yes counts 1, maybe ½, no 0. A mean at or above
  * `shipAt` with a median top price at or above the asking price ships; a mean
  * below `refuseBelow`, or a median top price under half the asking price, is
- * refused; everything between is held for the owner. These numbers are a
- * proposal for him (OWNER), not a finding.
+ * refused; everything between is held for the owner. These are the numbers
+ * he decided against on 8 October 2026 ("ship on panel yes now", PENDING 41):
+ * a clear yes here goes on sale without him once his own row says yes.
  */
 export const PANEL = { minimum: 3, shipAt: 0.6, refuseBelow: 0.3 } as const;
 

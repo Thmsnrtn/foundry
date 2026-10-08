@@ -856,6 +856,28 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('_gate_fixture_postal');
   });
 
+  it('check-the-owner-is-not-a-public-figure fails when the projection reads a sealed copy column raw', () => {
+    // PENDING 19, decided 8 October 2026: Experiment 001's sealed record keeps
+    // his name and its PAGE does not. The projection is the one boundary
+    // between them; a copy column read around `said()` carries the sealed
+    // sentence, name and all, onto the page.
+    unwrite('src/services/public-workshop/projection.ts', 'note: said(r.public_note)', j('note: String(r.public', '_note)'));
+    const r = run('check-the-owner-is-not-a-public-figure.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('r.public_note reaches the page without said()');
+  });
+
+  it('check-the-owner-is-not-a-public-figure fails when the projection stops taking the name off', () => {
+    // The column rule above is about the SHAPE; this is the behaviour. The
+    // gate puts every named public copy through the real projection function,
+    // so a withoutTheOwner that no longer removes anything is caught on
+    // Experiment 001's own text.
+    unwrite('src/services/public-workshop/projection.ts', "if (!w || name === '') return text;", "if (!w || name !== '') return text;");
+    const r = run('check-the-owner-is-not-a-public-figure.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('PROOF1_PUBLIC.note: still names the owner on the page');
+  });
+
   it('check-forge-seals-only-inside-the-charter fails when a file seals a design without asking the charter', () => {
     // The forge acts with nobody watching. The rule it must obey — ask the
     // charter before sealing, in the same file, before the seal — is held

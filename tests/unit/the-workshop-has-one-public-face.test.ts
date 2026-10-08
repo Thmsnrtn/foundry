@@ -395,7 +395,10 @@ describe('Allow publishes the page; offers point at it and go out as the Worksho
     expect(shown.text).toContain('$29, once. No subscription, nothing renews.');
     expect(shown.text).toContain('Buy for $29');
     expect(shown.text).toContain('https://buy.stripe.com/');
-    expect(shown.text).toContain('I\'m Thomas Norton');
+    // PENDING 19, decided 8 October 2026: the sealed note names him; the page
+    // the public reads speaks as the Workshop instead.
+    expect(shown.text).not.toContain('Thomas Norton');
+    expect(shown.text).toContain('I\'m Apex Micro, a small workshop.');
     expect(shown.text).toContain('PO Box 123');
     // THE ORDER A STRANGER READS IN. The offer and its price come before the
     // seller's biography, because five seconds on a phone is what a cold
