@@ -126,11 +126,14 @@ export async function yourDecisions(founderId: string, env: NodeJS.ProcessEnv = 
   // PRINTABLE FILES MADE BY THE HANDS (PENDING 41). Built and off: only his
   // own `make_printable_pdf` row turns it on, and a machine with no Chromium
   // cannot print whatever he says (products/printable.ts).
-  const { mayMakePrintables } = await import('../venture/products/printable.js');
+  // DONE IS HIS ANSWER, not the machine's: once he has said yes the act is
+  // his and made, and a machine with no Chromium is said as the reason it
+  // still cannot print, rather than as a decision he has yet to make.
+  const { mayMakePrintables, printablesChoice } = await import('../venture/products/printable.js');
   const printing = await mayMakePrintables(founderId, env);
   out.push({ key: 'printables', act: 'Let Foundry make printable files itself, or keep refusing them',
-    unblocks: 'tests that sell a file the hands wrote, printed and checked, delivered by a download link',
-    state: printing.may ? 'done' : 'open', seen: printing.because });
+    unblocks: 'tests that sell a file the hands wrote, printed and checked, delivered by a download link; a clear panel yes ships, a split one waits for you',
+    state: (await printablesChoice(founderId)).allowed ? 'done' : 'open', seen: printing.because });
 
   const { liveCharter } = await import('../institution/charter.js');
   const charter = await liveCharter(founderId);

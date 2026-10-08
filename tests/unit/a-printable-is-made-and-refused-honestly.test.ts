@@ -34,10 +34,13 @@ vi.mock('../../src/services/ai/client.js', async (orig) => ({
 
 const P = await import('../../src/services/venture/products/printable.js');
 
+// FOUNDRY_CHROMIUM_PATH FIRST, as production reads it, so running this file
+// with the image's environment proves the image's printer; then the usual paths.
 const CHROMIUM = [
+  process.env.FOUNDRY_CHROMIUM_PATH,
   '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
   '/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome',
-].find((p) => existsSync(p));
+].find((p): p is string => !!p && existsSync(p));
 const withBrowser = CHROMIUM ? describe : describe.skip;
 
 const spec = (content = PRINTABLE_CONTENT_HONEST) => ({ kind: 'printable_pdf' as const, title: 'The Home Maintenance Log', ...content });

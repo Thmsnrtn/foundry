@@ -17,7 +17,7 @@
 //      Workshop, the venture hands or the outbound door — except the record
 //      that holds it (settings.ts), the projection that hands it to the terms
 //      page as `legalOperator`, and the sealed design text of Experiment 001,
-//      which is history and is not rewritten.
+//      which is history and is not rewritten (its PAGE is clause 6's).
 //   2. `legalOperator` used outside `renderTerms` in the public site.
 //   3. The owner's literal name (read from the Workshop record, never typed
 //      here) in the public site or the listing copy, outside the privacy
@@ -31,9 +31,20 @@
 //      it. The projection must build the public address through
 //      `publicPostalLines`, and the hand's email footer must not reach for the
 //      raw lines.
+//   5. His literal name in any file on a public path outside the sealed
+//      records, which are listed by name and reported.
+//   6. THE PAGE A SEALED RECORD BECOMES (PENDING 19, decided 8 October 2026).
+//      A sealed record may keep his name; the page the public reads from it
+//      may not. Experiment 001's page was EXEMPTED here until that decision;
+//      it is now COVERED, two ways: (a) the projection must read every public
+//      copy column through `said()` (which is `withoutTheOwner`), so no column
+//      can reach a page around it; and (b) every named copy constant handed to
+//      `givePublicIdentity` or `updatePublicCopy` is put through the real
+//      `withoutTheOwner`, and must come out with no name in it.
 //
 // Run: node scripts/check-the-owner-is-not-a-public-figure.mjs   (in lint:columns)
 // =============================================================================
+import { spawnSync } from 'child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
 import { join, relative, resolve } from 'path';
 
@@ -163,7 +174,7 @@ for (const dir of PUBLIC_DIRS) {
 // records are listed by id and REPORTED, and anything else FAILS.
 if (name) {
   const SEALED = new Map([
-    ['src/services/venture/proof-1.ts', 'Experiment 001\'s sealed public copy (PROOF1_PUBLIC, "Who I am") — PENDING 19'],
+    ['src/services/venture/proof-1.ts', 'Experiment 001\'s sealed record (PROOF1_PUBLIC, "Who I am"); its PAGE is clause 6\'s, and carries no name — PENDING 19, decided 2026-10-08'],
     ['src/services/venture/proof-1-content.ts', 'Experiment 001\'s outreach as sent (OUTREACH_TEMPLATE_MD sign-off) — a record of what went out'],
     ['src/services/venture/proof-2-content.ts', 'the Etsy privacy policy (PRIVACY_POLICY_MD) — the marketplace\'s disclosure'],
     ['src/services/public-workshop/settings.ts', 'the Workshop record that holds the operator\'s name'],
@@ -180,6 +191,73 @@ if (name) {
     }
   }
   for (const c of carried) console.log(`  carried by a sealed record: ${c}`);
+}
+
+// 6a. Every public copy column the projection reads is said through `said()`.
+//
+// The projection is the one boundary between a sealed row and a page. A
+// column read raw — `String(r.public_note)` — would carry the sealed text,
+// name and all, straight onto the page; so every read of a copy column must be
+// `said(r.public_x)`, `blank(r.public_x)`, or a null test. Comment lines are
+// not read (the rule's own explanation names the shape it forbids).
+if (existsSync(PROJECTION)) {
+  const src = readFileSync(PROJECTION, 'utf8').split('\n')
+    .map((line) => (/^\s*(\/\/|\*|\/\*)/.test(line) ? '' : line)).join('\n');
+  if (!/const said = \(v: unknown\): string => withoutTheOwner\(/.test(src)) {
+    failures.push(`${rel(PROJECTION)}: \`said\` must be withoutTheOwner — the one place the owner's name comes off the page`);
+  }
+  let reads = 0;
+  for (const m of src.matchAll(/r\.public_([a-z_]+)/g)) {
+    if (m[1].endsWith('_at')) continue;
+    reads++;
+    const before = src.slice(Math.max(0, m.index - 6), m.index);
+    const after = src.slice(m.index + m[0].length, m.index + m[0].length + 10);
+    if (/said\($|blank\($/.test(before) || /^\s*[!=]=\s*null/.test(after)) continue;
+    const line = src.slice(0, m.index).split('\n').length;
+    failures.push(`${rel(PROJECTION)}:${line}: r.public_${m[1]} reaches the page without said(); the owner's name would ride a sealed record onto it`);
+  }
+  // Vacuity: a projection that stopped naming the columns this way reads as clean.
+  if (reads < 10) failures.push(`${rel(PROJECTION)}: only ${String(reads)} public copy columns found; the rule is reading the wrong file or the wrong shape`);
+}
+
+// 6b. Every named copy constant, through the real projection function.
+if (name) {
+  const publicName = (/publicName:\s*'([^']+)'/.exec(readFileSync(SETTINGS, 'utf8')) ?? [])[1] ?? null;
+  const all = tsFiles(resolve(ROOT, 'src'));
+  const copies = new Map();
+  for (const f of all) {
+    const src = readFileSync(f, 'utf8');
+    for (const m of src.matchAll(/givePublicIdentity\(\{[\s\S]*?\bcopy:\s*([A-Z][A-Z0-9_]*)\b/g)) copies.set(m[1], null);
+    for (const m of src.matchAll(/updatePublicCopy\(\s*[\w.]+\s*,\s*([A-Z][A-Z0-9_]*)\s*\)/g)) copies.set(m[1], null);
+  }
+  for (const c of copies.keys()) {
+    const home = all.find((f) => new RegExp(`^export const ${c}\\b`, 'm').test(readFileSync(f, 'utf8')));
+    if (!home) failures.push(`${c}: a public copy constant whose export could not be found, so it was not read`);
+    else copies.set(c, home);
+  }
+  if (!copies.has('PROOF1_PUBLIC')) failures.push('PROOF1_PUBLIC is not among the public copies found; the population is wrong');
+  const probe = `
+    const { withoutTheOwner } = await import(${JSON.stringify(resolve(ROOT, 'src/services/public-workshop/projection.ts'))});
+    const w = ${JSON.stringify({ operatorName: name, publicName })};
+    const out = [];
+    for (const [c, file] of ${JSON.stringify([...copies].filter(([, f]) => f))}) {
+      const obj = (await import(file))[c];
+      const fields = Object.entries(obj ?? {}).filter(([, v]) => typeof v === 'string');
+      if (!fields.length) { out.push(c + ': no text fields were read'); continue; }
+      for (const [k, v] of fields) if (withoutTheOwner(v, w).toLowerCase().includes(w.operatorName.toLowerCase())) out.push(c + '.' + k + ': still names the owner on the page');
+    }
+    console.log(JSON.stringify(out));`;
+  const env = { ...process.env, TURSO_DATABASE_URL: 'file::memory:' };
+  const r = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', probe], { cwd: ROOT, env, encoding: 'utf8', timeout: 120_000 });
+  const last = (r.stdout ?? '').trim().split('\n').pop() ?? '';
+  let found = null;
+  try { found = JSON.parse(last); } catch { found = null; }
+  if (r.status !== 0 || !Array.isArray(found)) {
+    failures.push(`the page probe could not run, so no page was read (exit ${String(r.status)}): ${(r.stderr || r.stdout || '').trim().split('\n').slice(-3).join(' | ')}`);
+  } else {
+    for (const f of found) failures.push(`the page a sealed record becomes: ${f}`);
+    console.log(`  pages read through the projection: ${[...copies.keys()].join(', ')}`);
+  }
 }
 
 if (failures.length) {

@@ -13,11 +13,11 @@ around each item.
 ---
 
 <!-- status:begin — generated from the headings below by node scripts/check-record-matches-code.mjs --write -->
-# 22 WAITING ON THE OWNER, 3 WITH COUNSEL, 7 DECIDED IN PLACE
+# 20 WAITING ON THE OWNER, 3 WITH COUNSEL, 9 DECIDED IN PLACE
 
-- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 19, 21, 25, 26, 27, 29, 30, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41.
+- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 21, 25, 26, 27, 29, 30, 32, 33, 34, 35, 36, 37, 38, 39, 40.
 - **Waiting on counsel:** PENDING 9, 13, 15 (interim positions in force; see below).
-- **Decided, and kept where they were asked:** PENDING 16, 20, 22, 23, 24, 28, 31.
+- **Decided, and kept where they were asked:** PENDING 16, 19, 20, 22, 23, 24, 28, 31, 41.
 - **Answered and recorded as RESOLVED:** 15.
 <!-- status:end -->
 
@@ -946,7 +946,31 @@ wording is changed so it does not promise what the Workshop will not do. If
 neither, the form keeps promising and the record keeps silent, which is the
 one state that should not last.
 
-## PENDING 19 — Your name on Experiment 001's public page, against your own rule: **OWNER** (2026-09-21)
+## PENDING 19 — Your name on Experiment 001's public page, against your own rule: **DECIDED 2026-10-08** (asked 2026-09-21)
+
+**The owner decided it on 8 October 2026, conveyed through the coordinating
+session: remove his name from the PUBLIC page, replace it with the Workshop's
+own name, and leave the sealed record intact.** That is option (2) carried out
+at the projection rather than in the row: `public_experiments.public_note` and
+`PROOF1_PUBLIC` keep every word, and `withoutTheOwner` in
+`public-workshop/projection.ts` — the one boundary rows cross on their way to a
+page — turns "I'm <his name>, and Apex Micro is my workshop." into "I'm Apex
+Micro, a small workshop." on every copy column. The page re-renders from rows
+on the next workshop tick. `check-the-owner-is-not-a-public-figure` no longer
+exempts the page: it fails on a copy column read around `said()`, and puts
+every named public copy through the real function (both mutation-tested in
+`gates-fail-when-they-should`); `no-public-page-names-the-owner` renders every
+page of the site and finds the name only on /terms; the simulation's
+`decided-inside-the-charter` invariant dropped its Experiment 001 exemption.
+
+**What this cannot change.** Experiment 001's outreach already went out signed
+with his name (`OUTREACH_TEMPLATE_MD`); delivered mail cannot be unsent, and the
+template stays as the record of what was sent. The neighbours below (the
+first-name mailbox, the prose disclosure) were not part of his answer and are
+unchanged.
+
+The record below is as it stood when the question was asked.
+
 
 Two of your rules conflict and only you can settle it. The standing
 constraint says your name appears on the public site only on the terms page
@@ -2280,7 +2304,43 @@ one a browser sees and a DOM test does not, and the browser is already there.
 
 ---
 
-## PENDING 41 — May Foundry make printable files itself, and print them in production: **OWNER** (2026-10-07)
+## PENDING 41 — May Foundry make printable files itself, and print them in production: **DECIDED 2026-10-08, one act left to the owner** (asked 2026-10-07)
+
+**The owner decided it on 8 October 2026, conveyed through the coordinating
+session: "Ship on panel yes now."** Not the shadow-first recommendation below:
+a printable that passes every quality gate AND gets a clear yes from the
+stranger panel goes on sale without him, starting now. A split panel still
+comes to him as the one needs-you item, unchanged; a refusal is still a
+refusal. The panel's thresholds are the ones below, unchanged. **And the
+renderer: "Chromium in the production image: yes."**
+
+**What was built so his choice can take effect (8 October 2026).**
+- **His act, not a session's.** Nothing turns the kind on but his own
+  `make_printable_pdf` row, and a migration or seed writing it would be
+  Foundry declaring its own authority (the policy table refuses any principal
+  but a person; `owner-only-stays-owners` throws on a planted row). So the row
+  is NOT written here. **Control → Your decisions → "Let Foundry make printable
+  files itself" → "Allow printables, shipped on a clear panel yes"** writes it
+  from his session (`POST /foundry/controls/printables`); "Stop making
+  printables" restores "not yet". Until he presses it, the kind stays off.
+  Proven by `printables-are-his-to-allow` (button, his row, take-back, a
+  non-person refused, panel gates unchanged).
+- **The printer.** The production image's final stage installs Debian's
+  `chromium-headless-shell` (bookworm-security, no recommends, no fonts —
+  printable.css inlines its own) and sets
+  `FOUNDRY_CHROMIUM_PATH=/usr/lib/chromium/chromium-headless-shell`. Measured
+  by building the layer on `node:22-slim`: **+542 MB on disk, +210 MB
+  compressed**; most of it is Mesa/LLVM that `chromium-common`'s `x11-utils`
+  dependency pulls in. The printable suite passes in that image against that
+  binary (9 pages, no overflow). `the-image-prints-where-the-code-looks` reads
+  the Dockerfile's final stage and fails if the package, the path or the
+  variable the code reads drift apart. `playwright-core` stays a dev dependency
+  (a pinned rule) and reaches the image through the deps stage, which the test
+  also reads. The Fly VM is 1 GB; a print launches one headless shell at a
+  time, but memory under a real print in production is unmeasured.
+
+The record below is as it stood when the question was asked.
+
 
 **What is true.** A new product kind, `printable_pdf`, is built and off
 (`services/venture/products/printable.ts`, migration 392). A model writes a

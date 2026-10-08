@@ -5207,6 +5207,36 @@ foundryShellRoutes.post('/foundry/controls/front-loaded-attention',
     return c.redirect(`/foundry/controls?attention=${'refused' in r ? 'refused' : allow ? 'allowed' : 'required_again'}#your-decisions`);
   });
 
+/**
+ * PRINTABLES ARE HIS TO ALLOW (PENDING 41, decided 8 October 2026: "ship on
+ * panel yes now"). Only his own `make_printable_pdf` row turns the kind on
+ * (migration 392's default is "not yet"), so this writes that row as HIS act,
+ * from his session; the policy table refuses any other principal. "Allow"
+ * means a file that passes every gate AND a clear yes from the stranger panel
+ * goes on sale without him; a split panel is still held for him as one item,
+ * and a refusal is still a refusal — his yes moves no gate. "Stop" restores
+ * "not yet". Both keep every earlier row.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.post('/foundry/controls/printables',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const body = await c.req.parseBody();
+    const allow = String(body.allow ?? '') === 'yes';
+    const { PRINTABLE_POLICY } = await import('../../services/venture/products/printable.js');
+    const { supersedeOriginationPolicy } = await import('../../services/venture/legal-surface.js');
+    const r = await supersedeOriginationPolicy({
+      founderId: String(founder.id), requirement: PRINTABLE_POLICY, treatment: 'policy',
+      value: allow ? 'yes' : 'not_yet',
+      why: allow
+        ? 'The owner allowed Foundry to make printable files itself (PENDING 41): a file that passes every quality gate and gets a clear yes from the stranger panel goes on sale without him; a split panel is still held for him; a refusal is still a refusal.'
+        : 'The owner stopped Foundry making printable files itself.',
+      by: `founder:${String(founder.id)}`,
+    });
+    return c.redirect(`/foundry/controls?printables=${'refused' in r ? 'refused' : allow ? 'allowed' : 'refused_again'}#your-decisions`);
+  });
+
 foundryShellRoutes.post('/foundry/controls/charter/withdraw',
   requireInstitutionOwner(), async (c: any) => {
     const founder = c.get('founder') as { id?: string } | undefined;
@@ -7928,6 +7958,10 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
         <input type="hidden" name="allow" value="${d.state === 'done' ? 'no' : 'yes'}" />
         <button class="btn${d.state === 'done' ? '' : ' go'}" type="submit">${d.state === 'done' ? 'Refuse subscriptions again' : 'Allow subscriptions'}</button>
       </form>` : ''}
+      ${d.key === 'printables' ? html`<form method="POST" action="/foundry/controls/printables" class="inline">
+        <input type="hidden" name="allow" value="${d.state === 'done' ? 'no' : 'yes'}" />
+        <button class="btn${d.state === 'done' ? '' : ' go'}" type="submit">${d.state === 'done' ? 'Stop making printables' : 'Allow printables, shipped on a clear panel yes'}</button>
+      </form>` : ''}
       ${d.key === 'front_loaded_attention' ? html`<form method="POST" action="/foundry/controls/front-loaded-attention" class="inline">
         <input type="hidden" name="allow" value="${d.seen.startsWith('allowed') ? 'no' : 'yes'}" />
         <button class="btn${d.seen.startsWith('allowed') ? '' : ' go'}" type="submit">${d.seen.startsWith('allowed') ? 'Refuse them again' : d.state === 'done' ? 'Allow them' : 'Allow them, for every future offer'}</button>
@@ -8411,8 +8445,8 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
           exist.</p>
         <p class="quiet">Tests write to strangers only as ${workshop.publicName}, from
           ${workshop.contactEmail}, pointing at a page I have read back from the world.
-          Your name is on the terms page and, in Experiment 001's sealed public copy, on
-          that test's page; that copy is a record and is not rewritten. Nowhere else.</p>
+          Your name is on the terms page and nowhere else. Experiment 001's sealed record
+          still carries it, and is not rewritten; its page speaks as ${workshop.publicName}.</p>
       </details>` : ''}
 
       ${/* NO DESTINATION, SO NOT A ROW. Both of these explain why a control

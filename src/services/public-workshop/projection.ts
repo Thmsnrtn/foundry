@@ -94,6 +94,32 @@ function money(cents: number, currency: string): string {
   return currency.toUpperCase() === 'USD' ? `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}` : `${(cents / 100).toFixed(2)} ${currency.toUpperCase()}`;
 }
 
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * THE OWNER'S NAME COMES OFF THE PUBLIC COPY HERE (PENDING 19, decided by the
+ * owner on 8 October 2026: take his name off Experiment 001's public page and
+ * speak there as the Workshop; leave the sealed record intact).
+ *
+ * The sealed row keeps every word — a record is not rewritten — and this is
+ * the boundary between that row and the world, so the page reads the
+ * Workshop's name where the record reads his. The one sentence that names him
+ * as the workshop's maker becomes the Workshop introducing itself (the site
+ * speaks as "I" throughout, in the Workshop's voice); any other mention of his
+ * full name, in any case, becomes the Workshop's name. A text without his name
+ * is returned byte-identical. Only the full name is matched: a surname alone
+ * is also a Massachusetts town, and a bid notice may carry it.
+ */
+export function withoutTheOwner(text: string, w: { operatorName: string; publicName: string } | null): string {
+  const name = w?.operatorName.trim() ?? '';
+  if (!w || name === '') return text;
+  const n = escapeRe(name).replace(/\s+/g, '\\s+');
+  if (!new RegExp(n, 'i').test(text)) return text;
+  return text
+    .replace(new RegExp(`\\bI['’]m\\s+${n},\\s+and\\s+${escapeRe(w.publicName)}\\s+is\\s+my\\s+workshop\\.`, 'gi'), `I'm ${w.publicName}, a small workshop.`)
+    .replace(new RegExp(n, 'gi'), w.publicName);
+}
+
 /** The public shape of one experiment, or null when it has no public identity. */
 export async function projectExperiment(experimentId: string): Promise<PublicExperiment | null> {
   const r = (await rows(
@@ -117,6 +143,12 @@ export async function projectExperiment(experimentId: string): Promise<PublicExp
        LEFT JOIN experiment_exposures x ON x.experiment_id = e.id AND x.id = (SELECT id FROM experiment_exposures WHERE experiment_id = e.id ORDER BY placed_at DESC, rowid DESC LIMIT 1)
       WHERE w.experiment_id = ?`, [experimentId]))[0];
   if (!r) return null;
+  // EVERY COPY COLUMN IS SAID THROUGH `said`, which takes the owner's name off
+  // (withoutTheOwner, above); `check-the-owner-is-not-a-public-figure.mjs`
+  // fails on a copy column read here any other way.
+  const workshop = await publicWorkshopOfExperiment(experimentId);
+  const said = (v: unknown): string => withoutTheOwner(String(v), workshop);
+  const blank = (v: unknown): boolean => v == null || String(v).trim() === '';
 
   // Status, from canonical state. 'operating' is an asset that earned its
   // standing; 'graduated' an owner-recorded independent identity; 'closed'
@@ -161,7 +193,7 @@ export async function projectExperiment(experimentId: string): Promise<PublicExp
     ? { url: String(listingRef.exposure_ref), venueName: plan.listing.venueName }
     : null;
 
-  const outcome = r.public_outcome == null ? null : String(r.public_outcome);
+  const outcome = r.public_outcome == null ? null : said(r.public_outcome);
   const clarified = r.public_clarification != null;
   // A CORRECTED RECORD DOES NOT LOSE THE RESULT IT CORRECTS.
   //
@@ -218,9 +250,9 @@ export async function projectExperiment(experimentId: string): Promise<PublicExp
   const slug = String(r.slug);
   return {
     number: Number(r.number), slug, path: `/experiments/${slug}`, listed: Number(r.listed) === 1,
-    title: String(r.public_title), summary: String(r.public_summary), who: String(r.public_who), what: String(r.public_what),
-    limits: String(r.public_limits), sources: String(r.public_sources), selection: String(r.public_selection), note: String(r.public_note),
-    sample: r.public_sample == null || String(r.public_sample).trim() === '' ? null : String(r.public_sample),
+    title: said(r.public_title), summary: said(r.public_summary), who: said(r.public_who), what: said(r.public_what),
+    limits: said(r.public_limits), sources: said(r.public_sources), selection: said(r.public_selection), note: said(r.public_note),
+    sample: blank(r.public_sample) ? null : said(r.public_sample),
     // A portfolio entry describes something sold elsewhere; it carries no tool.
     tool: shape === 'portfolio_entry' || shape === 'identity_only' ? null : tool,
     // GIVEN FIRST only while the offer stands and only for an offer that is
@@ -230,7 +262,7 @@ export async function projectExperiment(experimentId: string): Promise<PublicExp
     status, statusLabel: STATUS_LABELS[status], statusLine, outcome,
     whereToGetIt, shape,
     clarification: r.public_clarification == null || r.public_clarification_at == null ? null
-      : { on: String(r.public_clarification_at), text: String(r.public_clarification) },
+      : { on: String(r.public_clarification_at), text: said(r.public_clarification) },
     price: shape === 'portfolio_entry' || shape === 'identity_only' ? null : price,
     recurring: shape !== 'portfolio_entry' && shape !== 'identity_only' && price?.recurring !== undefined,
     // The way to pay is public only while the offer stands; a closed test's

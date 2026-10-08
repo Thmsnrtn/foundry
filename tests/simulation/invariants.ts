@@ -97,13 +97,14 @@ export const INVARIANTS: readonly Invariant[] = [
       if (w.ownerName.trim()) {
         // The terms page is the one public surface where the law wants his name
         // (scripts/check-the-owner-is-not-a-public-figure.mjs); nowhere else.
-        // Experiment 001's sealed public copy names him, and that gate exempts
-        // it as a record (proof-1.ts): it is history, not something a run did.
-        const { PROOF1_SLUG } = await import('../../src/services/venture/proof-1.js');
+        // Experiment 001's page USED to be exempt here, because its sealed copy
+        // names him. On 8 October 2026 he decided its page speaks as the
+        // Workshop and the record stays sealed (PENDING 19), so the projection
+        // takes the name off and the page is read like every other.
         for (const p of w.pages()) {
           const text = strip(p.html);
           const at = text.indexOf(w.ownerName);
-          if (!/(^|[/:])terms(\.html)?$/.test(p.key) && !p.key.includes(PROOF1_SLUG) && at >= 0) out.push(`the public page ${p.key} names the owner: "…${text.slice(Math.max(0, at - 60), at + w.ownerName.length + 40)}…"`);
+          if (!/(^|[/:])terms(\.html)?$/.test(p.key) && at >= 0) out.push(`the public page ${p.key} names the owner: "…${text.slice(Math.max(0, at - 60), at + w.ownerName.length + 40)}…"`);
         }
         for (const s of w.sends()) {
           const text = `${s.text} ${strip(s.html)}`;

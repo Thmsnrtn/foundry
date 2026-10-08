@@ -3318,7 +3318,7 @@ independently; the reconciled branch keeps one fix for each (ROADMAP
   package prediction; the stance counts in `shelves.ts`/`seeds.ts`, which count
   a look, not support) were not changed.
 
-## First hands: the printable_pdf kind, built and off (Stage 2, C2, 2026-10-07)
+## First hands: the printable_pdf kind, built; decided yes, waiting on his press (Stage 2, C2, 2026-10-07; decided 2026-10-08)
 
 **What exists.** `services/venture/products/printable.ts`: a model writes a
 printable's words in a closed HTML vocabulary (`ALLOWED`; refused, never
@@ -3349,7 +3349,22 @@ dispatches to `checkPrintable` (hash, PDF, pages, version, not held).
 (`/share/download/:fulfilment/:expires/:token`, expiry inside the HMAC) plus the
 refund link, and records the version sold on `delivered_files_json`; the
 route serves exactly that version and nothing after a refund. Controls lists
-the decision (`printables`); PENDING 41 asks it.
+the decision (`printables`) with its button.
+
+**Decided 8 October 2026 (PENDING 41): "Ship on panel yes now", and Chromium
+in the image.** The owner's row is still NOT written — that is his act:
+Control → Your decisions → "Allow printables, shipped on a clear panel yes"
+(`POST /foundry/controls/printables`, his principal only; "Stop making
+printables" takes it back). The production image's final stage installs
+Debian's `chromium-headless-shell` and sets
+`FOUNDRY_CHROMIUM_PATH=/usr/lib/chromium/chromium-headless-shell` (+542 MB on
+disk, +210 MB compressed, measured by building the layer on `node:22-slim`);
+the printable suite passes inside that image against that binary.
+`printables-are-his-to-allow` (6) and `the-image-prints-where-the-code-looks`
+(5) pin the button and the image↔code contract; nine mutations (the env name,
+the path, the install moved to the builder stage, the code reading another
+variable, the button removed, the row written as a non-person) each turn one
+red.
 
 **Proof.** `tested` + `simulated`: `a-printable-is-made-and-refused-honestly`
 (15, real Chromium + pdfinfo), `a-split-panel-waits-for-the-owner` (6, stand-in
@@ -3362,8 +3377,10 @@ file's, the refund works, and a sibling file with an invented statistic is
 refused with the reason on the owner's view. Thirteen mutations each turned a
 test red.
 
-**Proof debt.** Never run on a real model, a real buyer or production Chromium
-(none in the image; PENDING 41). The personas are one model in four voices,
+**Proof debt.** Never run on a real model or a real buyer, and never printed
+on the deployed Fly machine: the image's Chromium is proven in a local build of
+the same layer, not in production, and memory under a real print on the 1 GB
+VM is unmeasured. Nothing ships until he presses the button. The personas are one model in four voices,
 not independent people. Fillable (AcroForm) fields are not built. An expired
 link's page asks the buyer to reply for a new one; minting a fresh link is
 `downloadLinkFor` with no owner surface yet. The experiment view counts brief
