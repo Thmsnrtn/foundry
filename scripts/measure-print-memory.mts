@@ -22,7 +22,7 @@
 //
 // Run (needs root for the cgroup; the server must be built first):
 //   npm run build
-//   npx tsx scripts/measure-print-memory.mts [--chromium PATH] [--out FILE]
+//   npx tsx scripts/measure-print-memory.mts [--chromium PATH] [--out FILE] [--limit-mb 1024]
 // =============================================================================
 
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -32,7 +32,8 @@ import { join, resolve } from 'node:path';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const arg = (name: string): string | undefined => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : undefined; };
-const LIMIT = 1024 * 1024 * 1024;
+/** 1 GB by default, as on the Fly machine; --limit-mb to prove headroom under less. */
+const LIMIT = Number(arg('--limit-mb') ?? 1024) * 1024 * 1024;
 
 // ─── The print child ─────────────────────────────────────────────────────────
 if (process.argv.includes('--print-child')) {
