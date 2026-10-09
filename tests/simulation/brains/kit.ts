@@ -43,7 +43,7 @@ export function rawBlock(user: string, tag: string): string {
   return m ? m[1]!.trim() : '';
 }
 
-const LABELS = ['CANDIDATE', 'THE TEST AS PROPOSED', 'EVIDENCE', 'RETRIEVALS', 'OPEN UNKNOWNS', 'LESSONS OF SETTLED TESTS', 'PRECEDENT ON THIS CANDIDATE',
+const LABELS = ['CANDIDATE', 'THE TEST AS PROPOSED', 'EVIDENCE', 'RETRIEVALS', 'OPEN UNKNOWNS', 'LESSONS OF SETTLED TESTS', 'SEASON OF WHAT IT WOULD SELL', 'PRECEDENT ON THIS CANDIDATE',
   'LEGAL PICTURE', 'THE CHARTER', 'EXCHANGES', 'WHAT THIS KIND OF THING TAKES', 'COST DIMENSIONS', 'STOP KINDS'] as const;
 
 /** The forge's record block, section by section, parsed as JSON where it is JSON. */

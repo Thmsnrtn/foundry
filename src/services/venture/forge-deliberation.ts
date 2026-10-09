@@ -78,6 +78,8 @@ export interface TheRecord {
   /** The retrievals the evidence came from: the words the eyes were asked with, and what came back. A brief can be built only from these. */
   retrievals: Array<{ sourceType: string; terms: string; source: string; returned: number; relevant: number; at: string }>;
   unknowns: Array<{ question: string; blocking: boolean; cheapestTest: string | null; asks: 'demand' | 'distribution' | 'conversion' | 'fulfilment' }>;
+  /** The season of what it would sell (F3): Foundry's own year, or a prior labelled an assumption; null when its words name none. */
+  season: import('./storefront/seasonality.js').Season | null;
   /** Each with the test it came from, so a design can record which lessons it read. */
   lessons: Array<{ experimentId: string; whatWeDid: string; verdict: string | null; couldNotEstablish: string | null }>;
   /** WHAT IS ALREADY KNOWN ABOUT THIS CANDIDATE, with its scope: the settled tests on it, and whether the proposed act repeats one. */
@@ -175,6 +177,7 @@ export async function theRecordOf(experimentId: string): Promise<TheRecord | nul
     candidate: { headline: String(e.headline), whoHasIt: String(e.who_has_it), theProblem: String(e.the_problem),
       whyItMight: String(e.why_it_might), killThesis: String(e.kill_thesis), lighter: e.lighter_architecture == null ? null : String(e.lighter_architecture) },
     evidence, retrievals, unknowns, lessons, precedent,
+    season: await (await import('./storefront/seasonality.js')).seasonFor(founderId, `${String(e.headline)} ${String(e.what_we_do)}`, new Date()),
     legal: { sentence: picture.sentence, inTheWay: picture.inTheWay },
     charter: envelope ? { monthlyCents: envelope.charter.monthlyCents, remainingCents: envelope.remainingCents,
       probesInFlight: envelope.charter.probesInFlight, inFlight: envelope.inFlight,
@@ -222,6 +225,7 @@ function recordBlock(r: TheRecord): string {
     `RETRIEVALS (the words the eyes were asked with, and what came back; a brief can be built only from these): ${j(r.retrievals)}`,
     `OPEN UNKNOWNS (each with which of the four questions it asks — demand, distribution, conversion, fulfilment — so the cheapest test is for the question actually open): ${j(r.unknowns)}`,
     `LESSONS OF SETTLED TESTS (what each could not establish): ${j(r.lessons)}`,
+    `SEASON OF WHAT IT WOULD SELL (source "assumption" is a prior, not observed; "own" is Foundry's recorded year; null: its words name no season): ${j(r.season ?? null)}`,
     `PRECEDENT ON THIS CANDIDATE (what is already known, with its scope; "asked_before" means this act repeats a settled test by the same mechanism and will not seal unless it says what it changes): ${j(r.precedent)}`,
     `LEGAL PICTURE: ${j(r.legal)}`,
     `THE CHARTER (null means none is standing and the owner decides each test himself): ${j(r.charter)}`,
@@ -667,6 +671,8 @@ export interface ForgePass {
   failed: Array<{ experimentId: string; because: string }>;
   /** Tests left alone this pass because they were refused recently, and when they are tried again (R27). */
   waiting: string[];
+  /** The season read for each sealed design, in the order they were let in (F3). */
+  timing?: Array<{ experimentId: string; sentence: string }>;
 }
 
 // ─── Backing off what keeps being refused (R27) ─────────────────────────────
@@ -856,7 +862,7 @@ export async function retireWaitingDesigns(founderId: string): Promise<number> {
 export const MOST_DESIGNS_PER_PASS = 2;
 
 export async function forgePass(founderId: string, now: Date = new Date()): Promise<ForgePass> {
-  const out: ForgePass = { proposed: 0, deliberated: [], allowed: [], notAllowed: [], skipped: null, failed: [], waiting: [] };
+  const out: ForgePass = { proposed: 0, deliberated: [], allowed: [], notAllowed: [], skipped: null, failed: [], waiting: [], timing: [] };
   const startedAt = performance.now();
   const budgetMs = forgePassBudgetMs();
   const outOfTime = (): boolean => performance.now() - startedAt >= budgetMs;
@@ -948,10 +954,18 @@ export async function forgePass(founderId: string, now: Date = new Date()): Prom
   }
 
   // SEALED INSIDE THE CHARTER AND READY: let in, as the charter's principal.
-  const sealed = await rows(
-    `SELECT d.experiment_id FROM probe_designs d JOIN venture_experiments e ON e.id = d.experiment_id
+  const sealedInOrder = await rows(
+    `SELECT d.experiment_id, e.what_we_do, o.headline FROM probe_designs d JOIN venture_experiments e ON e.id = d.experiment_id
+       LEFT JOIN venture_opportunities o ON o.id = e.opportunity_id
       WHERE e.founder_id = ? AND e.decision IS NULL AND e.retired_at IS NULL AND d.sealed_at IS NOT NULL
         AND d.designed_by = ? AND d.recommendation = 'run' ORDER BY d.sealed_at`, [founderId, FORGE]);
+  // TIMED AGAINST THE SEASON (F3): a design whose season's window is open goes
+  // in first, so a free place in flight is not spent on one whose peak is most
+  // of a year away. Foundry's own year once it has one; the labelled prior until.
+  const { launchOrder } = await import('./storefront/seasonality.js');
+  const ordered = await launchOrder(founderId, sealedInOrder.map((r) => ({ id: String(r.experiment_id), text: `${String(r.headline ?? '')} ${String(r.what_we_do ?? '')}` })), now);
+  out.timing = ordered.map((o) => ({ experimentId: o.id, sentence: o.sentence }));
+  const sealed = ordered.map((o) => ({ experiment_id: o.id }));
   if (sealed.length > 0) {
     const { allowExperiment, readiness, materialOf, HandRefused } = await import('./hand.js');
     const { shapeAndMake } = await import('./products/offer-composition.js');
