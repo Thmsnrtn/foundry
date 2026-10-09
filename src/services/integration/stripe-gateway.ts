@@ -306,10 +306,16 @@ async function createPaymentLinkHandler(req: GatewayRequest): Promise<{ id: stri
   // STRIPE TAX, ON HIS WORD ONLY (F2, PENDING 35): his own signed `stripe_tax`
   // row turns on automatic tax; with none the link carries no tax line. Stripe
   // Tax must be activated on the account for this to succeed, which is his act.
-  const owner = (await query('SELECT owner_id FROM products WHERE id = ?', [req.productId])).rows[0] as Record<string, unknown> | undefined;
-  if (owner?.owner_id) {
-    const { stripeTaxOn } = await import('../venture/storefront/tax.js');
-    if (await stripeTaxOn(String(owner.owner_id))) link.set('automatic_tax[enabled]', 'true');
+  // A read that fails adds no tax line: tax is his opt-in, and an unreadable
+  // opt-in is not a yes (the link is what it was before he decided).
+  try {
+    const owner = (await query('SELECT owner_id FROM products WHERE id = ?', [req.productId])).rows[0] as Record<string, unknown> | undefined;
+    if (owner?.owner_id) {
+      const { stripeTaxOn } = await import('../venture/storefront/tax.js');
+      if (await stripeTaxOn(String(owner.owner_id))) link.set('automatic_tax[enabled]', 'true');
+    }
+  } catch (err) {
+    log.warn('stripe.create_payment_link.tax_unread', { productId: req.productId, error: err instanceof Error ? err.message : String(err) });
   }
   const data = await stripeForm(apiKey, 'payment_links', link, `${key}:link`);
   log.info('stripe.create_payment_link.ok', { productId: req.productId, paymentLinkId: String(data.id) });

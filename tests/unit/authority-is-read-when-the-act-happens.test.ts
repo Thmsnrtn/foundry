@@ -247,7 +247,10 @@ describe('the marketplace-write path, proved without enabling it', () => {
         WHERE p.capability_key = 'list_on_marketplace'`))
       .rows as unknown as Array<Record<string, unknown>>;
     expect(bound.length).toBeGreaterThan(0);
-    for (const r of bound) expect(r.tool, String(r.id)).toBeNull();
+    // F2 bound Gumroad's activation (gumroad_enable_product); every ETSY write
+    // provider stays unbound, which is what this asserts of Etsy.
+    for (const r of bound.filter((x) => String(x.id).startsWith('cp_etsy'))) expect(r.tool, String(r.id)).toBeNull();
+    expect(bound.filter((x) => x.tool !== null).map((x) => String(x.tool))).toEqual(['gumroad_enable_product']);
     // With nothing bound the gate resolves no family and returns null — the
     // act was already impossible one layer out, because the outbound door
     // cannot resolve a tool that is not bound.

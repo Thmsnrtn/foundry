@@ -144,7 +144,7 @@ describe('the Workshop stands up through the door, and the world is read back', 
     expect(r.retiredRecords).toHaveLength(3);
     expect(r.site.failed).toEqual([]);
     expect(r.site.unverified).toEqual([]);
-    expect(r.site.verified).toBe(16); // fourteen pages and the two files beside them
+    expect(r.site.verified).toBe(17); // fourteen pages and the three files beside them (llms.txt since F2)
     // The world: the site answers, www redirects, the trust surface is there, the private institution is not.
     // THE OWNER IS NOT A PUBLIC FIGURE: the home page names the Workshop, not him.
     expect((await publicGet('/')).text).toContain('small digital workshop in Massachusetts');
@@ -167,7 +167,7 @@ describe('the Workshop stands up through the door, and the world is read back', 
     expect(receipts.filter((x) => x.tool === 'cloudflare_worker_deploy')).toHaveLength(1);
     expect(receipts.filter((x) => x.tool === 'cloudflare_domain_attach')).toHaveLength(2);
     // Fourteen pages and the two files beside them, robots.txt and sitemap.xml.
-    expect(receipts.filter((x) => x.tool === 'cloudflare_kv_put')).toHaveLength(16);
+    expect(receipts.filter((x) => x.tool === 'cloudflare_kv_put')).toHaveLength(17); // the pages, robots.txt, sitemap.xml and llms.txt (F2)
     expect(receipts.filter((x) => x.tool === 'cloudflare_kv_namespace_create')).toHaveLength(1);
     expect(receipts.every((x) => x.outcome === 'applied')).toBe(true);
     await expect(query(`UPDATE cloudflare_mutations SET previous_json = '{}' WHERE rowid = 1`)).rejects.toThrow(/only_verification_may_follow/);
@@ -192,7 +192,7 @@ describe('the Workshop stands up through the door, and the world is read back', 
     // Nothing changed, so nothing is announced again.
     expect(again.site.announced ?? null).toBeNull();
     expect(state.indexNow).toHaveLength(1);
-    expect((await query(`SELECT COUNT(*) AS n FROM public_publications`)).rows[0]).toMatchObject({ n: 16 });
+    expect((await query(`SELECT COUNT(*) AS n FROM public_publications`)).rows[0]).toMatchObject({ n: 17 }); // llms.txt since F2
     const health = await workshopHealth(OWNER);
     expect(health.site).toMatchObject({ status: 'healthy' });
     // HEALTHY EVEN THOUGH `/user/tokens/verify` REFUSES THE TOKEN. An
@@ -204,7 +204,7 @@ describe('the Workshop stands up through the door, and the world is read back', 
     const { verifyToken } = await import('../../src/services/integration/cloudflare-gateway.js');
     expect(await verifyToken()).toMatchObject({ ok: true, status: 'active' });
     expect(health.sending.status).toBe('needs_attention');
-    expect((await page('/foundry/public-workshop')).text).toContain('16 pages served as published');
+    expect((await page('/foundry/public-workshop')).text).toContain('17 pages served as published');
   });
 
   it('the envelope: another zone, an NS record, a wildcard, a page key deleted, another program, another hostname are refused and the refusal is a receipt', async () => {
@@ -499,7 +499,7 @@ describe('Allow publishes the page; offers point at it and go out as the Worksho
     const sync = await syncOptOutsFromStore(OWNER);
     expect(sync).toMatchObject({ recorded: 1, swept: 1, failed: [] });
     expect(await isSuppressed(OWNER, victim.email!)).toMatchObject({ suppressed: true, reason: 'they_asked' });
-    expect(state.cf.kv.get((await publicWorkshopOf(OWNER))!.kvNamespaceId!)!.size).toBe(17); // 15 pages, robots.txt and sitemap.xml, the opt-out swept
+    expect(state.cf.kv.get((await publicWorkshopOf(OWNER))!.kvNamespaceId!)!.size).toBe(18); // 15 pages, robots.txt, sitemap.xml and llms.txt (F2), the opt-out swept
     await expect(planOffer({ experimentId: X, recipientId: victim.id, now: NOW })).rejects.toThrow(/recipient_suppressed/);
     expect(await contactIsRefused(FOUNDRY, victim.email!)).toMatchObject({ refused: true, reason: 'workshop:they_asked' });
     // The row refuses on its own, and the list is append-only.
@@ -784,7 +784,7 @@ describe('the public program serves only the store, and the private institution 
 // =============================================================================
 describe('the address he typed does not put his name on every page', () => {
   it('the street address is on every page; his name is on the terms page and the sealed record only', async () => {
-    const { renderSite } = await import('../../src/services/public-workshop/site.js');
+    const { renderSite, PUBLIC_FILES } = await import('../../src/services/public-workshop/site.js');
     const { workshopFacts } = await import('../../src/services/public-workshop/projection.js');
     const { publicPostalLines } = await import('../../src/services/public-workshop/settings.js');
 
@@ -797,7 +797,8 @@ describe('the address he typed does not put his name on every page', () => {
     const pages = renderSite(workshopFacts(w), await projectRegistry(OWNER));
     expect(pages.size).toBeGreaterThan(8);
     for (const [path, html] of pages) {
-      if (path.includes('robots') || path.includes('sitemap')) continue;
+      // The files beside the pages are not pages: the canonical list, not a substring.
+      if ((PUBLIC_FILES as readonly string[]).includes(path)) continue;
       // Every page still carries a postal address, because commercial mail
       // must and because the footer is the same on all of them.
       expect(html, `${path} lost the street address`).toContain('Suite 300A #361');

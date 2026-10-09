@@ -61,7 +61,8 @@ describe('what is announced', () => {
 describe('the key file is served by the program itself', () => {
   it('is a valid IndexNow key, named in the program\'s files, and answered with itself', () => {
     expect(INDEXNOW_KEY).toMatch(/^[a-f0-9]{32}$/);
-    expect(WORKER_SOURCE).toContain(`${JSON.stringify(INDEXNOW_KEY_PATH)}: 'text/plain; charset=utf-8'`);
+    // The served file map is built from the program's own list (site.ts PUBLIC_FILE_TYPES) plus the key file.
+    expect(WORKER_SOURCE).toContain(`${JSON.stringify(INDEXNOW_KEY_PATH)}:"text/plain; charset=utf-8"`);
     expect(WORKER_SOURCE).toContain('if (path === INDEXNOW_KEY_PATH) return new Response(INDEXNOW_KEY');
   });
 

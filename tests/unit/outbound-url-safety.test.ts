@@ -197,6 +197,11 @@ describe('posting to a URL somebody else chose', () => {
       // Every later eye reads through this one door, which reads through the guard.
       'src/services/venture/sources/fetching.ts',
       'src/services/venture/sources/npm-registry.ts',
+      // THE STOREFRONT'S HTTP SEAM (F2). Its hosts are compiled into each
+      // adapter, but Gumroad's upload answers with presigned part URLs a
+      // provider chose, and the seam PUTs to them: through safeFetch, with no
+      // credential header on those calls.
+      'src/services/venture/storefront/canonical.ts',
     ]);
   });
 
