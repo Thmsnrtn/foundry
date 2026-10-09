@@ -27,7 +27,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 const DIR = resolve(import.meta.dirname, '../../src/services/venture/sources');
 /** Addresses kept as links on an observation for a reader to open; never requested by an eye. */
-const LINK_ONLY = new Set(['news.ycombinator.com', 'apps.apple.com', 'www.npmjs.com', 'apexmicro.ai']);
+const LINK_ONLY = new Set(['news.ycombinator.com', 'apps.apple.com', 'www.npmjs.com', 'apexmicro.ai', 'www.etsy.com']);
 
 const files = (): string[] => readdirSync(DIR).filter((f) => f.endsWith('.ts')).sort();
 
@@ -61,7 +61,8 @@ describe('the population: every source file', () => {
 
   it('every https address in a source file is a site with named terms, or a link never requested', async () => {
     const { SOURCE_TERMS } = await import('../../src/services/venture/sources/terms.js');
-    const named = new Set(SOURCE_TERMS.flatMap((t) => t.hosts));
+    // A FORBIDDEN host may appear only as a link a reader opens, never as a place an eye reads.
+    const named = new Set(SOURCE_TERMS.filter((t) => t.verdict !== 'forbidden').flatMap((t) => t.hosts));
     const unnamed: string[] = [];
     // terms.ts is the register itself: the addresses in it are where each permission is published.
     for (const f of files().filter((x) => x !== 'terms.ts')) for (const u of scan(f).urls) {
@@ -69,7 +70,7 @@ describe('the population: every source file', () => {
       if (!named.has(host) && !LINK_ONLY.has(host)) unnamed.push(`${f}: ${host}`);
     }
     expect(unnamed).toEqual([]);
-    expect(named.size, 'the register was read').toBeGreaterThanOrEqual(12);
+    expect(named.size, 'the register was read').toBeGreaterThanOrEqual(10);
   });
 
 });
