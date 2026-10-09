@@ -26,7 +26,7 @@ const P = await import('../../src/services/venture/products/printable.js');
 const spec = { kind: 'printable_pdf' as const, title: 'The Home Maintenance Log', ...PRINTABLE_CONTENT_HONEST };
 const meta = { workshop: 'Apex Micro', version: 1, madeOn: '2026-10-09' };
 
-afterEach(() => { P.useRenderer(null); P.setPrintTimeoutMs(null); });
+afterEach(() => { P.useRenderer(null); P.setPrintTimeoutMs(null); P.setStopGraceMs(null); });
 
 describe('one print at a time', () => {
   it('two prints asked for together never overlap, and both finish', async () => {
@@ -49,11 +49,45 @@ describe('one print at a time', () => {
       signal?.addEventListener('abort', () => { stopped = true; });
     });
     P.setPrintTimeoutMs(50);
+    P.setStopGraceMs(50); // this renderer never returns; the real one does once killed
     P.useRenderer(hung);
     await expect(P.renderPrintable(spec, meta)).rejects.toThrow(/did not finish printing within/);
     expect(stopped).toBe(true);
     P.useRenderer(async () => ({ pdf: Buffer.from('%PDF-1.4'), sections: 9, overflow: [] }));
     expect((await P.renderPrintable(spec, meta)).sections).toBe(9);
+  });
+
+  // F2 audit of F1: the queue moved on the moment the timer fired, while the
+  // kill it signalled was still in flight — so the next print's browser could
+  // start beside a dying one. One at a time means one PROCESS at a time: the
+  // next print waits for the stopped one to be gone (bounded, so a renderer
+  // that never returns cannot jam the queue for ever).
+  it('after a print is stopped, the next does not start until the stopped one is gone', async () => {
+    let inside = 0; let most = 0;
+    const dying: import('../../src/services/venture/products/printable.js').Renderer = (_html, signal) => new Promise((_, reject) => {
+      inside += 1; most = Math.max(most, inside);
+      signal?.addEventListener('abort', () => { setTimeout(() => { inside -= 1; reject(new Error('killed')); }, 150); });
+    });
+    P.setPrintTimeoutMs(30);
+    P.useRenderer(dying);
+    const first = P.renderPrintable(spec, meta);
+    P.useRenderer(async () => { inside += 1; most = Math.max(most, inside); await new Promise((r) => setTimeout(r, 10)); inside -= 1; return { pdf: Buffer.from('%PDF-1.4'), sections: 9, overflow: [] }; });
+    const second = P.renderPrintable(spec, meta);
+    await expect(first).rejects.toThrow(/did not finish printing within/);
+    expect((await second).sections).toBe(9);
+    expect(most).toBe(1);
+  });
+
+  it('a stopped print that never returns holds the queue only for the grace period', async () => {
+    P.setPrintTimeoutMs(20);
+    P.setStopGraceMs(60);
+    P.useRenderer(() => new Promise(() => undefined));
+    const first = P.renderPrintable(spec, meta);
+    P.useRenderer(async () => ({ pdf: Buffer.from('%PDF-1.4'), sections: 9, overflow: [] }));
+    const started = Date.now();
+    await expect(first).rejects.toThrow(/did not finish printing within/);
+    expect((await P.renderPrintable(spec, meta)).sections).toBe(9);
+    expect(Date.now() - started).toBeLessThan(2_000);
   });
 
   it('a failed print does not jam the queue', async () => {

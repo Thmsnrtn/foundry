@@ -435,6 +435,11 @@ export const PRINT_TIMEOUT_MS = (() => {
 let timeoutOverride: number | null = null;
 /** For tests: a shorter timeout (null restores PRINT_TIMEOUT_MS). */
 export function setPrintTimeoutMs(ms: number | null): void { timeoutOverride = ms; }
+/** How long a stopped print may take to be gone before the queue moves on regardless. */
+export const STOP_GRACE_MS = 10_000;
+let graceOverride: number | null = null;
+/** For tests: a shorter grace (null restores STOP_GRACE_MS). */
+export function setStopGraceMs(ms: number | null): void { graceOverride = ms; }
 
 /**
  * THE LAUNCH LINE. Each flag is here for memory, not speed: no GPU process,
@@ -468,23 +473,34 @@ let queue: Promise<unknown> = Promise.resolve();
  */
 export function printOne(html: string, renderer: Renderer): Promise<RenderResult> {
   const limit = timeoutOverride ?? PRINT_TIMEOUT_MS;
+  // ONE PROCESS AT A TIME, NOT ONE PROMISE (F2 audit of F1). The caller hears
+  // of an overrun the moment the timer fires, but the QUEUE is released only
+  // when the stopped renderer has actually returned — its browser killed and
+  // reaped — or, if it never returns, after STOP_GRACE_MS. Releasing on the
+  // timer let the next print launch a browser beside a dying one.
+  let gone: Promise<unknown> = Promise.resolve();
   const run = async (): Promise<RenderResult> => {
     const controller = new AbortController();
     let timer: NodeJS.Timeout | undefined;
+    const printing = renderer(html, controller.signal);
+    const settled = printing.then(() => undefined, () => undefined);
+    gone = settled;
     const overrun = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
         controller.abort();
+        const grace = graceOverride ?? STOP_GRACE_MS;
+        gone = Promise.race([settled, new Promise<void>((r) => { setTimeout(r, grace).unref(); })]);
         reject(new Error(`the file did not finish printing within ${String(Math.round(limit / 1000))} s, so its browser was stopped`));
       }, limit);
     });
     try {
-      return await Promise.race([renderer(html, controller.signal), overrun]);
+      return await Promise.race([printing, overrun]);
     } finally {
       clearTimeout(timer);
     }
   };
   const mine = queue.then(run, run);
-  queue = mine.then(() => undefined, () => undefined);
+  queue = mine.then(() => gone, () => gone).then(() => undefined, () => undefined);
   return mine;
 }
 
