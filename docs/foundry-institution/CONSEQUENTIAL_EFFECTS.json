@@ -10,14 +10,7 @@
     },
     {
       "file": "src/services/ai/client.ts",
-      "line": 680,
-      "detector": "templated_post",
-      "status": "control_path",
-      "capability": "the central AI client — atomic reservation before dispatch, settlement or release after"
-    },
-    {
-      "file": "src/services/ai/client.ts",
-      "line": 863,
+      "line": 685,
       "detector": "templated_post",
       "status": "control_path",
       "capability": "the central AI client — atomic reservation before dispatch, settlement or release after"
