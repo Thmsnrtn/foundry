@@ -75,6 +75,10 @@ export interface TheRecord {
   experiment: { id: string; opportunityId: string; whatWeDo: string; whatWeExpect: string; wouldDisprove: string; costCents: number; unknown: string };
   candidate: { headline: string; whoHasIt: string; theProblem: string; whyItMight: string; killThesis: string; lighter: string | null };
   evidence: Array<{ sourceType: string; stance: string | null; bearing: string; saw: string; source: string; observedAt: string; fromAbsence: boolean }>;
+  /** Rows read for this candidate and left out because they are about something else (F3, relevance.ts). */
+  evidenceLeftOut: number;
+  /** What Foundry's own products about this subject sold, per channel, over 90 days (F3): the strongest signal. */
+  ownSales: Array<{ experimentId: string; what: string; daysListed: number | null; channels: Array<{ channel: string; sales: number; refunds: number; grossCents: number }> }>;
   /** The retrievals the evidence came from: the words the eyes were asked with, and what came back. A brief can be built only from these. */
   retrievals: Array<{ sourceType: string; terms: string; source: string; returned: number; relevant: number; at: string }>;
   unknowns: Array<{ question: string; blocking: boolean; cheapestTest: string | null; asks: 'demand' | 'distribution' | 'conversion' | 'fulfilment' }>;
@@ -110,7 +114,7 @@ export async function theRecordOf(experimentId: string): Promise<TheRecord | nul
   if (!e) return null;
   const founderId = String(e.founder_id);
   const opportunityId = String(e.opportunity_id);
-  const evidence = (await rows(
+  const evidenceRead = (await rows(
     `SELECT o.source_type, t.epistemic_stance, o.bearing, o.saw, o.source, o.observed_at, o.from_absence
        FROM market_observations o
        JOIN market_claims c ON c.id = o.claim_id
@@ -128,6 +132,15 @@ export async function theRecordOf(experimentId: string): Promise<TheRecord | nul
     bearing: bearingAsRead(r.bearing, r.from_absence), saw: shieldUntrustedContent(String(r.saw).slice(0, 400)).sanitized, source: String(r.source),
     observedAt: String(r.observed_at).slice(0, 10), fromAbsence: Number(r.from_absence) === 1,
   }));
+  // ONLY ROWS ABOUT THIS CANDIDATE REACH A REVIEWER (F3, relevance.ts), counted.
+  const { keepWhatIsAbout } = await import('./relevance.js');
+  const subject = `${String(e.headline)} ${String(e.who_has_it)} ${String(e.the_problem)}`;
+  const onTopic = keepWhatIsAbout(subject, evidenceRead, (r) => r.saw);
+  const evidence = onTopic.kept;
+  // FOUNDRY'S OWN SALES, THE STRONGEST SIGNAL (F3): what its own products about
+  // this subject sold, on every channel, in the last 90 days — real money from
+  // strangers shown a real offer, beside which every other row is a proxy.
+  const ownSales = await ownSalesAbout(founderId, subject);
   const retrievals = (await rows(
     `SELECT DISTINCT r.source_type, r.terms, r.source, r.returned_count, r.relevant_count, r.retrieved_at
        FROM market_retrievals r
@@ -178,7 +191,7 @@ export async function theRecordOf(experimentId: string): Promise<TheRecord | nul
       wouldDisprove: String(e.would_disprove), costCents: Number(e.cost_cents), unknown: String(e.unknown) },
     candidate: { headline: String(e.headline), whoHasIt: String(e.who_has_it), theProblem: String(e.the_problem),
       whyItMight: String(e.why_it_might), killThesis: String(e.kill_thesis), lighter: e.lighter_architecture == null ? null : String(e.lighter_architecture) },
-    evidence, retrievals, unknowns, lessons, precedent,
+    evidence, evidenceLeftOut: onTopic.dropped, ownSales, retrievals, unknowns, lessons, precedent,
     season: await (await import('./storefront/seasonality.js')).seasonFor(founderId, `${String(e.headline)} ${String(e.what_we_do)}`, new Date()),
     legal: { sentence: picture.sentence, inTheWay: picture.inTheWay },
     charter: envelope ? { monthlyCents: envelope.charter.monthlyCents, remainingCents: envelope.remainingCents,
@@ -223,7 +236,8 @@ function recordBlock(r: TheRecord): string {
     '<record>',
     `CANDIDATE: ${j(r.candidate)}`,
     `THE TEST AS PROPOSED (from the cheapest thing that would settle an unknown): ${j(r.experiment)}`,
-    `EVIDENCE (each with its source type, the stance that kind of source supplies, what it bore on its own claim — "found_nothing" is a search that came back with nothing on the subject, which is not support — and an address): ${j(r.evidence)}`,
+    `OWN SALES (what Foundry's own pages sold, the strongest signal: strangers shown a real offer, per channel, last 90 days; an empty list means none of its products is about this): ${j(r.ownSales)}`,
+    `EVIDENCE (${String(r.evidenceLeftOut)} rows about something else were left out; each with its source type, the stance that kind of source supplies, what it bore on its own claim — "found_nothing" is a search that came back with nothing on the subject, which is not support — and an address): ${j(r.evidence)}`,
     `RETRIEVALS (the words the eyes were asked with, and what came back; a brief can be built only from these): ${j(r.retrievals)}`,
     `OPEN UNKNOWNS (each with which of the four questions it asks — demand, distribution, conversion, fulfilment — so the cheapest test is for the question actually open): ${j(r.unknowns)}`,
     `LESSONS OF SETTLED TESTS (what each could not establish): ${j(r.lessons)}`,
@@ -1007,4 +1021,27 @@ export async function forgePass(founderId: string, now: Date = new Date()): Prom
     }
   }
   return out;
+}
+
+/** Foundry's own products whose words share the subject, and what each sold on every channel (F3). */
+async function ownSalesAbout(founderId: string, subject: string): Promise<TheRecord['ownSales']> {
+  const { channelPnl } = await import('./storefront/reconcile.js');
+  const { isAbout } = await import('./relevance.js');
+  const out: TheRecord['ownSales'] = [];
+  const listed = await rows(
+    `SELECT e.id, e.what_we_do, o.headline, (SELECT MIN(x.placed_at) FROM experiment_exposures x WHERE x.experiment_id = e.id) AS placed
+       FROM venture_experiments e LEFT JOIN venture_opportunities o ON o.id = e.opportunity_id
+      WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND e.decision = 'approved'
+        AND EXISTS (SELECT 1 FROM experiment_exposures x WHERE x.experiment_id = e.id)`, [founderId]);
+  if (listed.length === 0) return out;
+  const pnl = new Map((await channelPnl(founderId, 90, 'real')).map((st) => [st.experimentId, st]));
+  for (const r of listed) {
+    const what = `${String(r.headline ?? '')} ${String(r.what_we_do ?? '')}`.trim();
+    if (!isAbout(subject, what).about) continue;
+    const st = pnl.get(String(r.id));
+    const placed = r.placed == null ? NaN : Date.parse(String(r.placed).replace(' ', 'T') + (String(r.placed).includes('Z') ? '' : 'Z'));
+    out.push({ experimentId: String(r.id), what: what.slice(0, 200), daysListed: Number.isFinite(placed) ? Math.floor((Date.now() - placed) / 86_400_000) : null,
+      channels: (st?.channels ?? []).map((c) => ({ channel: c.channel, sales: c.sales, refunds: c.refunds, grossCents: c.grossCents })) });
+  }
+  return out.slice(0, 6);
 }

@@ -231,6 +231,41 @@ const githubIssues: Asker = {
   },
 };
 
+const stackExchange: Asker = {
+  provider: 'stack_exchange', sourceType: 'community', stance: 'problem_pain',
+  question: (words) => `whether people ask each other how to deal with it, searching Stack Exchange's question sites for "${words}"`,
+  async ask(input) {
+    const { whatPeopleAsked, SITES } = await import('./stack-exchange.js');
+    const claim = `people ask each other how to deal with this: ${input.seed}`;
+    const claimId = await claimFor(input, claim);
+    const asked: Awaited<ReturnType<typeof whatPeopleAsked>>['found'] = [];
+    let url = ''; let total = 0; let observedAt = new Date();
+    for (const site of SITES.slice(0, 2)) {
+      const r = await whatPeopleAsked(input.words, site, 5);
+      asked.push(...r.found); url ||= r.url; total += r.total; observedAt = r.observedAt;
+    }
+    const onSubject = asked.filter((a) => relevanceOf(input.words, '', a.text).relevant);
+    const sentence = onSubject.length === 0
+      ? `Nobody on Stack Exchange's question sites asks about "${input.words}"${asked.length ? ` — ${String(asked.length)} questions came back and none is about this` : ''}.`
+      : `${String(onSubject.length)} question(s) on Stack Exchange ask about "${input.words}"; the newest: "${onSubject[0]!.text.slice(0, 140)}".`;
+    const retrievalId = await recordRetrieval({
+      founderId: input.founderId, sourceType: 'community', source: url, terms: input.words, returnedCount: total,
+      canSee: 'what people ask each other about everyday work, and when', cannotSee: 'who they are, whether an answer solved it, and whether anybody would pay',
+      wouldMostHelp: 'somebody with the problem, asked directly', notAlsoTried: null, evidenceMode: 'real',
+      items: asked.map((a) => ({ label: a.text.slice(0, 90), url: a.url, datedAt: a.saidAt, said: a.text.slice(0, 500),
+        relevant: onSubject.includes(a), sharedTerms: relevanceOf(input.words, '', a.text).shared })),
+    });
+    await observe({ retrievalId, fromAbsence: onSubject.length === 0, founderId: input.founderId, claimId, sourceType: 'community',
+      source: url, saw: sentence, bearing: onSubject.length === 0 ? 'contradicts' : 'supports', directness: 'inferred', observedAt, evidenceMode: 'real' });
+    for (const voice of onSubject.slice(0, 3)) {
+      await observe({ retrievalId, fromAbsence: false, founderId: input.founderId, claimId, sourceType: 'community', source: voice.url,
+        saw: voice.text.slice(0, 500), bearing: 'supports', directness: 'direct', observedAt: new Date(voice.saidAt ?? observedAt), evidenceMode: 'real' });
+    }
+    return { provider: this.provider, sourceType: this.sourceType, stance: this.stance, claimId,
+      asked: this.question(input.words), found: onSubject.length === 0 ? 'empty' : 'found', sentence };
+  },
+};
+
 // ─── demand_signal ───────────────────────────────────────────────────────────
 
 const searchDemand: Asker = {
@@ -301,6 +336,54 @@ const remotiveJobs: Asker = {
   },
 };
 
+// ─── transaction ─────────────────────────────────────────────────────────────
+
+const etsyMarketplace: Asker = {
+  provider: 'etsy_marketplace_search', sourceType: 'marketplace', stance: 'transaction',
+  question: (words) => `whether something like it already sells, and at what price, searching a marketplace for "${words}"`,
+  async ask(input) {
+    const { whatSells, CAN_SEE, CANNOT_SEE, WOULD_MOST_HELP, CANNOT_TELL_US } = await import('./marketplace.js');
+    const { etsyAppKey, etsyApiKeyHeader } = await import('../../senses/app-credential.js');
+    const key = await etsyAppKey();
+    // NO KEY, NO LOOK — and not an absence: nothing was asked, so nothing is filed.
+    if (!key) throw new Error('no Etsy application key has been placed, so the marketplace was not asked');
+    const claim = `people already pay for something like this on a marketplace: ${input.seed}`;
+    const claimId = await claimFor(input, claim);
+    const search = await whatSells(input.words, etsyApiKeyHeader(key), { limit: 25 });
+    const relevant = search.found.filter((l) => l.relevant);
+    const reviewed = relevant.filter((l) => (l.reviews ?? 0) > 0);
+    const price = search.medianPriceCents === null ? '' : `, asking $${(search.medianPriceCents / 100).toFixed(2)} in the middle`;
+    const sentence = relevant.length === 0
+      ? `Nothing on the subject is for sale on Etsy for "${input.words}"${search.found.length ? `: ${String(search.found.length)} listings came back and none is about this` : ''}.`
+      : `${String(relevant.length)} listing(s) on Etsy are about "${input.words}"${price}; `
+        + (reviewed.length === 0 ? 'none of the ones read has a buyer\'s review, so none is shown to have sold.'
+          : `${String(reviewed.length)} of them have buyers' reviews (${reviewed.map((l) => `${String(l.reviews)} on "${l.title.slice(0, 60)}"`).join('; ')}), and a review on Etsy needs a purchase.`);
+    const retrievalId = await recordRetrieval({
+      founderId: input.founderId, sourceType: 'marketplace', source: search.url, terms: input.words,
+      returnedCount: search.total, canSee: CAN_SEE, cannotSee: CANNOT_SEE, wouldMostHelp: WOULD_MOST_HELP,
+      notAlsoTried: null, evidenceMode: 'real',
+      items: search.found.map((l) => ({ label: l.title.slice(0, 90), url: l.url, datedAt: l.listedAt,
+        said: `${l.title}${l.priceCents === null ? '' : ` — $${(l.priceCents / 100).toFixed(2)}`}${l.reviews === null ? '' : `, ${String(l.reviews)} reviews`}${l.favourites === null ? '' : `, saved ${String(l.favourites)} times`}`.slice(0, 500),
+        relevant: l.relevant, sharedTerms: l.shared })),
+    });
+    await observe({
+      retrievalId, fromAbsence: reviewed.length === 0, founderId: input.founderId, claimId, sourceType: 'marketplace',
+      source: search.url, saw: sentence, bearing: reviewed.length === 0 ? 'contradicts' : 'supports',
+      directness: 'direct', observedAt: search.observedAt, evidenceMode: 'real',
+    });
+    for (const l of reviewed.slice(0, 3)) {
+      await observe({
+        retrievalId, fromAbsence: false, founderId: input.founderId, claimId, sourceType: 'marketplace', source: l.url,
+        saw: `${l.title} — ${l.priceCents === null ? 'price not read' : `$${(l.priceCents / 100).toFixed(2)}`}, ${String(l.reviews)} buyers' reviews`.slice(0, 500),
+        bearing: 'supports', directness: 'direct', observedAt: new Date(l.listedAt ?? search.observedAt), evidenceMode: 'real',
+      });
+    }
+    await raiseWhatItCannotSettle(input.founderId, input.opportunityId ?? null, claimId, CANNOT_TELL_US);
+    return { provider: this.provider, sourceType: this.sourceType, stance: this.stance, claimId,
+      asked: this.question(input.words), found: reviewed.length === 0 ? 'empty' : 'found', sentence };
+  },
+};
+
 // ─── usage ───────────────────────────────────────────────────────────────────
 
 const wikipediaPageviews: Asker = {
@@ -333,7 +416,14 @@ const wikipediaPageviews: Asker = {
   },
 };
 
-const ASKERS: Asker[] = [npmRegistry, appleAppStore, appleReviews, hnCommunity, githubIssues, searchDemand, remotiveJobs, wikipediaPageviews];
+/** Which named terms (terms.ts) each provider reads under. */
+export const TERMS_OF: Readonly<Record<string, string>> = Object.freeze({
+  npm_registry: 'npm_registry', apple_app_store: 'itunes_search', apple_app_reviews: 'itunes_search', hn_algolia: 'hn_algolia',
+  github_issues: 'github_issues', duckduckgo_autocomplete: 'duckduckgo_autocomplete', remotive: 'remotive',
+  wikipedia_pageviews: 'wikimedia', etsy_marketplace_search: 'etsy_marketplace_search', stack_exchange: 'stack_exchange',
+});
+
+const ASKERS: Asker[] = [npmRegistry, appleAppStore, appleReviews, hnCommunity, githubIssues, stackExchange, searchDemand, remotiveJobs, wikipediaPageviews, etsyMarketplace];
 
 /**
  * THE ASKERS FOUNDRY CAN REACH FOR THESE STANCES, in registry order. A provider
@@ -347,7 +437,12 @@ export async function askersFor(stances: string[], world: 'real' | 'reference' =
       WHERE p.supplies_source_type IS NOT NULL AND p.maturity NOT IN ('unavailable','degraded')`, []))
     .rows as unknown as Array<Record<string, unknown>>).map((r) => String(r.provider)));
   const wanted = new Set(stances);
-  return ASKERS.filter((a) => wanted.has(a.stance) && reachable.has(a.provider))
+  // ONLY A SOURCE WHOSE TERMS LET IT BE READ (F3, terms.ts): an unknown one
+  // waits for his word and is not asked meanwhile, rather than asked and refused.
+  const { mayAsk } = await import('./terms.js');
+  const allowed = new Set<string>();
+  for (const a of ASKERS) if (await mayAsk(TERMS_OF[a.provider] ?? a.provider)) allowed.add(a.provider);
+  return ASKERS.filter((a) => wanted.has(a.stance) && reachable.has(a.provider) && allowed.has(a.provider))
     .map((a, i) => ({ a, i }))
     .sort((x, y) => stances.indexOf(x.a.stance) - stances.indexOf(y.a.stance) || x.i - y.i)
     .map((x) => x.a);
