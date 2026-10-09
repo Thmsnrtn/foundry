@@ -117,6 +117,12 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
   const pnl = await channelPnl(founderId, 30);
   const { taxThresholdAlert } = await import('../../services/venture/storefront/tax.js');
   const taxAlerts = await taxThresholdAlert(founderId);
+  const { VISITS_NOT_RECORDED, SEASONAL_PRIORS, launchTiming } = await import('../../services/venture/storefront/seasonality.js');
+  const visitsNote = VISITS_NOT_RECORDED;
+  const seasons = ((await query(
+    `SELECT month, signal, channel, value FROM demand_signals WHERE founder_id = ? AND evidence_mode = 'real' ORDER BY month DESC, channel, signal LIMIT 36`,
+    [founderId])).rows as Array<Record<string, unknown>>).map((r) => ({ month: String(r.month), signal: String(r.signal), channel: String(r.channel), value: Number(r.value) }));
+  const timings = Object.keys(SEASONAL_PRIORS).map((theme) => ({ theme, ...launchTiming(theme, new Date())! }));
   const concentration = await channelConcentration(founderId, 90);
   const hisFloor = await priceFloorOf(founderId);
   const floorLine = hisFloor
@@ -343,6 +349,10 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
           · fees ${ch.feesCents === null ? 'not known' : dollars(ch.feesCents)} · net <b>${ch.netCents === null ? 'not known' : dollars(ch.netCents)}</b>
           <br /><small class="quiet">${ch.because}</small></li>`))}</ul>`}
       <p class="quiet">${concentration.sentence}</p>
+      <h3>Foundry's own seasons</h3>
+      ${seasons.length === 0 ? html`<p class="quiet">No month has been recorded yet; the first is recorded when a month ends. ${visitsNote}</p>`
+        : html`<ul class="sales">${seasons.map((r) => html`<li>${r.month}, ${channelName(r.channel)}: ${r.signal === 'net_cents' ? `net ${dollars(r.value)}` : `${String(r.value)} ${r.signal}`}</li>`)}</ul><p class="quiet">${visitsNote}</p>`}
+      <p class="quiet">Until Foundry has a year of its own, these priors stand in, each an assumption: ${timings.map((t) => `${t.theme} — list by ${t.listBy} for its peak in month ${String(t.peakMonth)}`).join('; ')}.</p>
       <h3>Tax on the Workshop page</h3>
       <ul class="sales">${taxAlerts.map((a) => html`<li>${a.level === 'approaching' || a.level === 'over' ? html`<strong>${a.sentence}</strong>` : a.sentence}</li>`)}</ul>
       <form class="inline" method="POST" action="/foundry/money/channel-listing">

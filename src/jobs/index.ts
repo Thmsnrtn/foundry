@@ -1307,6 +1307,19 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
       } catch (err) {
         logger.warn(`experiment_hand_tick: reading the channels threw: ${err instanceof Error ? err.message : String(err)}`, { jobName: 'experiment_hand_tick' });
       }
+      // FOUNDRY'S OWN SEASONS (F2): the month that just ended, recorded once,
+      // from the ledgers; a pass later in the month is no change.
+      try {
+        const { recordDemandSignals, monthToRecord } = await import('../services/venture/storefront/seasonality.js');
+        const month = monthToRecord(new Date());
+        const { query: q } = await import('../db/client.js');
+        for (const f of (await q('SELECT id FROM founders ORDER BY id', [])).rows as Array<Record<string, unknown>>) {
+          const r = await recordDemandSignals(String(f.id), month);
+          if (r.recorded) logger.info(`experiment_hand_tick: ${String(r.recorded)} demand signals recorded for ${month}`, { jobName: 'experiment_hand_tick' });
+        }
+      } catch (err) {
+        logger.warn(`experiment_hand_tick: recording the month's demand threw: ${err instanceof Error ? err.message : String(err)}`, { jobName: 'experiment_hand_tick' });
+      }
       // A LISTING DOES NOT GO QUIET WHEN ITS EXPERIMENT DOES. `settleListings`
       // below withdraws the exposure the moment a test settles, and without
       // this second pass that same withdrawal is what drops the experiment out
