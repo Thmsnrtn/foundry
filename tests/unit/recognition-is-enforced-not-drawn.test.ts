@@ -152,17 +152,24 @@ describe('the boundary is at the door, so no origin goes around it', () => {
     // That is safe today and it is worth writing down: the day a tool is bound
     // to `list_on_marketplace`, this clause becomes load-bearing for the first
     // time, and it will already have been proven by the offer case below.
+    // F2 (9 October 2026) BOUND ONE: Gumroad's activation is
+    // `gumroad_enable_product` on `list_on_marketplace`. Etsy's stay unbound.
     const bound = (await query(
-      `SELECT p.id, p.tool FROM capability_providers p
+      `SELECT p.id, p.provider, p.tool FROM capability_providers p
         WHERE p.capability_key = 'list_on_marketplace'`))
       .rows as unknown as Array<Record<string, unknown>>;
     expect(bound.length).toBeGreaterThan(0);
-    for (const r of bound) expect(r.tool, String(r.id)).toBeNull();
+    for (const r of bound.filter((x) => x.provider === 'etsy')) expect(r.tool, String(r.id)).toBeNull();
+    expect(bound.filter((x) => x.tool !== null).map((x) => x.tool)).toEqual(['gumroad_enable_product']);
 
-    const stood = await qualificationStandsInTheWay({
-      experimentId: X, tool: 'post_listing', kind: null,
-    });
-    expect(stood).toBeNull();
+    // An unbound tool still resolves to nothing, as before.
+    expect(await qualificationStandsInTheWay({ experimentId: X, tool: 'post_listing', kind: null })).toBeNull();
+    // AND THE CLAUSE IS NOW LOAD-BEARING, as this test said it would be: a
+    // marketplace write through the bound tool is refused while the shop is
+    // unrecognised, exactly as an offer is.
+    const stood = await qualificationStandsInTheWay({ experimentId: X, tool: 'gumroad_enable_product', kind: null });
+    expect(stood).not.toBeNull();
+    expect(stood!.blocking).toContain(SHOP);
   });
 
   it('refuses an offer while the shop is unrecognised', async () => {

@@ -18,6 +18,7 @@ import { pathSegment } from '../outbound/path-segment.js';
 import { withRetry } from '../resilience.js';
 import { log } from '../../lib/logger.js';
 import { priceIsMostlyFees } from '../venture/fee-floor.js';
+import { query } from '../../db/client.js';
 
 const STRIPE_TIMEOUT_MS = 10_000;
 const STRIPE_API = 'https://api.stripe.com/v1';
@@ -301,6 +302,20 @@ async function createPaymentLinkHandler(req: GatewayRequest): Promise<{ id: stri
   if (params.confirmation_message) {
     link.set('after_completion[type]', 'hosted_confirmation');
     link.set('after_completion[hosted_confirmation][custom_message]', params.confirmation_message.slice(0, 500));
+  }
+  // STRIPE TAX, ON HIS WORD ONLY (F2, PENDING 35): his own signed `stripe_tax`
+  // row turns on automatic tax; with none the link carries no tax line. Stripe
+  // Tax must be activated on the account for this to succeed, which is his act.
+  // A read that fails adds no tax line: tax is his opt-in, and an unreadable
+  // opt-in is not a yes (the link is what it was before he decided).
+  try {
+    const owner = (await query('SELECT owner_id FROM products WHERE id = ?', [req.productId])).rows[0] as Record<string, unknown> | undefined;
+    if (owner?.owner_id) {
+      const { stripeTaxOn } = await import('../venture/storefront/tax.js');
+      if (await stripeTaxOn(String(owner.owner_id))) link.set('automatic_tax[enabled]', 'true');
+    }
+  } catch (err) {
+    log.warn('stripe.create_payment_link.tax_unread', { productId: req.productId, error: err instanceof Error ? err.message : String(err) });
   }
   const data = await stripeForm(apiKey, 'payment_links', link, `${key}:link`);
   log.info('stripe.create_payment_link.ok', { productId: req.productId, paymentLinkId: String(data.id) });

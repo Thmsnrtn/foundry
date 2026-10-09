@@ -1295,6 +1295,31 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
             + `${err instanceof Error ? err.message : String(err)}`, { jobName: 'experiment_hand_tick' });
         }
       }
+      // EVERY CHANNEL HE OPENED IS READ TOO (F2): Gumroad's sales and Lemon
+      // Squeezy's orders, recorded once against the canonical product. With no
+      // grant nothing is read; a channel that fails says why and blocks nothing.
+      try {
+        const { readOpenChannels } = await import('../services/venture/storefront/index.js');
+        for (const c of await readOpenChannels()) {
+          logger.info(`experiment_hand_tick: ${c.channel} for ${c.founderId}: ${c.result.read ? `${String(c.result.recorded)} new, ${String(c.result.repeated)} already recorded, ${String(c.result.notOurs)} not ours` : c.result.because}`,
+            { jobName: 'experiment_hand_tick' });
+        }
+      } catch (err) {
+        logger.warn(`experiment_hand_tick: reading the channels threw: ${err instanceof Error ? err.message : String(err)}`, { jobName: 'experiment_hand_tick' });
+      }
+      // FOUNDRY'S OWN SEASONS (F2): the month that just ended, recorded once,
+      // from the ledgers; a pass later in the month is no change.
+      try {
+        const { recordDemandSignals, monthToRecord } = await import('../services/venture/storefront/seasonality.js');
+        const month = monthToRecord(new Date());
+        const { query: q } = await import('../db/client.js');
+        for (const f of (await q('SELECT id FROM founders ORDER BY id', [])).rows as Array<Record<string, unknown>>) {
+          const r = await recordDemandSignals(String(f.id), month);
+          if (r.recorded) logger.info(`experiment_hand_tick: ${String(r.recorded)} demand signals recorded for ${month}`, { jobName: 'experiment_hand_tick' });
+        }
+      } catch (err) {
+        logger.warn(`experiment_hand_tick: recording the month's demand threw: ${err instanceof Error ? err.message : String(err)}`, { jobName: 'experiment_hand_tick' });
+      }
       // A LISTING DOES NOT GO QUIET WHEN ITS EXPERIMENT DOES. `settleListings`
       // below withdraws the exposure the moment a test settles, and without
       // this second pass that same withdrawal is what drops the experiment out

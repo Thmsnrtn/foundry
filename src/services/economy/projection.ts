@@ -936,8 +936,10 @@ export async function costToServe(founderId: string, days = 30): Promise<CostToS
             COALESCE(SUM(CASE WHEN e.kind IN ('refund','dispute_withdrawal') THEN e.amount_cents END), 0) AS returned,
             COALESCE(SUM(CASE WHEN e.kind IN ('provider_fee','dispute_fee') THEN e.amount_cents END), 0) AS fees,
             COALESCE(SUM(CASE WHEN e.kind = 'refund_fee_returned' THEN e.amount_cents END), 0) AS fees_back,
-            COUNT(DISTINCT CASE WHEN e.kind = 'charge' THEN e.fulfilment_id END) AS charges,
-            COUNT(DISTINCT CASE WHEN e.kind = 'provider_fee' THEN e.fulfilment_id END) AS fee_read
+            -- PER CHARGE, not per fulfilment (F2 audit of F1): a fulfilment
+            -- charged twice with one fee read does not have its fees known.
+            COUNT(CASE WHEN e.kind = 'charge' THEN 1 END) AS charges,
+            COUNT(CASE WHEN e.kind = 'provider_fee' THEN 1 END) AS fee_read
        FROM economic_events e JOIN experiment_fulfilments f ON f.id = e.fulfilment_id
       WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND datetime(e.occurred_at) >= datetime('now', ?)
       GROUP BY f.experiment_id`, [founderId, since])).rows as Array<Record<string, unknown>>;

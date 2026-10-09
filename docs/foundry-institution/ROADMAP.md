@@ -189,24 +189,31 @@ real sale; revenue net of fees and refunds per stream; the held-out panel's
 "yes" rate; owner minutes under 10 a week; zero charter breaches and zero
 fabrications.
 
-**FQ — products a stranger would pay for** (alongside F2, before any paid push):
-- **[code]** fillable PDF forms (every panel persona asked for them), if not built;
-- **[owner]** a held-out buyer panel run on a real model, within the real-model
-  budget, on the products made; target a majority of yes or "maybe at the price";
-- **[owner]** the pricing floor against fees (PENDING 44); each stream's net is
-  on Economics since F1;
-- **[code]** accessible, tagged PDFs, and the version shown on the listing.
+**FQ — products a stranger would pay for: done in code on `claude/foundry-f2-reach`**, not deployed:
+- **[code, done]** fillable PDF forms: an AcroForm field on every blank;
+- **[owner]** the held-out panel on a real model: the command is ready
+  (`tests/simulation/panel/run-real-panel.mts`, about $0.45 by its estimate);
+  it needs the key and a ceiling;
+- **[owner]** the pricing floor against fees (PENDING 44): the check reads his
+  row and refuses every channel listing until it exists; each listing shows
+  what every channel leaves;
+- **[code, done]** accessible, tagged PDFs with an outline, and the version on
+  the file, its title and every listing.
 
 **F1 — ready to run cheaply: done in code on `claude/foundry-f1-lean`**, not
-deployed (see the Done table and `IMPLEMENTATION_STATE.md`, "F1").
+deployed (see the Done table and `IMPLEMENTATION_STATE.md`, "F1"); audited by
+F2's session, five gaps closed (`IMPLEMENTATION_STATE.md`, "FQ and F2").
 
-**F2 — distribution:** one storefront adapter per channel, decided as every
-channel (PENDING 42), each opened by the owner's own grant (PENDING 43); until
-then the Workshop's own page and Stripe stay the live path. Every product ships
-with a free lead magnet and an article on the Workshop, with IndexNow, started
-as soon as F2 opens because being found takes months (with llms.txt and
-structured data). An optional ad test only from a standing allowance he sets.
-Gate: a calibrated twin year in the base band, then a real pilot he watches.
+**F2 — distribution: done in code on `claude/foundry-f2-reach`**, not deployed.
+One storefront over Etsy, Gumroad and Lemon Squeezy; the Workshop's page stays
+the live path. Every printable ships with its guide, a free page and llms.txt,
+announced through IndexNow. Stripe Tax on his word; thresholds as an alert; EU
+and UK buyers routed to a merchant of record once one carries the product; his
+own demand recorded monthly. Gate: the twin year on every channel reconciles
+cent for cent and sits inside the band, below its base. **Next, his:** open a
+merchant-of-record channel (PENDING 43), set the floor (PENDING 44), say whether
+an allowed test may list on his channels (PENDING 47); then a real pilot he
+watches. The optional ad test is not built.
 
 **F3 — wider, fresher eyes:** marketplace search signals, autocomplete and
 trends, forums, rotating newest-first terms, Foundry's own sales as the

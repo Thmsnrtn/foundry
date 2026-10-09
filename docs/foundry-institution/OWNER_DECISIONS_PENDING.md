@@ -13,9 +13,9 @@ around each item.
 ---
 
 <!-- status:begin — generated from the headings below by node scripts/check-record-matches-code.mjs --write -->
-# 24 WAITING ON THE OWNER, 3 WITH COUNSEL, 10 DECIDED IN PLACE
+# 26 WAITING ON THE OWNER, 3 WITH COUNSEL, 10 DECIDED IN PLACE
 
-- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 21, 25, 26, 27, 29, 30, 32, 33, 34, 35, 36, 37, 38, 39, 40, 43, 44, 45, 46.
+- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 21, 25, 26, 27, 29, 30, 32, 33, 34, 35, 36, 37, 38, 39, 40, 43, 44, 45, 46, 47, 48.
 - **Waiting on counsel:** PENDING 9, 13, 15 (interim positions in force; see below).
 - **Decided, and kept where they were asked:** PENDING 16, 19, 20, 22, 23, 24, 28, 31, 41, 42.
 - **Answered and recorded as RESOLVED:** 15.
@@ -2472,3 +2472,61 @@ allow; with no charter, the pre-charter bound of $1 a day binds.
 
 **Recommendation.** Keep 10% until there is revenue to read; it changes nothing
 today, when the trailing revenue is $0.
+
+---
+
+## PENDING 47 — May allowing a test also allow listing it on the channels you opened: **OWNER** (2026-10-09)
+
+**What is true (F2).** Gumroad's three acts (upload the file, make a draft,
+put it on sale) are bound at the outbound door to the capabilities migration
+339 graded. The door lets an experimental asset reach the world only through an
+act its approved test carries, and allowing a test today carries the Workshop's
+payment link, not a channel listing. So with your floor set and Gumroad open,
+listing is still refused at the door, and nothing is sent.
+
+**Your choice.**
+- **(a)** Allowing a test also allows listing it on every channel you have
+  opened, at your floor, with the same version and disclosure (the public step
+  still draws on the allowance or your exact approval).
+- **(b)** Each listing is its own decision, asked once per product and channel.
+- **(c)** Not yet.
+
+**Recommendation.** (a): you open each channel once, and the floor and the
+allowance already bound what a listing can cost; (b) costs your minutes per
+product.
+
+---
+
+## PENDING 48 — How much of the revenue one channel may carry: **OWNER** (2026-10-09)
+
+**What is true.** The per-channel diversification limit is an alert when one
+channel carries more than 60% of the last 90 days' revenue (`MAX_CHANNEL_SHARE`,
+an assumption). It acts on nothing; it says so on Economics.
+
+**Your choice.** Keep 60%; another share; or none.
+
+**Recommendation.** Keep 60% until a year of sales says otherwise.
+
+---
+
+## Updates of 9 October 2026 (F2), against earlier items
+
+- **PENDING 35 (tax):** turning Stripe Tax on is now one act of yours — your
+  `stripe_tax` row adds automatic tax to every payment link the door mints (0.5%
+  a sale) — but it needs Stripe Tax activated on the Stripe account first (head
+  office address, registrations), in Stripe's dashboard, or link creation
+  fails. Economics shows the thresholds as an alert: EU and UK zero for a seller
+  outside them, US $100,000 in most states; the buyer's country is not
+  recorded, so whether a sale was taxable abroad is not known. EU and UK buyers
+  are sent to a merchant of record once one carries the product.
+- **PENDING 42 (every channel):** built, see `IMPLEMENTATION_STATE.md`, "FQ and
+  F2".
+- **PENDING 43 (accounts):** Controls → Your decisions → "Open the channels
+  Foundry may sell on" takes the channel, and for Lemon Squeezy its store id,
+  for Etsy your answer to "who made it" and the category; the key is pasted
+  beside it and kept only after the channel confirms the account. Lemon
+  Squeezy cannot create a product by API: you make it once from the canonical
+  listing and record its id on Economics.
+- **PENDING 44 (floor):** Economics → "Every channel" → "Set the floor", in
+  dollars, as the share fees may take, or per channel. Until then no channel
+  listing is placed.

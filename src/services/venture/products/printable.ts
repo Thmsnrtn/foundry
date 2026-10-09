@@ -403,7 +403,103 @@ export function printableCss(): string {
     `url(data:font/woff2;base64,${readFileSync(resolve(dir, file)).toString('base64')})`);
 }
 
-export interface RenderResult { pdf: Buffer; sections: number; overflow: string[] }
+export interface RenderResult { pdf: Buffer; sections: number; overflow: string[]; fields?: FieldBox[] }
+
+// ─── Blanks a reader can fill (FQ, 9 October 2026) ───────────────────────────
+//
+// Every buyer persona asked whether the file could be filled in on screen. The
+// design system already draws every blank — a labelled underline (div.field),
+// writing lines (div.lines), the empty cells of a worksheet table (table.ws),
+// the square before a checklist item (ul.check) — so the printer measures each
+// one where Chromium laid it out (FIELD_PROBE) and `addFormFields` puts a real
+// AcroForm field on it: transparent and borderless, so the printed page looks
+// exactly as it did, and named for what it asks, so a screen reader can say it.
+
+/** One blank, measured in CSS pixels from the top-left of its printed page. */
+export interface FieldBox { page: number; kind: 'text' | 'check'; label: string; x: number; y: number; w: number; h: number; pageW: number; pageH: number }
+
+const FIELD_PROBE = `(() => {
+  const out = [];
+  const clean = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+  Array.from(document.querySelectorAll('section.page')).forEach((page, pi) => {
+    const o = page.getBoundingClientRect();
+    const heading = clean(page.getAttribute('data-heading')) || ('page ' + (pi + 1));
+    const push = (kind, label, r) => {
+      if (r.width < 4 || r.height < 4) return;
+      out.push({ page: pi, kind, label: clean(label).slice(0, 120), x: r.left - o.left, y: r.top - o.top, w: r.width, h: r.height, pageW: o.width, pageH: o.height });
+    };
+    page.querySelectorAll('div.field').forEach((f) => {
+      const line = f.querySelector('i');
+      const label = f.querySelector('span');
+      if (line) push('text', label ? label.textContent : heading, line.getBoundingClientRect());
+    });
+    page.querySelectorAll('div.lines').forEach((d) => {
+      Array.from(d.querySelectorAll('i')).forEach((line, k) => push('text', heading + ', line ' + (k + 1), line.getBoundingClientRect()));
+    });
+    page.querySelectorAll('table.ws').forEach((t) => {
+      const heads = Array.from(t.querySelectorAll('thead th')).map((th) => clean(th.textContent));
+      Array.from(t.querySelectorAll('tbody tr')).forEach((tr, ri) => {
+        const lbl = tr.querySelector('td.lbl');
+        Array.from(tr.children).forEach((td, ci) => {
+          if (td.tagName !== 'TD' || td.classList.contains('lbl') || clean(td.textContent) !== '') return;
+          const col = heads[ci] || ('column ' + (ci + 1));
+          push('text', (lbl ? clean(lbl.textContent) + ', ' : '') + col + (lbl ? '' : ', row ' + (ri + 1)), td.getBoundingClientRect());
+        });
+      });
+    });
+    page.querySelectorAll('ul.check li').forEach((li) => {
+      const r = li.getBoundingClientRect();
+      const b = getComputedStyle(li, '::before');
+      const w = parseFloat(b.width); const h = parseFloat(b.height);
+      push('check', li.textContent, { left: r.left + (parseFloat(b.left) || 0), top: r.top + (parseFloat(b.top) || 0), width: w, height: h });
+    });
+  });
+  return out;
+})()`;
+
+/**
+ * PUT A FIELD ON EVERY BLANK. Pixels become points by the page's own width
+ * (8.5 in is 816 CSS px and 612 pt), and the top-left origin becomes the PDF's
+ * bottom-left. Each field is transparent and borderless, carries its label as
+ * its accessible name (TU), and has a name unique in the file. No boxes: the
+ * file comes back untouched.
+ */
+export async function addFormFields(pdf: Buffer, boxes: FieldBox[]): Promise<Buffer> {
+  if (boxes.length === 0) return pdf;
+  const { PDFDocument, PDFName, PDFHexString } = await import('pdf-lib');
+  const doc = await PDFDocument.load(pdf);
+  const form = doc.getForm();
+  const pages = doc.getPages();
+  const counts = new Map<string, number>();
+  for (const b of boxes) {
+    const page = pages[b.page];
+    if (!page) throw new Error(`a blank was measured on page ${String(b.page + 1)}, and the file has ${String(pages.length)}`);
+    const k = page.getWidth() / b.pageW;
+    const rect = { x: b.x * k, y: page.getHeight() - (b.y + b.h) * k, width: b.w * k, height: b.h * k,
+      backgroundColor: undefined, borderColor: undefined, borderWidth: 0 };
+    const key = `p${String(b.page + 1)}_${b.kind}`;
+    const n = (counts.get(key) ?? 0) + 1;
+    counts.set(key, n);
+    const name = `${key}_${String(n)}`;
+    // The accessible name on the field AND its widget: readers differ in which they read.
+    const named = (acro: import('pdf-lib').PDFAcroTerminal): void => {
+      acro.dict.set(PDFName.of('TU'), PDFHexString.fromText(b.label));
+      for (const w of acro.getWidgets()) w.dict.set(PDFName.of('TU'), PDFHexString.fromText(b.label));
+    };
+    if (b.kind === 'text') {
+      const f = form.createTextField(name);
+      f.addToPage(page, rect);
+      named(f.acroField);
+    } else {
+      const f = form.createCheckBox(name);
+      f.addToPage(page, rect);
+      named(f.acroField);
+    }
+  }
+  // No object streams: every page object stays readable as itself, so the
+  // page count (`pdfPageCount`) and any reader that scans the file still work.
+  return Buffer.from(await doc.save({ useObjectStreams: false }));
+}
 /**
  * Print one document. ONE FUNCTION, so a test can stand in for Chromium. The
  * signal fires when the print has run past its time: a renderer that holds a
@@ -435,6 +531,11 @@ export const PRINT_TIMEOUT_MS = (() => {
 let timeoutOverride: number | null = null;
 /** For tests: a shorter timeout (null restores PRINT_TIMEOUT_MS). */
 export function setPrintTimeoutMs(ms: number | null): void { timeoutOverride = ms; }
+/** How long a stopped print may take to be gone before the queue moves on regardless. */
+export const STOP_GRACE_MS = 10_000;
+let graceOverride: number | null = null;
+/** For tests: a shorter grace (null restores STOP_GRACE_MS). */
+export function setStopGraceMs(ms: number | null): void { graceOverride = ms; }
 
 /**
  * THE LAUNCH LINE. Each flag is here for memory, not speed: no GPU process,
@@ -468,23 +569,34 @@ let queue: Promise<unknown> = Promise.resolve();
  */
 export function printOne(html: string, renderer: Renderer): Promise<RenderResult> {
   const limit = timeoutOverride ?? PRINT_TIMEOUT_MS;
+  // ONE PROCESS AT A TIME, NOT ONE PROMISE (F2 audit of F1). The caller hears
+  // of an overrun the moment the timer fires, but the QUEUE is released only
+  // when the stopped renderer has actually returned — its browser killed and
+  // reaped — or, if it never returns, after STOP_GRACE_MS. Releasing on the
+  // timer let the next print launch a browser beside a dying one.
+  let gone: Promise<unknown> = Promise.resolve();
   const run = async (): Promise<RenderResult> => {
     const controller = new AbortController();
     let timer: NodeJS.Timeout | undefined;
+    const printing = renderer(html, controller.signal);
+    const settled = printing.then(() => undefined, () => undefined);
+    gone = settled;
     const overrun = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
         controller.abort();
+        const grace = graceOverride ?? STOP_GRACE_MS;
+        gone = Promise.race([settled, new Promise<void>((r) => { setTimeout(r, grace).unref(); })]);
         reject(new Error(`the file did not finish printing within ${String(Math.round(limit / 1000))} s, so its browser was stopped`));
       }, limit);
     });
     try {
-      return await Promise.race([renderer(html, controller.signal), overrun]);
+      return await Promise.race([printing, overrun]);
     } finally {
       clearTimeout(timer);
     }
   };
   const mine = queue.then(run, run);
-  queue = mine.then(() => undefined, () => undefined);
+  queue = mine.then(() => gone, () => gone).then(() => undefined, () => undefined);
   return mine;
 }
 
@@ -545,8 +657,13 @@ export function chromiumRenderer(executablePath: string): Renderer {
         await page.setContent(html, { waitUntil: 'load' });
         await page.evaluate('document.fonts.ready.then(() => true)');
         const layout = await page.evaluate(LAYOUT_PROBE) as { sections: number; overflow: string[] };
-        const pdf = await page.pdf({ printBackground: true, preferCSSPageSize: true });
-        return { pdf: Buffer.from(pdf), sections: layout.sections, overflow: layout.overflow };
+        // Measured under print media, where the page is laid out as it prints.
+        const fields = await page.evaluate(FIELD_PROBE) as FieldBox[];
+        // TAGGED, WITH AN OUTLINE (FQ): a structure tree built from the HTML
+        // (headings, paragraphs, lists, tables) and bookmarks from the
+        // headings, so a screen reader reads the file as a document.
+        const pdf = await page.pdf({ printBackground: true, preferCSSPageSize: true, tagged: true, outline: true });
+        return { pdf: Buffer.from(pdf), sections: layout.sections, overflow: layout.overflow, fields };
       } finally {
         await browser.close().catch(() => undefined);
       }
@@ -569,7 +686,10 @@ export async function renderPrintable(spec: PrintableSpec, meta: PrintMeta, rend
   const path = chromiumPath();
   const r = renderer ?? substitute ?? (path ? chromiumRenderer(path) : null);
   if (!r) throw new Error('there is no Chromium on this machine to print a page with');
-  return { ...(await printOne(html, r)), html };
+  const printed = await printOne(html, r);
+  // The blanks become fields after the browser is gone: no Chromium is held for it.
+  const pdf = printed.fields?.length ? await addFormFields(printed.pdf, printed.fields) : printed.pdf;
+  return { ...printed, pdf, html };
 }
 
 // ─── The stored file ─────────────────────────────────────────────────────────
@@ -590,6 +710,8 @@ export function printableOf(m: Pick<Material, 'body'> | null): PrintableManifest
 
 /** What the offer shape records about the file it sells. */
 export interface PrintablePlan { version: number; sha256: string; pages: number; filename: string; topics: SensitiveTopic[];
+  /** WHAT IT SHIPS WITH TO BE FOUND (F2): its sections' headings and introductions, and one page of it free. Words the file already carries. */
+  public?: { outline: Array<{ heading: string; lede: string }>; freePage: { heading: string; lede: string; html: string } | null };
   panel: { outcome: 'ship' | 'hold'; because: string; answers: PanelAnswer[] };
   /** Set while the panel was split and the owner has not said; cleared only by him. */
   held: string | null; releasedBy?: string; releasedAt?: string }
@@ -700,7 +822,14 @@ export async function makePrintable(input: {
   const manifest: PrintableManifest = { kind: 'printable_pdf', version, title: input.spec.title, filename, pages, bytes: printed.pdf.length,
     sha256, madeAt: now.toISOString(), topics, pdfBase64: printed.pdf.toString('base64') };
   const held = panel.outcome === 'hold' ? panel.because : null;
-  const printable: PrintablePlan = { version, sha256, pages, filename, topics, panel: { outcome: panel.outcome, because: panel.because, answers }, held };
+  // The free page is the first that has blanks to fill (a worksheet sells itself
+  // better than an introduction), else the first; checked by the same vocabulary.
+  const free = input.spec.pages.find((pg) => /class="(?:[^"]*\s)?(?:field|check|ws|lines)\b/.test(pg.html)) ?? input.spec.pages[0] ?? null;
+  const pub: PrintablePlan['public'] = {
+    outline: input.spec.pages.map((pg) => ({ heading: pg.heading, lede: pg.lede })),
+    freePage: free && sanitizePageHtml(free.html).length === 0 ? { heading: free.heading, lede: free.lede, html: free.html } : null,
+  };
+  const printable: PrintablePlan = { version, sha256, pages, filename, topics, panel: { outcome: panel.outcome, because: panel.because, answers }, held, public: pub };
   const plan: OfferShapePlan = { ...input.plan, price: { ...input.plan.price, productName: `${input.plan.price.productName} (version ${String(version)})` } };
   const offerShapeId = await recordMaterial({ founderId: input.founderId, experimentId: input.experimentId, kind: 'offer_shape', title: 'offer shape',
     body: JSON.stringify({ ...plan, kind: 'printable_pdf', spec: { ...input.spec, pages: input.spec.pages.length }, printable }), by: HAND });

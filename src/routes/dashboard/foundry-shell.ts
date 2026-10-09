@@ -5237,6 +5237,44 @@ foundryShellRoutes.post('/foundry/controls/printables',
     return c.redirect(`/foundry/controls?printables=${'refused' in r ? 'refused' : allow ? 'allowed' : 'refused_again'}#your-decisions`);
   });
 
+// EVERY CHANNEL (F2, PENDING 43): he opens or closes one channel at a time,
+// with what that channel needs only he can answer; and places its key, which
+// is kept only once the channel says it is a real account.
+foundryShellRoutes.post('/foundry/controls/channels',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const body = await c.req.parseBody();
+    const { MARKET_CHANNELS, CHANNEL_NAMES, grantChannel } = await import('../../services/venture/storefront/channels.js');
+    const channel = String(body.channel ?? '') as (typeof MARKET_CHANNELS)[number];
+    if (!MARKET_CHANNELS.includes(channel)) return c.redirect('/foundry/controls?channels=unknown#your-decisions');
+    const open = String(body.open ?? '') === 'yes';
+    const who = String(body.who_made ?? '');
+    const taxonomy = Number(String(body.taxonomy_id ?? '').trim());
+    const store = String(body.store_id ?? '').trim();
+    const grant = open ? {
+      ...(channel === 'etsy' && ['i_did', 'someone_else', 'collective'].includes(who) ? { whoMade: who as 'i_did' } : {}),
+      ...(channel === 'etsy' && Number.isInteger(taxonomy) && taxonomy > 0 ? { taxonomyId: taxonomy } : {}),
+      ...(channel === 'lemonsqueezy' && store ? { storeId: store.slice(0, 40) } : {}),
+    } : null;
+    const r = await grantChannel(String(founder.id), channel, grant,
+      open ? `The owner opened ${CHANNEL_NAMES[channel]} for Foundry to sell on (PENDING 42, 43).` : `The owner closed ${CHANNEL_NAMES[channel]}.`,
+      `founder:${String(founder.id)}`);
+    return c.redirect(`/foundry/controls?channels=${'refused' in r ? 'refused' : open ? 'opened' : 'closed'}#your-decisions`);
+  });
+
+foundryShellRoutes.post('/foundry/controls/channels/key',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const body = await c.req.parseBody();
+    const channel = String(body.channel ?? '');
+    if (channel !== 'gumroad' && channel !== 'lemonsqueezy') return c.redirect('/foundry/controls?channel_key=unknown#your-decisions');
+    const { setChannelKey } = await import('../../services/venture/storefront/channels.js');
+    const r = await setChannelKey(channel, String(body.key ?? ''), `founder:${String(founder.id)}`);
+    return c.redirect(`/foundry/controls?channel_key=${'placed' in r ? 'placed' : encodeURIComponent(r.ownerWords)}#your-decisions`);
+  });
+
 foundryShellRoutes.post('/foundry/controls/charter/withdraw',
   requireInstitutionOwner(), async (c: any) => {
     const founder = c.get('founder') as { id?: string } | undefined;
@@ -7961,6 +7999,27 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
       ${d.key === 'printables' ? html`<form method="POST" action="/foundry/controls/printables" class="inline">
         <input type="hidden" name="allow" value="${d.state === 'done' ? 'no' : 'yes'}" />
         <button class="btn${d.state === 'done' ? '' : ' go'}" type="submit">${d.state === 'done' ? 'Stop making printables' : 'Allow printables, shipped on a clear panel yes'}</button>
+      </form>` : ''}
+      ${d.key === 'price_floor' ? html`<a class="btn" href="/foundry/money#channels">Set it on Money</a>` : ''}
+      ${d.key === 'channels' ? html`<form method="POST" action="/foundry/controls/channels" class="inline">
+        <label for="ch-which">Channel</label>
+        <select id="ch-which" name="channel"><option value="gumroad">Gumroad</option><option value="lemonsqueezy">Lemon Squeezy</option><option value="etsy">Etsy</option></select>
+        <label for="ch-open">Open or close</label>
+        <select id="ch-open" name="open"><option value="yes">Open it</option><option value="no">Close it</option></select>
+        <label for="ch-store">Lemon Squeezy store id</label>
+        <input id="ch-store" name="store_id" type="text" placeholder="only for Lemon Squeezy" />
+        <label for="ch-who">Etsy: who made it</label>
+        <select id="ch-who" name="who_made"><option value="">only for Etsy</option><option value="i_did">I did</option><option value="someone_else">Someone else</option><option value="collective">A collective</option></select>
+        <label for="ch-tax">Etsy category id</label>
+        <input id="ch-tax" name="taxonomy_id" type="text" inputmode="numeric" placeholder="only for Etsy" />
+        <button class="btn go" type="submit">Say it</button>
+      </form>
+      <form method="POST" action="/foundry/controls/channels/key" class="inline">
+        <label for="ck-which">Key for</label>
+        <select id="ck-which" name="channel"><option value="gumroad">Gumroad</option><option value="lemonsqueezy">Lemon Squeezy</option></select>
+        <label for="ck-key">API key</label>
+        <input id="ck-key" name="key" type="password" autocomplete="off" />
+        <button class="btn" type="submit">Check and keep it</button>
       </form>` : ''}
       ${d.key === 'front_loaded_attention' ? html`<form method="POST" action="/foundry/controls/front-loaded-attention" class="inline">
         <input type="hidden" name="allow" value="${d.seen.startsWith('allowed') ? 'no' : 'yes'}" />

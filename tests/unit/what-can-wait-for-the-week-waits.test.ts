@@ -80,3 +80,44 @@ describe('the week, through the real queue', () => {
     expect((await Q.theWeeksBatch(OWNER)).handsOn).toBe(true);
   });
 });
+
+// ─── THROUGH needsYou ITSELF, OFF THE BATCH DAY (F2 audit of F1) ─────────────
+// The checks above call the pure pieces. A founder made in a test begins
+// today, so every other suite meets needsYou ON his batch day, where nothing
+// is held back at all: rewriting needsYou to hold back EVERY item off the
+// batch day — decisions, obligations and the charter with it — stayed green
+// across all nine suites that read the queue. This drives the real queue on a
+// day that is not his batch day, with a decision and advice both waiting.
+describe('off the batch day, through the real queue', () => {
+  const OFF = 'f_offday';
+  beforeAll(async () => {
+    await query('INSERT INTO founders (id,clerk_user_id,email,name,created_at) VALUES (?,?,?,?,datetime(\'now\',\'-16 days\'))', [OFF, 'clk_off', 'off@example.com', 'Off']);
+    await query(`INSERT INTO products (id,name,owner_id,status,scp_status,reality) VALUES ('p_off','Offday',?,'active','active','real')`, [OFF]);
+    await query(`INSERT INTO owner_boundaries (id, product_id, subject, statement, mode)
+       VALUES ('ob_off','p_off','spend_money','Ask me before spending','ask_first')`, []);
+    await query(
+      `INSERT INTO proposed_acts (id, product_id, subject, params_fingerprint, summary, why, expected_effect, risk, consequence, proposed_by, expires_at)
+       VALUES ('pa_off','p_off','spend_money','fp','buy the thing','because','it arrives','it does not','low','foundry',datetime('now','+3 days'))`, []);
+    await query(`INSERT INTO company_situations (id, product_id, situation, headline, evidence_mode, began_at)
+       VALUES ('cs_off','p_off','needs_attention','it keeps needing something','real',datetime('now','-10 day'))`, []);
+    await query(`INSERT INTO situation_recommendations (id, situation_id, product_id, kind, summary, why, would_need, raised_at)
+       VALUES ('sr_off','cs_off','p_off','advice','tidy the shelf','because','a decision from you',datetime('now','-1 day'))`, []);
+  });
+
+  it('a decision reaches him today; advice waits, marked as batched, until his batch day', async () => {
+    expect((await Q.theWeeksBatch(OFF)).today).toBe(false);
+    const { items, later } = await Q.needsYou(OFF);
+    const keys = items.map((i) => i.key);
+    expect(keys).toContain('act:pa_off');
+    expect(keys).not.toContain('advice:sr_off');
+    const held = later.find((i) => i.key === 'advice:sr_off');
+    expect(held?.batched).toBe(true);
+    expect(later.some((i) => i.key === 'act:pa_off')).toBe(false);
+  });
+
+  it('on his batch day the advice reaches him too', async () => {
+    await query(`UPDATE founders SET created_at = datetime('now', '-14 days') WHERE id = ?`, [OFF]);
+    const { items } = await Q.needsYou(OFF);
+    expect(items.map((i) => i.key)).toEqual(expect.arrayContaining(['act:pa_off', 'advice:sr_off']));
+  });
+});

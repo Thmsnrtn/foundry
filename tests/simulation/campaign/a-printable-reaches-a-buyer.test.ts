@@ -175,6 +175,9 @@ world('a printable made by the hands reaches a buyer', () => {
     const plan = printablePlanOf((await materialOf(X, 'offer_shape'))!.body)!;
     expect(plan).toMatchObject({ version: 1, sha256: file.sha256, held: null });
     expect(plan.panel.outcome).toBe('ship');
+    // WHAT IT SHIPS WITH TO BE FOUND (F2): its own sections, and one page of it free.
+    expect(plan.public?.outline.map((o) => o.heading)).toEqual(PRINTABLE_CONTENT_HONEST.pages.map((pg) => pg.heading));
+    expect(plan.public?.freePage?.html).toMatch(/class="(field|check|ws)/);
     // Every gate that asks a model was asked: the writer, the honesty check, four strangers.
     expect(modelCalls.filter((c) => c === 'persona').length).toBe(4);
     expect(modelCalls).toContain('check');
@@ -206,6 +209,10 @@ world('a printable made by the hands reaches a buyer', () => {
     const page = pages.find((html) => html.includes('The Home Maintenance Log') && html.includes('Version 1'));
     expect(page, 'the published page carries the file and its version').toBeTruthy();
     expect(page).toContain('$9');
+    // AND IT IS FOUND FROM DAY ONE (F2): the guide, a free page and llms.txt are published with it.
+    expect(pages.some((html) => html.includes('The Home Maintenance Log: a guide') && html.includes('"@type":"Article"'))).toBe(true);
+    expect(pages.some((html) => html.includes('Free to print: one page of'))).toBe(true);
+    expect(pages.some((html) => html.startsWith('# ') && html.includes('## Files for sale') && html.includes('/guide'))).toBe(true);
   });
 
   let fileSha = '';
@@ -276,5 +283,23 @@ world('a printable made by the hands reaches a buyer', () => {
     await runMorning(HANDS);
     expect((await app.request(href)).status).toBe(404);
     expect(await n('SELECT COUNT(*) AS n FROM experiment_fulfilments WHERE experiment_id = ?', [X])).toBe(1);
+  });
+
+  it('when it is no longer on sale here, its guide and free page come down too, as notices nobody indexes (F2)', async () => {
+    const pagesNow = () => [...state.cf.kv.values()].flatMap((store) => [...store.entries()]);
+    const guideKey = pagesNow().find(([k]) => k.endsWith('/guide'))?.[0];
+    expect(guideKey, 'the guide was published').toBeTruthy();
+    // The refund above stopped the test (its stop rule), and the morning's
+    // republish already took the guide down. Withdrawing the exposure too and
+    // publishing again must leave it a notice, and change nothing more.
+    await query(`UPDATE experiment_exposures SET withdrawn_at = datetime('now') WHERE experiment_id = ? AND withdrawn_at IS NULL`, [X]);
+    const { publishSite } = await import('../../../src/services/public-workshop/publication.js');
+    await publishSite(OWNER, 'test: the offer came down');
+    const after = pagesNow().find(([k]) => k === guideKey)![1];
+    expect(after).toContain('Not available now');
+    expect(after).toContain('name="robots" content="noindex"');
+    expect(after).not.toContain('"@type":"Article"');
+    // A second pass changes nothing more.
+    expect((await publishSite(OWNER, 'test: again')).withdrawn.filter((p) => p.endsWith('/guide') || p.endsWith('/free'))).toEqual([]);
   });
 });

@@ -11,6 +11,7 @@
 // =============================================================================
 import type { PublicExperiment, PublicWorkshopFacts } from './projection.js';
 import { postalLines } from './settings.js';
+import { merchantOfRecordAmong } from '../venture/storefront/tax.js';
 
 export const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const paras = (s: string): string => s.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean).map((p) => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`).join('\n');
@@ -41,7 +42,11 @@ const amount = (p: NonNullable<PublicExperiment['price']>): string =>
 export const PUBLIC_PATHS = ['/', '/about', '/experiments', '/operating', '/graduated', '/closed', '/contact', '/privacy', '/email', '/email/done', '/thank-you', '/refunds', '/terms', '/404'] as const;
 export type PublicPath = typeof PUBLIC_PATHS[number];
 /** The two files that are not pages, served beside them with their own types. */
-export const PUBLIC_FILES = ['/robots.txt', '/sitemap.xml'] as const;
+export const PUBLIC_FILES = ['/robots.txt', '/sitemap.xml', '/llms.txt'] as const;
+/** Each file's type, the one list the edge program (worker-source.ts) and its test stub both read. */
+export const PUBLIC_FILE_TYPES: Readonly<Record<typeof PUBLIC_FILES[number], string>> = Object.freeze({
+  '/robots.txt': 'text/plain; charset=utf-8', '/sitemap.xml': 'application/xml; charset=utf-8', '/llms.txt': 'text/plain; charset=utf-8',
+});
 /**
  * WHAT A CRAWLER IS TOLD NOT TO KEEP. The opt-out form, its receipt, the
  * answer receipt and the not-found page are for the person in front of them,
@@ -89,13 +94,13 @@ textarea{width:100%;font:inherit;padding:.7rem .8rem;border:1px solid var(--line
 button{font:inherit}footer{border-top:1px solid var(--line);padding:1.5rem 1.25rem 3rem;color:var(--soft);font-size:.9rem}
 footer p{margin:.3rem 0}footer a{display:inline-block;padding:.4rem 0}`;
 
-function shell(f: PublicWorkshopFacts, title: string, current: string, body: string, description: string, at: { path: string; head?: string }): string {
+function shell(f: PublicWorkshopFacts, title: string, current: string, body: string, description: string, at: { path: string; head?: string; noindex?: boolean }): string {
   // The paths stay what they are; what a visitor reads is what a person calls it.
   const nav = [['/', 'Home'], ['/about', 'About'], ['/experiments', 'What I\'ve put out'], ['/contact', 'Contact']] as const;
   // ONE ADDRESS PER PAGE. A crawler that reaches a page by any other route is
   // told which address is the page's own; a page that is not for an index says
   // so instead, and carries no canonical, which would contradict it.
-  const found = UNINDEXED.has(at.path)
+  const found = UNINDEXED.has(at.path) || at.noindex
     ? '<meta name="robots" content="noindex">'
     : `<link rel="canonical" href="${esc(f.origin)}${esc(at.path)}">`;
   return `<!DOCTYPE html>
@@ -487,7 +492,9 @@ ${asking ? `<h2>Anything you'd like to say?</h2>
   <button class="btn" type="submit">Send</button>
 </form>` : ''}
 
-<h2>Refunds, privacy and how to reach me</h2>
+${x.guide ? `<h2>Before you buy</h2>
+<p>This is version ${String(x.guide.version)} of the file.${x.guide.freePage ? ` <a href="${x.path}/free">One page of it, free to print</a>.` : ''} <a href="${x.path}/guide">The guide its sections make</a>.</p>` : ''}
+${euLine(x)}<h2>Refunds, privacy and how to reach me</h2>
 ${refundLine ? `<p>${esc(refundLine)}</p>` : ''}
 <p>Buying this here, Stripe handles the payment and passes me your email address so I can send you the brief. That's all I use it for. There's no tracking in the email or on this site, so the only thing I know is what you choose to tell me — more on the <a href="/privacy">privacy page</a>.</p>
 <p>Anything else, <a href="/contact">just write to me</a>.${f.replyRouteProven ? ' Replies to anything I send come straight back to me.' : ''}</p>
@@ -630,8 +637,74 @@ export function renderNotFound(f: PublicWorkshopFacts): string {
 /** Every page of the site at once, keyed by path. Experiment pages included. */
 /** What a crawler may keep: every indexable page and every listed experiment; the unlisted resolve but are not announced. */
 /** Every path a crawler is meant to keep: the indexed fixed pages and every listed experiment (R38). */
+/** The guide and the free page of a listed product on sale here (F2). */
+const foundPaths = (x: PublicExperiment): string[] => x.listed && x.guide ? [`${x.path}/guide`, ...(x.guide.freePage ? [`${x.path}/free`] : [])] : [];
+
 export function indexedPaths(registry: PublicExperiment[]): Set<string> {
-  return new Set<string>([...INDEXED_PATHS, ...registry.filter((x) => x.listed).map((x) => x.path)]);
+  return new Set<string>([...INDEXED_PATHS, ...registry.filter((x) => x.listed).flatMap((x) => [x.path, ...foundPaths(x)])]);
+}
+
+// ─── Being found (F2, plan C-3.2) ─────────────────────────────────────────────
+//
+// Every printable on sale here ships with the guide its own sections make and
+// one page of it free. Both are composed from the words the file carries —
+// headings and introductions that passed every gate the file did — so the
+// pages say nothing the product does not. Search takes months; they are
+// published, put in the sitemap and announced with the product's first page.
+
+/** A buyer in the EU or the UK is sent to a merchant of record that carries it, when one does. */
+function euLine(x: PublicExperiment): string {
+  // The routing rule's own function (storefront/tax.ts), never a copy of it.
+  const mor = merchantOfRecordAmong(x.elsewhere ?? []);
+  return mor ? `<p class="quiet">Buying from the EU or the UK? <a href="${esc(mor.url)}">Buy it on ${esc(mor.venueName)}</a>, which charges and pays the VAT due where you live.</p>
+` : '';
+}
+
+export function renderGuide(f: PublicWorkshopFacts, x: PublicExperiment): string {
+  const g = x.guide!;
+  const body = `<h1>${esc(x.title)}: a guide</h1>
+<p class="lede">${esc(x.summary)}</p>
+${g.outline.map((o) => `<h2>${esc(o.heading)}</h2>\n<p>${esc(o.lede)}</p>`).join('\n')}
+<div class="card"><p>Each section above is a page of <a href="${x.path}">${esc(x.title)}</a>, version ${String(g.version)}, with room to fill in your own.${g.freePage ? ` <a href="${x.path}/free">One page of it is free to print</a>.` : ''}</p></div>
+<p class="quiet"><a href="${x.path}">${esc(x.title)}</a></p>`;
+  const head = `<script type="application/ld+json">${jsonLd({
+    '@context': 'https://schema.org', '@type': 'Article', headline: `${x.title}: a guide`, description: x.summary,
+    datePublished: x.openedOn ?? x.updatedOn, dateModified: x.updatedOn, author: { '@type': 'Organization', name: f.name },
+    publisher: { '@type': 'Organization', name: f.name }, mainEntityOfPage: `${f.origin}${x.path}/guide`,
+  })}</script>`;
+  return shell(f, `${x.title}: a guide`, '/experiments', body, x.summary, { path: `${x.path}/guide`, head });
+}
+
+export function renderFree(f: PublicWorkshopFacts, x: PublicExperiment): string {
+  const p = x.guide!.freePage!;
+  const body = `<h1>${esc(p.heading)}</h1>
+<p class="lede">${esc(p.lede)}</p>
+<p class="quiet">Free to print: one page of <a href="${x.path}">${esc(x.title)}</a>, version ${String(x.guide!.version)}, exactly as it is in the file.</p>
+<div class="card">${p.html}</div>
+<p class="quiet"><a href="${x.path}/guide">The guide its sections make</a></p>`;
+  return shell(f, `${p.heading} (free page)`, '/experiments', body, `${p.lede} One page of ${x.title}, free to print.`, { path: `${x.path}/free` });
+}
+
+/** A guide or free page whose product is no longer on sale here. */
+export function renderFoundPageGone(f: PublicWorkshopFacts, path: string): string {
+  const product = path.replace(/\/(guide|free)$/, '');
+  const body = `<h1>Not available now</h1>
+<p>This page went with a file that is not on sale here at the moment. <a href="${esc(product)}">Its own page says what happened to it.</a></p>`;
+  return shell(f, 'Not available now', '/experiments', body, 'This page went with a file that is not on sale here at the moment.', { path, noindex: true });
+}
+
+/** llms.txt: a plain map of the Workshop for answer engines (llmstxt.org's format: a title, a summary, linked sections). */
+export function renderLlms(f: PublicWorkshopFacts, registry: PublicExperiment[]): string {
+  const listed = registry.filter((x) => x.listed);
+  const selling = listed.filter((x) => canBuy(x) && x.guide && x.price);
+  const lines = [`# ${f.name}`, '', `> ${f.name} is a small digital workshop in ${f.region}. It makes printable files, sells them here, and publishes what it puts in front of people.`, ''];
+  if (selling.length) {
+    lines.push('## Files for sale', '');
+    for (const x of selling) lines.push(`- [${x.title}](${f.origin}${x.path}): ${x.summary} $${(x.price!.amountCents / 100).toFixed(x.price!.amountCents % 100 === 0 ? 0 : 2)}, one time; version ${String(x.guide!.version)}. Guide: ${f.origin}${x.path}/guide`);
+    lines.push('');
+  }
+  lines.push('## The Workshop', '', `- [What it has put out](${f.origin}/experiments)`, `- [About](${f.origin}/about)`, `- [Refunds](${f.origin}/refunds)`, `- [Contact](${f.origin}/contact)`, '');
+  return lines.join('\n');
 }
 
 export function renderSitemap(f: PublicWorkshopFacts, registry: PublicExperiment[]): string {
@@ -639,7 +712,7 @@ export function renderSitemap(f: PublicWorkshopFacts, registry: PublicExperiment
   // changed, from the same record the page prints; the fixed pages carry none
   // rather than a date that would be a guess.
   const entries = [...INDEXED_PATHS.map((p) => ({ path: p as string, lastmod: null as string | null })),
-    ...registry.filter((x) => x.listed).map((x) => ({ path: x.path, lastmod: /^\d{4}-\d{2}-\d{2}/.test(x.updatedOn) ? x.updatedOn.slice(0, 10) : null }))];
+    ...registry.filter((x) => x.listed).flatMap((x) => [x.path, ...foundPaths(x)].map((path) => ({ path, lastmod: /^\d{4}-\d{2}-\d{2}/.test(x.updatedOn) ? x.updatedOn.slice(0, 10) : null })))];
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${entries.map((e) => `  <url><loc>${esc(f.origin)}${esc(e.path)}</loc>${e.lastmod ? `<lastmod>${e.lastmod}</lastmod>` : ''}</url>`).join('\n')}
@@ -674,6 +747,13 @@ export function renderSite(f: PublicWorkshopFacts, registry: PublicExperiment[])
   pages.set('/terms', renderTerms(f));
   pages.set('/404', renderNotFound(f));
   for (const x of registry) pages.set(x.path, renderExperiment(f, x));
+  // BEING FOUND (F2): a guide and a free page for each printable on sale here, and llms.txt.
+  for (const x of registry) {
+    if (!x.guide || !canBuy(x) || x.shape === 'portfolio_entry' || x.shape === 'identity_only') continue;
+    pages.set(`${x.path}/guide`, renderGuide(f, x));
+    if (x.guide.freePage) pages.set(`${x.path}/free`, renderFree(f, x));
+  }
+  pages.set('/llms.txt', renderLlms(f, registry));
   pages.set('/privacy', renderPrivacy(f, [...pages.values()].some((html) => html.includes('src="/tool.js"'))));
   return pages;
 }

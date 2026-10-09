@@ -73,7 +73,8 @@ describe('every page names its one address, or says it is not for an index', () 
     expect(robots).toContain('Disallow: /email\n');
     expect(robots).toContain('Disallow: /thank-you\n');
     expect(robots).toContain('Sitemap: https://apexmicro.ai/sitemap.xml\n');
-    expect(PUBLIC_FILES).toEqual(['/robots.txt', '/sitemap.xml']);
+    // llms.txt joined them in F2: a plain map of the Workshop for answer engines.
+    expect(PUBLIC_FILES).toEqual(['/robots.txt', '/sitemap.xml', '/llms.txt']);
   });
 
   it('says what is for sale in the form an index reads, only while it is for sale', () => {
@@ -127,10 +128,11 @@ describe('the row guard admits exactly the two files', () => {
       [`pub_${path.replace(/[^a-z]/g, '')}`, path]);
     await insert('/robots.txt');
     await insert('/sitemap.xml');
-    for (const bad of ['/x.txt', '/robots.txt.bak', '/Sitemap.xml', '/sitemap.xml?x', '/a/../robots.txt']) {
+    await insert('/llms.txt');
+    for (const bad of ['/x.txt', '/robots.txt.bak', '/Sitemap.xml', '/sitemap.xml?x', '/a/../robots.txt', '/llms.txt.bak', '/LLMS.txt']) {
       await expect(insert(bad), bad).rejects.toThrow(/path_invalid/);
     }
     const kept = (await query("SELECT path FROM public_publications WHERE founder_id = 'f_found' ORDER BY path")).rows.map((r) => (r as Record<string, unknown>).path);
-    expect(kept).toEqual(['/robots.txt', '/sitemap.xml']);
+    expect(kept).toEqual(['/llms.txt', '/robots.txt', '/sitemap.xml']);
   });
 });

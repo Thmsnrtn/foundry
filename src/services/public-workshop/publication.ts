@@ -294,8 +294,10 @@ export async function publishSite(founderId: string, by: string, fetchImpl?: typ
   }
   for (const [path, html] of pages) {
     const x = registry.find((r) => r.path === path);
-    if (x) {
-      const leak = leakIn(html, await privateStringsOf(experimentIdOf(x, all)));
+    // A product's guide and free page carry its words: held to its private values too (F2).
+    const owner = x ?? registry.find((r) => path.startsWith(`${r.path}/`));
+    if (owner) {
+      const leak = leakIn(html, await privateStringsOf(experimentIdOf(owner, all)));
       if (leak) { report.failed.push({ path, reason: `a private value would appear on the page (${leak.slice(0, 24)}…)` }); continue; }
     }
     try {
@@ -304,6 +306,18 @@ export async function publishSite(founderId: string, by: string, fetchImpl?: typ
       if (before && before.id === p.id) report.unchanged.push(path); else report.published.push(path);
       if (p.verifiedStatus === 'verified') report.verified += 1; else report.unverified.push(`${path}: ${p.verifiedDetail ?? p.verifiedStatus ?? 'unverified'}`);
     } catch (e) { report.failed.push({ path, reason: e instanceof Error ? e.message : String(e) }); }
+  }
+  // A GUIDE OR FREE PAGE WHOSE PRODUCT IS NO LONGER ON SALE HERE COMES DOWN
+  // (F2): it would otherwise keep pointing at a file nobody can buy. Replaced by
+  // a short notice, as a withdrawn product page is; nothing it said is a record.
+  const { renderFoundPageGone } = await import('./site.js');
+  for (const live of await livePublications(founderId)) {
+    if (!/^\/experiments\/[a-z0-9-]+\/(guide|free)$/.test(live.path) || pages.has(live.path)) continue;
+    try {
+      // Publishing the same notice again is no change (publishPage keeps the live version for an equal digest).
+      const p = await publishPage({ founderId, path: live.path, html: renderFoundPageGone(facts, live.path), kind: 'page', experimentId: null, by, fetchImpl });
+      if (p.id !== live.id) report.withdrawn.push(live.path);
+    } catch (e) { report.failed.push({ path: live.path, reason: `could not take it down: ${e instanceof Error ? e.message : String(e)}` }); }
   }
   // TELL SEARCH ENGINES WHAT CHANGED (R38): only pages meant to be indexed,
   // only versions this pass put up and read back, through the door that

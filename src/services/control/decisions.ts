@@ -135,6 +135,21 @@ export async function yourDecisions(founderId: string, env: NodeJS.ProcessEnv = 
     unblocks: 'tests that sell a file the hands wrote, printed and checked, delivered by a download link; a clear panel yes ships, a split one waits for you',
     state: (await printablesChoice(founderId)).allowed ? 'done' : 'open', seen: printing.because });
 
+  // EVERY CHANNEL (F2): two acts of his, read from his own rows. Until he sets
+  // a floor against fees (PENDING 44), no channel listing is placed; until he
+  // opens a channel (PENDING 43), nothing is sold or read there.
+  const { priceFloorOf } = await import('../venture/storefront/price-floor.js');
+  const floor = await priceFloorOf(founderId);
+  out.push({ key: 'price_floor', act: 'Set the lowest price a product may carry against its fees',
+    unblocks: 'listing a product on any channel beside the Workshop page',
+    state: floor ? 'done' : 'open', seen: floor ? `you set it on ${floor.on}` : 'no floor is set, so nothing is listed on a channel (PENDING 44)' });
+  const { MARKET_CHANNELS, CHANNEL_NAMES, channelGrant } = await import('../venture/storefront/channels.js');
+  const opened: string[] = [];
+  for (const ch of MARKET_CHANNELS) if ((await channelGrant(founderId, ch)).granted) opened.push(CHANNEL_NAMES[ch]);
+  out.push({ key: 'channels', act: 'Open the channels Foundry may sell on, one at a time',
+    unblocks: 'products on Etsy, Gumroad and Lemon Squeezy as well as the Workshop page, each channel\'s sales read into its line',
+    state: opened.length ? 'done' : 'open', seen: opened.length ? `open: ${opened.join(', ')}` : 'no channel is open (PENDING 43)' });
+
   const { liveCharter } = await import('../institution/charter.js');
   const charter = await liveCharter(founderId);
   out.push({ key: 'charter', act: 'Sign the charter, with the smallest envelope that lets a test seal', unblocks: 'tests that can seal, and thinking above $1 a day',

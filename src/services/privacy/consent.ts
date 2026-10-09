@@ -1039,6 +1039,20 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
       + 'provider reports against',
     onAccountErasure: { op: 'delete' },
   },
+  // F2: what each channel said it sold for one person's products, where his
+  // products are listed, and his own demand by month. All his; erased with him.
+  channel_sales: {
+    reason: 'what a channel said it sold and returned of one person\'s products, as the channel stated it',
+    onAccountErasure: { op: 'delete' },
+  },
+  channel_listings: {
+    reason: 'where one person\'s products are listed on a channel, with the version and disclosure each carries',
+    onAccountErasure: { op: 'delete' },
+  },
+  demand_signals: {
+    reason: 'one person\'s own demand, counted month by month from his ledgers',
+    onAccountErasure: { op: 'delete' },
+  },
   experiment_run_state: {
     reason: 'whether one person\'s experiment is progressing or stopped, and on what — '
       + 'a live reading of his test, replaced each pass rather than accumulated',
@@ -1868,6 +1882,18 @@ const PERSON_ACROSS_COMPANIES: Record<string, PersonInOthersCompany> = {
   experiment_exposures: {
     op: 'delete', columns: ['founder_id'],
     reason: 'where that person\'s test placed an offer; the test was theirs',
+  },
+  channel_sales: {
+    op: 'delete', columns: ['founder_id'],
+    reason: 'what a channel said it sold of that person\'s products; the products were theirs',
+  },
+  channel_listings: {
+    op: 'delete', columns: ['founder_id'],
+    reason: 'where that person\'s products were listed; the products were theirs',
+  },
+  demand_signals: {
+    op: 'delete', columns: ['founder_id'],
+    reason: 'that person\'s own demand by month; the record was theirs',
   },
   experiment_recipients: {
     op: 'delete', columns: ['founder_id'],

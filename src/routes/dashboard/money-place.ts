@@ -108,6 +108,37 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
   const { costPerDecision, costToServe, foundryLine, hourValueOf } = await import('../../services/economy/projection.js');
   const line30 = await foundryLine(founderId);
   const serve = await costToServe(founderId);
+  // EVERY CHANNEL (F2): each stream's line per channel, the floor, and what each channel leaves of each price.
+  const { channelPnl, channelConcentration } = await import('../../services/venture/storefront/reconcile.js');
+  const { priceFloorOf, netLine } = await import('../../services/venture/storefront/price-floor.js');
+  const { canonicalListing } = await import('../../services/venture/storefront/canonical.js');
+  const { CHANNEL_NAMES } = await import('../../services/venture/storefront/channels.js');
+  const channelName = (ch: string): string => (CHANNEL_NAMES as Record<string, string>)[ch] ?? ch;
+  const pnl = await channelPnl(founderId, 30);
+  const { taxThresholdAlert } = await import('../../services/venture/storefront/tax.js');
+  const taxAlerts = await taxThresholdAlert(founderId);
+  const { VISITS_NOT_RECORDED, SEASONAL_PRIORS, launchTiming } = await import('../../services/venture/storefront/seasonality.js');
+  const visitsNote = VISITS_NOT_RECORDED;
+  const seasons = ((await query(
+    `SELECT month, signal, channel, value FROM demand_signals WHERE founder_id = ? AND evidence_mode = 'real' ORDER BY month DESC, channel, signal LIMIT 36`,
+    [founderId])).rows as Array<Record<string, unknown>>).map((r) => ({ month: String(r.month), signal: String(r.signal), channel: String(r.channel), value: Number(r.value) }));
+  const timings = Object.keys(SEASONAL_PRIORS).map((theme) => ({ theme, ...launchTiming(theme, new Date())! }));
+  const concentration = await channelConcentration(founderId, 90);
+  const { channelListingsOf } = await import('../../services/venture/storefront/reconcile.js');
+  const placed = await channelListingsOf(founderId);
+  const hisFloor = await priceFloorOf(founderId);
+  const floorLine = hisFloor
+    ? `Your floor, set on ${hisFloor.on}: ${[hisFloor.floor.minCents !== undefined ? `nothing under ${dollars(hisFloor.floor.minCents)}` : null, hisFloor.floor.maxFeeShare !== undefined ? `fees may take at most ${String(Math.round(hisFloor.floor.maxFeeShare * 100))}% of a price` : null].filter(Boolean).join('; ') || 'set per channel'}.`
+    : 'You have not set a lowest price against fees, so nothing is listed on a channel until you do (PENDING 44).';
+  const forSale = (await query(
+    `SELECT DISTINCT experiment_id FROM experiment_materials WHERE founder_id = ? AND kind = 'deliverable' AND superseded_at IS NULL AND body LIKE '{"kind":"printable_pdf"%'`,
+    [founderId])).rows as Array<Record<string, unknown>>;
+  const listings: Array<{ experimentId: string; title: string; version: number; netLine: string }> = [];
+  for (const r of forSale) {
+    const l = await canonicalListing(founderId, String(r.experiment_id));
+    if (!('refused' in l)) listings.push({ experimentId: l.experimentId, title: l.title, version: l.version, netLine: netLine(l.priceCents) });
+  }
+  const channelsSummary = pnl.length ? `${String(pnl.length)} ${pnl.length === 1 ? 'product' : 'products'} sold somewhere` : hisFloor ? 'no channel sales yet' : 'no floor set';
   const perDecision = await costPerDecision(founderId);
   const worth = await hourValueOf(founderId);
   // STANDING DOES NOT APPLY: the owner may enter time on any asset of theirs,
@@ -301,6 +332,44 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
         </li>`)}</ul>`}
       <p class="quiet">Thinking that served no one product (the search, and companies' own work): ${fig(serve.unattributedThinking)}. It is not split across products.</p>`)}
 
+    ${fold('channels', 'Every channel: what each sold, kept and returned', channelsSummary, html`
+      <p>${floorLine}</p>
+      <form class="inline" method="POST" action="/foundry/money/price-floor">
+        <label for="floormin">Lowest price, in dollars</label>
+        <input id="floormin" name="min_dollars" type="text" inputmode="decimal" placeholder="e.g. 7" />
+        <label for="floorshare">Most of the price fees may take, in percent</label>
+        <input id="floorshare" name="max_fee_percent" type="text" inputmode="decimal" placeholder="e.g. 20" />
+        <label for="floorwhy2">Why</label>
+        <input id="floorwhy2" name="why" type="text" placeholder="Why that floor" />
+        <button class="btn" type="submit">Set the floor</button>
+      </form>
+      ${listings.length === 0 ? html`<p class="quiet">No product is for sale yet, so there is no price to read against the channels' fees.</p>`
+        : html`<ul class="sales">${listings.map((l) => html`<li><a href="/foundry/experiments/${l.experimentId}">${l.title}</a>, version ${String(l.version)}: ${l.netLine}</li>`)}</ul>`}
+      ${pnl.length === 0 ? html`<p class="quiet">No channel has sold anything in the last 30 days.</p>` : html`<ul class="sales">${pnl.flatMap((st) => st.channels.map((ch) => html`<li>
+          <a href="/foundry/experiments/${st.experimentId}">${st.experimentId}</a> on ${channelName(ch.channel)}:
+          ${String(ch.sales)} sold, ${dollars(ch.grossCents)} · ${String(ch.refunds)} returned, ${dollars(ch.refundedCents)}
+          · fees ${ch.feesCents === null ? 'not known' : dollars(ch.feesCents)} · net <b>${ch.netCents === null ? 'not known' : dollars(ch.netCents)}</b>${ch.taxByMerchantCents > 0 ? ` · ${dollars(ch.taxByMerchantCents)} tax collected and paid by ${channelName(ch.channel)}, not yours` : ''}
+          <br /><small class="quiet">${ch.because}</small></li>`))}</ul>`}
+      ${placed.length === 0 ? '' : html`<ul class="sales">${placed.map((pl) => html`<li>On ${channelName(pl.channel)} since ${pl.listedAt}: <a href="/foundry/experiments/${pl.experimentId}">${pl.experimentId}</a>, version ${String(pl.version)} (${pl.externalRef}). AI disclosure: ${pl.aiDisclosure}</li>`)}</ul>`}
+      <p class="quiet">${concentration.sentence}</p>
+      <h3>Foundry's own seasons</h3>
+      ${seasons.length === 0 ? html`<p class="quiet">No month has been recorded yet; the first is recorded when a month ends. ${visitsNote}</p>`
+        : html`<ul class="sales">${seasons.map((r) => html`<li>${r.month}, ${channelName(r.channel)}: ${r.signal === 'net_cents' ? `net ${dollars(r.value)}` : `${String(r.value)} ${r.signal}`}</li>`)}</ul><p class="quiet">${visitsNote}</p>`}
+      <p class="quiet">Until Foundry has a year of its own, these priors stand in, each an assumption: ${timings.map((t) => `${t.theme} — list by ${t.listBy} for its peak in month ${String(t.peakMonth)}`).join('; ')}.</p>
+      <h3>Tax on the Workshop page</h3>
+      <ul class="sales">${taxAlerts.map((a) => html`<li>${a.level === 'approaching' || a.level === 'over' ? html`<strong>${a.sentence}</strong>` : a.sentence}</li>`)}</ul>
+      <form class="inline" method="POST" action="/foundry/money/channel-listing">
+        <label for="cl-exp">Test id</label>
+        <input id="cl-exp" name="experiment_id" type="text" />
+        <label for="cl-ch">Channel</label>
+        <select id="cl-ch" name="channel"><option value="lemonsqueezy">Lemon Squeezy</option><option value="gumroad">Gumroad</option></select>
+        <label for="cl-ref">Its product id there</label>
+        <input id="cl-ref" name="external_ref" type="text" />
+        <label for="cl-ver">Version</label>
+        <input id="cl-ver" name="version" type="text" inputmode="numeric" />
+        <button class="btn" type="submit">Record the listing I made</button>
+      </form>`)}
+
     ${fold('carry', 'What Foundry costs to carry each month', carry.notKnown.length ? `at least ${figureText(carry.total)}` : figureText(carry.total), html`
       <p><strong>${carry.notKnown.length ? 'At least ' : ''}${fig(carry.total)}</strong> a month. ${carry.total.because}.</p>
       <ul class="sales">${carry.lines.map((l) => html`<li>
@@ -477,6 +546,42 @@ moneyRoutes.post('/foundry/money/minutes', requireInstitutionOwner(), async (c: 
     return back(c, '', err instanceof Error ? err.message : 'That was not recorded.');
   }
   return back(c, 'carry');
+});
+
+// THE PRICE FLOOR AGAINST FEES (FQ, PENDING 44): his, in dollars or as the share fees may take.
+moneyRoutes.post('/foundry/money/price-floor', requireInstitutionOwner(), async (c: any) => {
+  const founderId = await founderOf(c);
+  if (!founderId) return back(c, '', 'No owner on this request.');
+  const form = await c.req.parseBody();
+  const min = String(form.min_dollars ?? '').trim();
+  const share = String(form.max_fee_percent ?? '').trim();
+  const why = String(form.why ?? '').trim();
+  if (!why) return back(c, '', 'Say why that floor, so it can be argued with later.');
+  const minCents = min ? cents(min) : null;
+  if (min && minCents === null) return back(c, '', 'That lowest price is not a number of dollars.');
+  const pct = share ? Number(share) : null;
+  if (share && (pct === null || !Number.isFinite(pct))) return back(c, '', 'That share is not a number.');
+  const { setPriceFloor } = await import('../../services/venture/storefront/price-floor.js');
+  const r = await setPriceFloor(founderId, { ...(minCents !== null ? { minCents } : {}), ...(pct !== null ? { maxFeeShare: pct / 100 } : {}) }, why, `founder:${founderId}`);
+  return back(c, 'refused' in r ? '' : 'The floor is set.', 'refused' in r ? r.refused : '');
+});
+
+// A LISTING HE MADE HIMSELF in a channel's dashboard (Lemon Squeezy has no create API).
+moneyRoutes.post('/foundry/money/channel-listing', requireInstitutionOwner(), async (c: any) => {
+  const founderId = await founderOf(c);
+  if (!founderId) return back(c, '', 'No owner on this request.');
+  const form = await c.req.parseBody();
+  const channel = String(form.channel ?? '');
+  if (channel !== 'lemonsqueezy' && channel !== 'gumroad') return back(c, '', 'That is not a channel a listing can be recorded for.');
+  const experimentId = String(form.experiment_id ?? '').trim();
+  const version = Number(String(form.version ?? '').trim());
+  const { canonicalListing } = await import('../../services/venture/storefront/canonical.js');
+  const l = await canonicalListing(founderId, experimentId);
+  if ('refused' in l) return back(c, '', l.refused);
+  const { recordOwnerListing } = await import('../../services/venture/storefront/reconcile.js');
+  const r = await recordOwnerListing({ founderId, experimentId, channel, externalRef: String(form.external_ref ?? '').trim().slice(0, 80),
+    version, priceCents: l.priceCents, by: `founder:${founderId}` });
+  return back(c, 'refused' in r ? '' : 'Recorded: its sales will be read into the product\'s line.', 'refused' in r ? r.refused : '');
 });
 
 moneyRoutes.post('/foundry/money/floor', requireInstitutionOwner(), async (c: any) => {
