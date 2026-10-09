@@ -49,6 +49,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { query } from '../../../db/client.js';
+import { dataBlockInstruction, wrapDataBlock } from '../../ai/sanitize.js';
 import { BANNED_CLAIMS, HAND, recordMaterial } from '../hand.js';
 import type { Material, OfferShapePlan } from '../hand.js';
 
@@ -259,6 +260,7 @@ const HONESTY_SYSTEM = [
   'Reply with one JSON object and nothing else:',
   '{"invented": [{"kind": "statistic|testimonial|review|credential|source|result", "quote": <exact words>}],',
   ' "regulated_advice": true|false, "regulated_why": <one sentence or null>}',
+  dataBlockInstruction('file'),
 ].join('\n');
 
 /**
@@ -272,7 +274,7 @@ export async function modelHonestyCheck(text: string, ctx: { founderId: string; 
   const { institutionSpend } = await import('../../ai/what-it-is-for.js');
   let content: string;
   try {
-    content = (await callSonnet(HONESTY_SYSTEM, `<file>\n${text.slice(0, 40_000)}\n</file>`, 900,
+    content = (await callSonnet(HONESTY_SYSTEM, wrapDataBlock('file', text, 40_000), 900,
       institutionSpend('checking a printable the hands made for invented facts before it is sold', 'scoring an audit', { kind: 'experiment', id: ctx.experimentId }))).content;
   } catch (err) {
     if (ModelDoorError && err instanceof ModelDoorError) throw err;
@@ -337,12 +339,13 @@ export async function askThePanel(input: { experimentId: string; listing: string
     const system = [
       `You are ${persona}. You are shown a listing and the full text of the file it sells, for $${String(input.priceDollars)}, one-time.`,
       'Decide as that buyer, with your own money, not as a reviewer; politeness helps nobody.',
+      dataBlockInstruction('listing'), dataBlockInstruction('file'),
       'Reply with one JSON object and nothing else:',
       '{"verdict": "yes"|"maybe"|"no", "max_price_dollars": <the most you would pay, a number>, "why": <one sentence>}',
     ].join('\n');
     let content = '';
     try {
-      content = (await callSonnet(system, `<listing>\n${input.listing}\n</listing>\n<file>\n${input.text.slice(0, 24_000)}\n</file>`, 400,
+      content = (await callSonnet(system, `${wrapDataBlock('listing', input.listing, 4000)}\n${wrapDataBlock('file', input.text, 24_000)}`, 400,
         institutionSpend('asking whether a stranger would pay for a printable before it is sold', 'scoring an audit', { kind: 'experiment', id: input.experimentId }))).content;
     } catch (err) {
       if (ModelDoorError && err instanceof ModelDoorError) throw err;
@@ -401,11 +404,89 @@ export function printableCss(): string {
 }
 
 export interface RenderResult { pdf: Buffer; sections: number; overflow: string[] }
-/** Print one document. ONE FUNCTION, so a test can stand in for Chromium. */
-export type Renderer = (html: string) => Promise<RenderResult>;
+/**
+ * Print one document. ONE FUNCTION, so a test can stand in for Chromium. The
+ * signal fires when the print has run past its time: a renderer that holds a
+ * process must kill it then.
+ */
+export type Renderer = (html: string, signal?: AbortSignal) => Promise<RenderResult>;
 let substitute: Renderer | null = null;
 /** For tests: print with this instead of Chromium (null restores Chromium). */
 export function useRenderer(r: Renderer | null): void { substitute = r; }
+
+// ─── Printing fits the machine (F1, 9 October 2026) ──────────────────────────
+//
+// Production is ONE Fly machine with 1 GB, the web server and the scheduler in
+// one process (fly.private.toml). Chromium is the largest thing that process
+// ever starts, so a print is held to three rules:
+//   * ONE AT A TIME. A second browser beside the first is how 1 GB is
+//     exceeded; a print asked for while another runs waits its turn.
+//   * A PRINT THAT RUNS OVER IS KILLED, the browser process with it, and the
+//     queue moves on (`PRINT_TIMEOUT_MS`, FOUNDRY_PRINT_TIMEOUT_MS to change it).
+//   * IT IS LAUNCHED SMALL AND CLOSED AFTER EVERY PRINT (`CHROMIUM_LAUNCH_ARGS`).
+// The peak measured under a 1 GB cap with the server resident is recorded in
+// IMPLEMENTATION_STATE; `scripts/measure-print-memory.mjs` measures it again.
+
+/** How long one print may take before its browser is killed. */
+export const PRINT_TIMEOUT_MS = (() => {
+  const v = Number(process.env.FOUNDRY_PRINT_TIMEOUT_MS);
+  return Number.isFinite(v) && v > 0 ? v : 90_000;
+})();
+let timeoutOverride: number | null = null;
+/** For tests: a shorter timeout (null restores PRINT_TIMEOUT_MS). */
+export function setPrintTimeoutMs(ms: number | null): void { timeoutOverride = ms; }
+
+/**
+ * THE LAUNCH LINE. Each flag is here for memory, not speed: no GPU process,
+ * no /dev/shm (Fly's is small; Chromium falls back to /tmp), one renderer, no
+ * site-per-process isolation (the document is ours and the network is refused),
+ * no extensions, no background networking, a capped V8 heap for the page.
+ */
+export const CHROMIUM_LAUNCH_ARGS: readonly string[] = Object.freeze([
+  '--no-sandbox',
+  '--disable-dev-shm-usage',
+  '--disable-gpu',
+  '--renderer-process-limit=1',
+  '--disable-site-isolation-trials',
+  '--disable-features=site-per-process,Translate,MediaRouter,OptimizationHints',
+  '--disable-extensions',
+  '--disable-background-networking',
+  '--disable-component-update',
+  '--disable-default-apps',
+  '--disable-sync',
+  '--no-first-run',
+  '--mute-audio',
+  '--js-flags=--max-old-space-size=128',
+]);
+
+let queue: Promise<unknown> = Promise.resolve();
+
+/**
+ * PRINT ONE DOCUMENT, IN TURN. Waits for any print before it, then gives the
+ * renderer the time it has; past it, the renderer's signal fires (Chromium is
+ * killed) and the print is refused with the reason.
+ */
+export function printOne(html: string, renderer: Renderer): Promise<RenderResult> {
+  const limit = timeoutOverride ?? PRINT_TIMEOUT_MS;
+  const run = async (): Promise<RenderResult> => {
+    const controller = new AbortController();
+    let timer: NodeJS.Timeout | undefined;
+    const overrun = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new Error(`the file did not finish printing within ${String(Math.round(limit / 1000))} s, so its browser was stopped`));
+      }, limit);
+    });
+    try {
+      return await Promise.race([renderer(html, controller.signal), overrun]);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  const mine = queue.then(run, run);
+  queue = mine.then(() => undefined, () => undefined);
+  return mine;
+}
 
 /** Where Chromium is on this machine, or null. FOUNDRY_CHROMIUM_PATH first. */
 export function chromiumPath(env: NodeJS.ProcessEnv = process.env): string | null {
@@ -442,22 +523,38 @@ const LAYOUT_PROBE = `(() => {
   return { sections: pages.length, overflow: out };
 })()`;
 
-/** Headless Chromium, with the network refused: the document carries everything it needs. */
+/**
+ * Headless Chromium, with the network refused: the document carries everything
+ * it needs. Started as a server so the process can be KILLED when a print runs
+ * over (a closed connection to a hung browser leaves the browser running), and
+ * closed after every print.
+ */
 export function chromiumRenderer(executablePath: string): Renderer {
-  return async (html: string) => {
+  return async (html: string, signal?: AbortSignal) => {
     const { chromium } = await import('playwright-core');
-    const browser = await chromium.launch({ executablePath, args: ['--no-sandbox'] });
+    const server = await chromium.launchServer({ executablePath, args: [...CHROMIUM_LAUNCH_ARGS] });
+    const kill = (): void => { void server.kill().catch(() => undefined); };
+    if (signal?.aborted) { kill(); throw new Error('the print was stopped before it started'); }
+    signal?.addEventListener('abort', kill, { once: true });
     try {
-      const page = await browser.newPage();
-      await page.route('**/*', (route) => (route.request().url().startsWith('data:') ? route.continue() : route.abort()));
-      await page.emulateMedia({ media: 'print' });
-      await page.setContent(html, { waitUntil: 'load' });
-      await page.evaluate('document.fonts.ready.then(() => true)');
-      const layout = await page.evaluate(LAYOUT_PROBE) as { sections: number; overflow: string[] };
-      const pdf = await page.pdf({ printBackground: true, preferCSSPageSize: true });
-      return { pdf: Buffer.from(pdf), sections: layout.sections, overflow: layout.overflow };
+      const browser = await chromium.connect(server.wsEndpoint());
+      try {
+        const page = await browser.newPage();
+        await page.route('**/*', (route) => (route.request().url().startsWith('data:') ? route.continue() : route.abort()));
+        await page.emulateMedia({ media: 'print' });
+        await page.setContent(html, { waitUntil: 'load' });
+        await page.evaluate('document.fonts.ready.then(() => true)');
+        const layout = await page.evaluate(LAYOUT_PROBE) as { sections: number; overflow: string[] };
+        const pdf = await page.pdf({ printBackground: true, preferCSSPageSize: true });
+        return { pdf: Buffer.from(pdf), sections: layout.sections, overflow: layout.overflow };
+      } finally {
+        await browser.close().catch(() => undefined);
+      }
     } finally {
-      await browser.close();
+      signal?.removeEventListener('abort', kill);
+      await server.close().catch(() => undefined);
+      // close() asks politely; a browser that did not go is killed.
+      await server.kill().catch(() => undefined);
     }
   };
 }
@@ -472,7 +569,7 @@ export async function renderPrintable(spec: PrintableSpec, meta: PrintMeta, rend
   const path = chromiumPath();
   const r = renderer ?? substitute ?? (path ? chromiumRenderer(path) : null);
   if (!r) throw new Error('there is no Chromium on this machine to print a page with');
-  return { ...(await r(html)), html };
+  return { ...(await printOne(html, r)), html };
 }
 
 // ─── The stored file ─────────────────────────────────────────────────────────

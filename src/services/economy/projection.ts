@@ -894,3 +894,94 @@ export async function costPerDecision(founderId: string): Promise<CostPerDecisio
     : `Thinking cost ${dollars(thinkingCents)} in the last 30 days, across ${String(decisions)} ${decisions === 1 ? 'decision' : 'decisions'} you recorded: about ${dollars(perDecisionCents!)} each, as a ratio, not a price on any one.`;
   return { thinkingCents, decisions, perDecisionCents, sentence };
 }
+
+// ─── What each product costs to serve (F1, 9 October 2026) ───────────────────
+
+export interface StreamCost {
+  experimentId: string;
+  name: string;
+  /** Real charges less refunds and disputes, through this product's fulfilments. */
+  revenue: Figure;
+  /** What the provider took, less fees it returned. Not known when any charge has no fee row. */
+  fees: Figure;
+  /** Settled model spend whose purpose is this experiment. */
+  thinking: Figure;
+  /** The stated Fly bill split equally across active products: an estimate, or not stated. */
+  hosting: Figure;
+  /** Revenue less every known cost. Not known when the fees are not. */
+  net: Figure;
+}
+
+export interface CostToServe {
+  days: number;
+  streams: StreamCost[];
+  /** Thinking that served no one product: the search, and companies' own work. Never split across products. */
+  unattributedThinking: Figure;
+  sentence: string;
+}
+
+/**
+ * EACH PRODUCT STREAM'S MODEL, HOSTING AND FEE COST AGAINST ITS REVENUE, over
+ * the last `days` days. A stream is one experiment: one thing for sale. Every
+ * figure is a sum of rows a provider or the spend ledger wrote, except hosting,
+ * which is the owner's stated Fly bill split equally across the streams with
+ * any activity and is labelled an estimate. An unread fee makes the stream's
+ * fees and net NOT KNOWN rather than zero, as `unitContribution` does.
+ */
+export async function costToServe(founderId: string, days = 30): Promise<CostToServe> {
+  const since = `-${String(days)} days`;
+  const money = (await query(
+    `SELECT f.experiment_id AS exp,
+            COALESCE(SUM(CASE WHEN e.kind = 'charge' THEN e.amount_cents END), 0) AS charged,
+            COALESCE(SUM(CASE WHEN e.kind IN ('refund','dispute_withdrawal') THEN e.amount_cents END), 0) AS returned,
+            COALESCE(SUM(CASE WHEN e.kind IN ('provider_fee','dispute_fee') THEN e.amount_cents END), 0) AS fees,
+            COALESCE(SUM(CASE WHEN e.kind = 'refund_fee_returned' THEN e.amount_cents END), 0) AS fees_back,
+            COUNT(DISTINCT CASE WHEN e.kind = 'charge' THEN e.fulfilment_id END) AS charges,
+            COUNT(DISTINCT CASE WHEN e.kind = 'provider_fee' THEN e.fulfilment_id END) AS fee_read
+       FROM economic_events e JOIN experiment_fulfilments f ON f.id = e.fulfilment_id
+      WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND datetime(e.occurred_at) >= datetime('now', ?)
+      GROUP BY f.experiment_id`, [founderId, since])).rows as Array<Record<string, unknown>>;
+  // Read through the spend ledger, where the erasure promise about that table is kept.
+  const { settledByExperiment } = await import('../ai/spend-ledger.js');
+  const spent = await settledByExperiment(founderId, days);
+  const elsewhere = spent.outside;
+  const ids = [...new Set([...money.map((r) => String(r.exp)), ...spent.byExperiment.keys()])];
+  const names = new Map<string, string>();
+  if (ids.length) {
+    const rows = (await query(`SELECT id, what_we_do FROM venture_experiments WHERE founder_id = ? AND id IN (${ids.map(() => '?').join(',')})`,
+      [founderId, ...ids])).rows as Array<Record<string, unknown>>;
+    for (const r of rows) names.set(String(r.id), String(r.what_we_do ?? r.id));
+  }
+  // HOSTING: the newest stated Fly line, for the window, split equally. An assumption, and said so.
+  const fly = (await query(
+    `SELECT monthly_cents, source FROM foundry_cost_lines WHERE founder_id = ? AND provider = 'fly'
+      ORDER BY datetime(said_at) DESC, rowid DESC LIMIT 1`, [founderId])).rows[0] as Record<string, unknown> | undefined;
+  const flyCents = fly?.monthly_cents == null ? null : Number(fly.monthly_cents);
+  const known = ids.filter((id) => names.has(id));
+  const hostingEach: Figure = flyCents === null || known.length === 0
+    ? unavailable('hosting is not stated: tell Foundry what the Fly machine costs a month and it is split here')
+    : { cents: Math.round((flyCents * days) / 30 / known.length), quality: 'estimated',
+      because: `an estimate: the Fly bill you stated, for ${String(days)} days, split equally across ${String(known.length)} ${known.length === 1 ? 'product' : 'products'}` };
+  const streams: StreamCost[] = known.map((id) => {
+    const m = money.find((r) => String(r.exp) === id);
+    const charges = Number(m?.charges ?? 0);
+    const revenue = measured(Number(m?.charged ?? 0) - Number(m?.returned ?? 0),
+      charges === 0 ? 'nothing was sold in the window' : 'what buyers paid, less refunds and disputes');
+    const fees: Figure = Number(m?.fee_read ?? 0) < charges
+      ? unavailable(`the provider has not said what it took from ${String(charges - Number(m?.fee_read ?? 0))} of ${String(charges)} charges`)
+      : measured(Number(m?.fees ?? 0) - Number(m?.fees_back ?? 0), charges === 0 ? 'no charge, so no fee' : 'what the provider took, as it said');
+    const thinking = measured(Math.round(spent.byExperiment.get(id) ?? 0), 'settled model spend for this product');
+    const net: Figure = fees.cents === null
+      ? unavailable('not known until every fee is read')
+      : hostingEach.cents === null
+        ? measured((revenue.cents ?? 0) - fees.cents - (thinking.cents ?? 0), 'revenue less fees and thinking; hosting is not stated, so it is not subtracted')
+        : { cents: (revenue.cents ?? 0) - fees.cents - (thinking.cents ?? 0) - hostingEach.cents, quality: 'estimated',
+          because: 'revenue less fees, thinking and an estimated share of hosting' };
+    return { experimentId: id, name: names.get(id)!, revenue, fees, thinking, hosting: hostingEach, net };
+  });
+  const unattributedThinking = measured(Math.round(elsewhere), 'settled model spend whose purpose is no one product');
+  const sentence = streams.length === 0
+    ? `No product had a sale or thinking of its own in the last ${String(days)} days.`
+    : `${String(streams.length)} ${streams.length === 1 ? 'product' : 'products'} in the last ${String(days)} days; thinking that served no one product cost ${dollars(unattributedThinking.cents ?? 0)} and is not split across them.`;
+  return { days, streams, unattributedThinking, sentence };
+}

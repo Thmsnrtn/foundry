@@ -222,3 +222,21 @@ export async function settledCentsPerDay(days: number): Promise<number> {
       WHERE status = 'settled' AND date >= date('now', ?) AND date < date('now')`, [within(days)])).rows[0] as Record<string, unknown> | undefined;
   return Number(r?.cents ?? 0) / Math.max(1, Math.floor(days));
 }
+
+/**
+ * SETTLED THINKING BY PRODUCT, for cost to serve (F1, 9 October 2026):
+ * accounting in the plain sense — the bill, grouped by the experiment it was
+ * declared for — kept here beside `spentThinkingOn` for the reason
+ * `settledByModel` gives. `outside` is what no experiment was named for.
+ */
+export async function settledByExperiment(founderId: string, days: number): Promise<{ byExperiment: Map<string, number>; outside: number }> {
+  const rows = (await query(
+    `SELECT purpose_id AS exp, COALESCE(SUM(actual_cents), 0) AS cents FROM ai_spend_reservations
+      WHERE founder_id = ? AND status = 'settled' AND purpose_kind = 'experiment' AND date >= date('now', ?)
+      GROUP BY purpose_id`, [founderId, within(days)])).rows as unknown as Array<Record<string, unknown>>;
+  const outside = (await query(
+    `SELECT COALESCE(SUM(actual_cents), 0) AS cents FROM ai_spend_reservations
+      WHERE founder_id = ? AND status = 'settled' AND (purpose_kind IS NULL OR purpose_kind <> 'experiment') AND date >= date('now', ?)`,
+    [founderId, within(days)])).rows[0] as Record<string, unknown> | undefined;
+  return { byExperiment: new Map(rows.map((r) => [String(r.exp), Number(r.cents)])), outside: Number(outside?.cents ?? 0) };
+}

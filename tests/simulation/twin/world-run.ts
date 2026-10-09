@@ -83,6 +83,8 @@ export interface WorldResult {
   ownerMinutesPerWeekLate: number;
   ownerActs: number;
   needsYouSeen: Record<string, number>;
+  /** New needs-you items by what they said (ids and quoted titles blanked). */
+  needsYouSaid: Record<string, number>;
   fabricationRefusals: number;
   refusalsByKind: Record<string, number>;
   /** Every violation, by invariant, with the first day it was seen. */
@@ -434,6 +436,7 @@ export async function runWorld(o: WorldOptions): Promise<WorldResult> {
     ownerMinutesPerWeekLate: late.reduce((s, r) => s + r.ownerMinutes, 0) / Math.max(1, late.length / 7),
     ownerActs: timeline.reduce((s, r) => s + r.ownerActs.length, 0),
     needsYouSeen: owner.seen,
+    needsYouSaid: owner.said,
     fabricationRefusals, refusalsByKind,
     violations: [...byId.values()], breaches: verdicts.reduce((s, v) => s + v.violations.length, 0),
     forgeIdleAtEnd: idleRun >= 14, forgeIdleDays: idleDays,

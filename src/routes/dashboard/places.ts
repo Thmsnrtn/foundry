@@ -643,7 +643,7 @@ placeRoutes.get('/foundry/needs-you', async (c: any) => {
           <div class="pair"><a class="btn yes" href="${b.href}">Open it</a></div>
           <p class="row">${b.snoozable ? notNow(b.key) : ''}</p></div>`)}` : ''}
       ${ny && ny.later.length ? html`<details class="fold know" id="later"><summary><h3>Put off until later</h3><span class="gist">${String(ny.later.length)}</span></summary>
-        <ul>${ny.later.map((l) => html`<li><a href="${l.href}">${l.summary}</a> <span class="dim">until ${l.snoozedUntil!.slice(0, 16).replace('T', ' ')}</span></li>`)}</ul>
+        <ul>${ny.later.map((l) => html`<li><a href="${l.href}">${l.summary}</a> <span class="dim">${l.batched ? `in the week's batch, ${l.snoozedUntil!.slice(0, 10)}` : `until ${l.snoozedUntil!.slice(0, 16).replace('T', ' ')}`}</span></li>`)}</ul>
         <p class="quiet">Each comes back on its own when its time is up.</p></details>` : ''}` : ''}
     ${company && waiting > 0 ? html`<div class="know"><h2>Waiting on you</h2>
       ${openActs.map((a) => html`<div class="noticed"><p><strong>${String(a.summary)}</strong></p>

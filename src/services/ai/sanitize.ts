@@ -104,6 +104,16 @@ export function wrapDataBlock(tag: string, content: string, maxLength = 20000): 
 }
 
 /**
+ * A VALUE AS A DATA BLOCK: JSON inside `<tag>`, escaped as `wrapDataBlock`
+ * escapes, so nothing inside — a post quoting `</record>`, a model's finding
+ * that does — can close the block (F1, 9 October 2026). `JSON.stringify`
+ * escapes quotes and not angle brackets, which is the whole defect.
+ */
+export function dataJson(tag: string, value: unknown, maxLength = 60_000): string {
+  return wrapDataBlock(tag, JSON.stringify(value, null, 1) ?? 'null', maxLength);
+}
+
+/**
  * The sentence that makes the block above mean something.
  *
  * A delimiter with nothing telling the model what the delimiter is for is

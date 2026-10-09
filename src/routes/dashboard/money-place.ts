@@ -105,8 +105,9 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
   const ledger = await ledgerEntries(founderId, 30);
   const cost = await runningCost(founderId);
   const carry = await carryingCost(founderId);
-  const { costPerDecision, foundryLine, hourValueOf } = await import('../../services/economy/projection.js');
+  const { costPerDecision, costToServe, foundryLine, hourValueOf } = await import('../../services/economy/projection.js');
   const line30 = await foundryLine(founderId);
+  const serve = await costToServe(founderId);
   const perDecision = await costPerDecision(founderId);
   const worth = await hourValueOf(founderId);
   // STANDING DOES NOT APPLY: the owner may enter time on any asset of theirs,
@@ -287,6 +288,18 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
           · ${l.source}${l.providerRef ? ` · receipt ${l.providerRef}` : ''}
           · ${l.at}
         </li>`)}</ul>`}`)}
+
+    ${fold('serve', 'Cost to serve, by product', serve.streams.length === 0 ? 'nothing yet' : `${String(serve.streams.length)} ${serve.streams.length === 1 ? 'product' : 'products'}, ${String(serve.days)} days`, html`
+      <p>${serve.sentence}</p>
+      ${serve.streams.length === 0 ? '' : html`<ul class="sales">${serve.streams.map((st) => html`<li>
+          <a href="/foundry/experiments/${st.experimentId}">${st.name}</a>:
+          revenue <b>${fig(st.revenue)}</b>
+          · fees ${fig(st.fees)} · thinking ${fig(st.thinking)}
+          · hosting ${fig(st.hosting)}${st.hosting.quality === 'estimated' ? ' (an estimate: an equal share of the Fly bill you stated)' : ''}
+          · net <b>${fig(st.net)}</b>
+          <br /><small class="quiet">${st.net.because}${st.fees.cents === null ? `; ${st.fees.because}` : ''}${st.hosting.cents === null ? `; ${st.hosting.because}` : ''}</small>
+        </li>`)}</ul>`}
+      <p class="quiet">Thinking that served no one product (the search, and companies' own work): ${fig(serve.unattributedThinking)}. It is not split across products.</p>`)}
 
     ${fold('carry', 'What Foundry costs to carry each month', carry.notKnown.length ? `at least ${figureText(carry.total)}` : figureText(carry.total), html`
       <p><strong>${carry.notKnown.length ? 'At least ' : ''}${fig(carry.total)}</strong> a month. ${carry.total.because}.</p>

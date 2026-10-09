@@ -72,6 +72,11 @@ export const JUDGES: readonly Judge[] = [
     decide(p, x) {
       if (!fits(p, x)) return { verdict: 'no', maxPriceDollars: 0 };
       if (x.listedPages !== x.pages || x.defects.includes('over-claim')) return { verdict: 'no', maxPriceDollars: Math.round(p.wtpDollars * 0.5) };
+      // IT READS THE WORDS, not only the counts (F1): a file whose pages are
+      // padding — fewer distinct lines of substance than a third of its pages —
+      // is one this reader would ask the money back for, whatever the listing says.
+      const substance = new Set(x.text.split('\n').map((l) => l.trim().toLowerCase()).filter((l) => l.split(/\s+/).length >= 3)).size;
+      if (substance < Math.max(1, Math.floor(x.pages / 3))) return { verdict: 'no', maxPriceDollars: Math.round(p.wtpDollars * 0.3) };
       const v: Verdict = x.pages >= 8 && x.priceDollars <= p.wtpDollars * 1.1 ? 'yes' : 'maybe';
       return { verdict: v, maxPriceDollars: Math.round(p.wtpDollars * (x.pages >= 8 ? 1 : 0.7)) };
     },

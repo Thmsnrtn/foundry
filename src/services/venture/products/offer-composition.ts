@@ -11,7 +11,7 @@
 // opinions; and the hands make the thing and refuse it at their own gate.
 // =============================================================================
 import { callSonnet } from '../../ai/client.js';
-import { dataBlockInstruction } from '../../ai/sanitize.js';
+import { dataBlockInstruction, dataJson } from '../../ai/sanitize.js';
 import { institutionSpend } from '../../ai/what-it-is-for.js';
 import type { OfferShapePlan } from '../hand.js';
 import { designOf } from '../probe-design.js';
@@ -285,8 +285,11 @@ export async function shapeAndMake(experimentId: string): Promise<Made | { refus
   const printables = exchange === 'upfront_price' ? await mayMakePrintables(record.founderId) : { may: false, because: 'a printable is sold once at a fixed price' };
   const system = givesATool ? `${SYSTEM}\n${TOOL_SYSTEM}` : givesFirst ? `${SYSTEM}\n${VALUE_SYSTEM}` : recurs ? `${SYSTEM}\n${SUBSCRIPTION_SYSTEM}` : SYSTEM;
   const reply = await callSonnet(printables.may ? `${system}\n${PRINTABLE_SYSTEM}` : system,
-    `<record>${JSON.stringify({ candidate: record.candidate, test: record.experiment, evidence: record.evidence.slice(0, 20), retrievals: record.retrievals, charter: record.charter }, null, 1)}</record>\n<design>${JSON.stringify({
-      decides: design.decides, canProve: design.canProve, cannotProve: design.cannotProve, distribution: design.distribution, ifItSucceeds: design.ifItSucceeds }, null, 1)}</design>`,
+    // WHAT THE WORLD SAID REACHES THE MODEL AS DATA (F1): the evidence quotes
+    // strangers' posts, and raw JSON in a tag let a post saying `</record>`
+    // end the block. Escaped as every data block is.
+    `${dataJson('record', { candidate: record.candidate, test: record.experiment, evidence: record.evidence.slice(0, 20), retrievals: record.retrievals, charter: record.charter })}\n${dataJson('design', {
+      decides: design.decides, canProve: design.canProve, cannotProve: design.cannotProve, distribution: design.distribution, ifItSucceeds: design.ifItSucceeds })}`,
     givesATool ? 3200 : 1800, institutionSpend('shaping the offer of a designed test for the owner\'s portfolio search, which has no company to charge yet', 'shaping an offer', { kind: 'experiment', id: experimentId }));
   const from = reply.content.indexOf('{'); const to = reply.content.lastIndexOf('}');
   if (from < 0 || to <= from) return { refused: 'the composition was not an offer' };
@@ -485,8 +488,8 @@ async function shapeAndMakePrintable(input: {
     venue: 'workshop',
   };
   const reply = await callSonnet(PRINTABLE_CONTENT_SYSTEM,
-    `<offer>${JSON.stringify({ title, sells: plan.shape.sells, sellsTo: plan.shape.sellsTo, claimsMade: plan.shape.claimsMade, page: { who: str(page, 'who'), what: str(page, 'what'), limits: str(page, 'limits') } }, null, 1)}</offer>\n`
-      + `<design>${JSON.stringify(input.design, null, 1)}</design>`,
+    `${dataJson('offer', { title, sells: plan.shape.sells, sellsTo: plan.shape.sellsTo, claimsMade: plan.shape.claimsMade, page: { who: str(page, 'who'), what: str(page, 'what'), limits: str(page, 'limits') } })}\n`
+      + dataJson('design', input.design),
     8000, institutionSpend('writing the pages of a printable the hands will make for a designed test', 'shaping an offer', { kind: 'experiment', id: experimentId }));
   const from = reply.content.indexOf('{'); const to = reply.content.lastIndexOf('}');
   let written: Row;

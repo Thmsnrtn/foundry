@@ -40,7 +40,7 @@ import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 import { callOpus, callSonnet, ModelDoorError, ModelReplyRefused } from '../ai/client.js';
 import { numbersNotIn } from './invented-numbers.js';
-import { dataBlockInstruction } from '../ai/sanitize.js';
+import { dataBlockInstruction, dataJson } from '../ai/sanitize.js';
 import { shieldUntrustedContent } from '../ai/prompt-shield.js';
 import { institutionSpend } from '../ai/what-it-is-for.js';
 import { bearingAsRead } from './market-evidence.js';
@@ -478,13 +478,14 @@ const FIELD_NAMES: Record<string, AmendableField> = {
 };
 
 function draftBlock(d: ProbeDesign): string {
-  return `<draft>${JSON.stringify({
+  // Escaped as every data block is (F1): the draft quotes the evidence it was built from.
+  return dataJson('draft', {
     decides: d.decides, decides_because: d.decidesBecause, exchange: d.exchange.exchange, exchange_because: d.exchangeBecause,
     can_prove: d.canProve, cannot_prove: d.cannotProve, rather_than_waiting: d.ratherThanWaiting, distribution: d.distribution,
     if_it_succeeds: d.ifItSucceeds, fulfilment_cap: d.fulfilmentCap, recommendation: d.recommendation,
     recommendation_because: d.recommendationBecause, interpretations: d.interpretations, alternatives: d.alternatives,
     costs: d.costs, stop_conditions: d.stopConditions.map((s) => ({ kind: s.kind, threshold: s.threshold, because: s.because })),
-  }, null, 1)}</draft>`;
+  });
 }
 
 export async function attacksOf(experimentId: string): Promise<Array<Attack & { verdict: Recommendation; because: string }>> {
@@ -542,7 +543,7 @@ export async function deliberate(experimentId: string): Promise<Deliberation> {
     return { experimentId, outcome: 'refused', because: `${String(LENSES.length - findings.length)} of ${String(LENSES.length)} disciplines returned nothing usable; no design is composed on a partial review${refusedFindings.length ? `. Refused: ${refusedFindings.join('; ')}` : ''}`, ...empty, findings };
   }
 
-  const reply = await callOpus(COMPOSE_SYSTEM, `${recordBlock(record)}\n<findings>${JSON.stringify(findings, null, 1)}</findings>`, 4000, institutionSpend(
+  const reply = await callOpus(COMPOSE_SYSTEM, `${recordBlock(record)}\n${dataJson('findings', findings)}`, 4000, institutionSpend(
     'composing the design of a real test from five disciplines\' findings; being wrong here costs a probe and the Workshop\'s standing',
     'composing a probe', { kind: 'experiment', id: experimentId }));
   const raw = parseObject(reply.content);

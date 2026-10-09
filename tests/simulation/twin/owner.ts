@@ -18,6 +18,12 @@
 //   reading the Brief            → minutes.weeklyRead / 7, each day
 // Nothing is inferred from activity the owner did not have: a minute is
 // charged only for an item the institution actually put in front of him.
+//
+// THE WEEK'S BATCH (F1, 9 October 2026): an item that waits for the week
+// (`waitsForTheWeek`) leaves his list between batch days and comes back on the
+// next one. Coming back is not new to him when he read it in the last seven
+// days: it is charged as a waiting item (a glance), not a new one. Any other
+// item that disappears and comes back is still charged as new.
 // =============================================================================
 import type { Drawn } from './params.js';
 
@@ -32,25 +38,36 @@ export interface Owner {
   day(founderId: string): Promise<OwnerDay>;
   /** Item kinds seen, by the key's prefix, with how many new ones of each. */
   seen: Record<string, number>;
+  /** What each new item said when it first reached him, by its summary with ids blanked: what drives his minutes. */
+  said: Record<string, number>;
 }
 
 export function anOwner(p: Drawn, terms: { testsTotalCents: number; probesInFlight: number; cognitionCentsPerDay: number; publicVoice: string; statement: string }): Owner {
   const open = new Set<string>();
   const seen: Record<string, number> = {};
+  const said: Record<string, number> = {};
+  const lastSeen = new Map<string, number>();
+  let dayN = 0;
   return {
-    seen,
+    seen, said,
     async day(founderId) {
       const { needsYou } = await import('../../../src/services/needs-you/queue.js');
       const { liveCharter, signCharter } = await import('../../../src/services/institution/charter.js');
+      const { waitsForTheWeek } = await import('../../../src/services/needs-you/queue.js');
+      dayN += 1;
       const out: OwnerDay = { minutes: p['minutes.weeklyRead'] / 7, items: 0, newItems: [], acts: [] };
       const { items } = await needsYou(founderId);
       out.items = items.length;
       const now = new Set(items.map((i) => i.key));
       for (const i of items) {
         const kind = i.key.split(':')[0]!;
-        if (open.has(i.key)) { out.minutes += p['minutes.perWaitingItemPerDay']; continue; }
+        const readThisWeek = i.item !== null && waitsForTheWeek(i.item) && dayN - (lastSeen.get(i.key) ?? -99) <= 7;
+        lastSeen.set(i.key, dayN);
+        if (open.has(i.key) || readThisWeek) { out.minutes += p['minutes.perWaitingItemPerDay']; continue; }
         out.newItems.push(i.key);
         seen[kind] = (seen[kind] ?? 0) + 1;
+        const words = `${kind}: ${i.summary.replace(/"[^"]*"/g, '"…"').slice(0, 90)}`;
+        said[words] = (said[words] ?? 0) + 1;
         out.minutes += kind === 'mail' ? p['minutes.perBuyerMail'] : p['minutes.perNewItem'];
       }
       open.clear();
