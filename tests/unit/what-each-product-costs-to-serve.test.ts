@@ -99,4 +99,19 @@ describe('cost to serve, by product', () => {
     expect(text).toMatch(/Thinking that served no one product[^$]*\$0\.25/);
     expect(text).toMatch(/hosting.*estimate/i);
   });
+
+  // F2 audit of F1: "every fee read" was decided by counting FULFILMENTS with a
+  // fee, not CHARGES. A fulfilment charged twice (a renewal, a second invoice)
+  // with one fee read said its fees were known, and the net was overstated by
+  // the fee nobody read.
+  it('a second charge on the same fulfilment, its fee unread: fees and net are NOT KNOWN again', async () => {
+    const { record } = await import('../../src/services/economy/ledger.js');
+    await record({ founderId: OWNER, kind: 'charge', amountCents: 900, occurredAt: new Date(), provider: 'stripe', providerRef: 'ch_a_second',
+      sourceEventId: 'boe_a', fulfilmentId: 'ful_a', evidenceMode: 'real', because: 'a buyer paid again' });
+    const { costToServe } = await import('../../src/services/economy/projection.js');
+    const s = (await costToServe(OWNER)).streams.find((x) => x.experimentId === EXP)!;
+    expect(s.revenue.cents).toBe(2700);
+    expect(s.fees.cents).toBeNull();
+    expect(s.net.cents).toBeNull();
+  });
 });
