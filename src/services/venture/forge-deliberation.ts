@@ -223,7 +223,7 @@ const MAY_NOT_INVENT = [
   'that needs one says so rather than pretending otherwise.',
 ].join('\n');
 
-function recordBlock(r: TheRecord): string {
+export function recordBlock(r: TheRecord): string {
   // THE FENCE HOLDS ONLY IF NOTHING INSIDE IT CAN CLOSE IT. `JSON.stringify`
   // escapes quotes and not angle brackets, so a post containing `</record>`
   // ended the block and everything after it read as prompt, not data — and

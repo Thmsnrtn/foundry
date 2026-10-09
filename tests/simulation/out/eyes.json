@@ -1,11 +1,11 @@
 {
- "writtenAt": "2026-10-09T10:43:22.955Z",
- "days": 10,
+ "writtenAt": "2026-10-09T10:47:23.835Z",
+ "days": 90,
  "seeds": [
   {
    "seed": 1,
-   "rows": 172,
-   "onTopic": 144,
+   "rows": 1581,
+   "onTopic": 1485,
    "untethered": 0,
    "disagreements": [
     {
@@ -13,7 +13,7 @@
      "verdicts": "no/no/yes"
     },
     {
-     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nobody in the archive has discussed \"plain printable household bills\" — 5 things came back and none ",
+     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nobody in the archive has discussed \"plain printable household bills\" — 6 things came back and none ",
      "verdicts": "no/no/yes"
     },
     {
@@ -37,7 +37,7 @@
      "verdicts": "no/no/yes"
     },
     {
-     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nobody in the archive has discussed \"plain printable household bills\" — 5 things came back and none ",
+     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nobody in the archive has discussed \"plain printable household bills\" — 4 things came back and none ",
      "verdicts": "no/no/yes"
     },
     {
@@ -49,13 +49,13 @@
      "verdicts": "no/no/yes"
     }
    ],
-   "leftOut": 7,
-   "reviewed": 20
+   "leftOut": 46,
+   "reviewed": 171
   }
  ],
- "rows": 172,
- "onTopic": 144,
- "share": 0.8372093023255814,
+ "rows": 1581,
+ "onTopic": 1485,
+ "share": 0.9392789373814042,
  "judges": [
   {
    "id": "ground-truth",
@@ -71,7 +71,7 @@
   }
  ],
  "kappa": {
-  "fleiss": 0.6203090507726268,
+  "fleiss": 0.6507620941020422,
   "pairs": [
    {
     "pair": "ground-truth~theme-words",
@@ -79,11 +79,11 @@
    },
    {
     "pair": "ground-truth~candidate-words",
-    "cohen": 0.3582089552238801
+    "cohen": 0.38506417736289383
    },
    {
     "pair": "theme-words~candidate-words",
-    "cohen": 0.3582089552238801
+    "cohen": 0.38506417736289383
    }
   ]
  },
@@ -101,7 +101,87 @@
    49,
    49,
    50,
-   49
+   49,
+   47,
+   45,
+   51,
+   40,
+   41,
+   45,
+   48,
+   42,
+   40,
+   50,
+   37,
+   47,
+   53,
+   37,
+   39,
+   46,
+   45,
+   44,
+   46,
+   48,
+   51,
+   44,
+   43,
+   34,
+   44,
+   39,
+   46,
+   43,
+   41,
+   39,
+   44,
+   42,
+   28,
+   31,
+   39,
+   40,
+   43,
+   39,
+   31,
+   36,
+   45,
+   46,
+   47,
+   32,
+   36,
+   46,
+   33,
+   28,
+   44,
+   43,
+   46,
+   31,
+   38,
+   49,
+   33,
+   38,
+   20,
+   26,
+   18,
+   16,
+   33,
+   29,
+   18,
+   16,
+   32,
+   28,
+   18,
+   23,
+   27,
+   26,
+   42,
+   22,
+   22,
+   19,
+   15,
+   16,
+   22,
+   17,
+   15,
+   23
   ]
  ]
 }

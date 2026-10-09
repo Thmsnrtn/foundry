@@ -37,7 +37,9 @@ export interface SourceTerms {
   terms: string;
   /** Why the verdict, one sentence a reader can argue with. */
   basis: string;
-  /** Which requests this entry covers. */
+  /** The hosts this entry is about, declared so the census can read them. */
+  hosts: readonly string[];
+  /** Which requests this entry covers (within those hosts). */
   matches: (u: URL) => boolean;
 }
 
@@ -45,34 +47,34 @@ const host = (h: string) => (u: URL): boolean => u.hostname === h;
 
 /** EVERY SITE AN EYE MAY ASK, AND EVERY ONE IT MAY NOT. The census test reads this list. */
 export const SOURCE_TERMS: readonly SourceTerms[] = Object.freeze([
-  { id: 'hn_algolia', named: 'Hacker News, through its search API', verdict: 'documented_api', terms: 'https://hn.algolia.com/api',
+  { id: 'hn_algolia', hosts: ['hn.algolia.com'], named: 'Hacker News, through its search API', verdict: 'documented_api', terms: 'https://hn.algolia.com/api',
     basis: 'Algolia publishes the HN Search API for programmatic search, newest-first included', matches: host('hn.algolia.com') },
-  { id: 'npm_registry', named: 'the npm registry', verdict: 'documented_api', terms: 'https://github.com/npm/registry/blob/main/docs/REGISTRY-API.md',
+  { id: 'npm_registry', hosts: ['registry.npmjs.org', 'api.npmjs.org'], named: 'the npm registry', verdict: 'documented_api', terms: 'https://github.com/npm/registry/blob/main/docs/REGISTRY-API.md',
     basis: 'npm documents the public registry and download-count APIs', matches: (u) => u.hostname === 'registry.npmjs.org' || u.hostname === 'api.npmjs.org' },
-  { id: 'github_issues', named: 'GitHub issue search', verdict: 'documented_api', terms: 'https://docs.github.com/en/rest/search/search#search-issues-and-pull-requests',
+  { id: 'github_issues', hosts: ['api.github.com'], named: 'GitHub issue search', verdict: 'documented_api', terms: 'https://docs.github.com/en/rest/search/search#search-issues-and-pull-requests',
     basis: 'GitHub documents the REST search API and its unauthenticated rate limit', matches: host('api.github.com') },
-  { id: 'wikimedia', named: 'Wikipedia search and pageviews', verdict: 'documented_api', terms: 'https://wikimedia.org/api/rest_v1/',
+  { id: 'wikimedia', hosts: ['wikimedia.org', 'en.wikipedia.org'], named: 'Wikipedia search and pageviews', verdict: 'documented_api', terms: 'https://wikimedia.org/api/rest_v1/',
     basis: 'Wikimedia documents the pageviews REST API and the MediaWiki search API, asking for a named user agent, which is sent',
     matches: (u) => u.hostname === 'wikimedia.org' || u.hostname === 'en.wikipedia.org' },
-  { id: 'itunes_search', named: 'the App Store, through the iTunes Search API', verdict: 'documented_api', terms: 'https://performance-partners.apple.com/search-api',
+  { id: 'itunes_search', hosts: ['itunes.apple.com'], named: 'the App Store, through the iTunes Search API', verdict: 'documented_api', terms: 'https://performance-partners.apple.com/search-api',
     basis: 'Apple publishes the Search API and the customer-reviews feed for programmatic reads, rate-limited', matches: host('itunes.apple.com') },
-  { id: 'remotive', named: 'Remotive remote jobs', verdict: 'documented_api', terms: 'https://remotive.com/api-documentation',
+  { id: 'remotive', hosts: ['remotive.com'], named: 'Remotive remote jobs', verdict: 'documented_api', terms: 'https://remotive.com/api-documentation',
     basis: 'Remotive documents a public jobs API, asking that jobs link back to it, which every observation does', matches: host('remotive.com') },
-  { id: 'stack_exchange', named: 'Stack Exchange questions', verdict: 'documented_api', terms: 'https://api.stackexchange.com/docs',
+  { id: 'stack_exchange', hosts: ['api.stackexchange.com'], named: 'Stack Exchange questions', verdict: 'documented_api', terms: 'https://api.stackexchange.com/docs',
     basis: 'Stack Exchange publishes API 2.3 for reading questions, newest first included; content is CC BY-SA and every observation keeps its link',
     matches: host('api.stackexchange.com') },
-  { id: 'duckduckgo_autocomplete', named: 'DuckDuckGo search suggestions', verdict: 'unknown', terms: 'https://duckduckgo.com/terms',
+  { id: 'duckduckgo_autocomplete', hosts: ['duckduckgo.com'], named: 'DuckDuckGo search suggestions', verdict: 'unknown', terms: 'https://duckduckgo.com/terms',
     basis: 'the suggestion endpoint is what DuckDuckGo\'s own search box calls; no published term licenses a program to call it', matches: host('duckduckgo.com') },
-  { id: 'etsy_marketplace_search', named: 'Etsy\'s active listings, searched', verdict: 'unknown', terms: 'https://www.etsy.com/legal/api',
+  { id: 'etsy_marketplace_search', hosts: ['openapi.etsy.com'], named: 'Etsy\'s active listings, searched', verdict: 'unknown', terms: 'https://www.etsy.com/legal/api',
     basis: 'Etsy\'s Open API v3 documents findAllListingsActive and listing reviews for an application key; whether its API terms let a seller\'s app read other shops\' listings for research is not settled here',
     matches: (u) => u.hostname === 'openapi.etsy.com' && /^\/v3\/application\/listings\/(active|\d+\/reviews)$/.test(u.pathname) },
-  { id: 'reddit', named: 'Reddit', verdict: 'forbidden', terms: 'https://redditinc.com/policies/data-api-terms',
+  { id: 'reddit', hosts: ['www.reddit.com', 'reddit.com', 'oauth.reddit.com'], named: 'Reddit', verdict: 'forbidden', terms: 'https://redditinc.com/policies/data-api-terms',
     basis: 'Reddit\'s Data API terms bar commercial use without a separate agreement', matches: (u) => /(^|\.)reddit\.com$/.test(u.hostname) },
-  { id: 'google_trends', named: 'Google Trends', verdict: 'forbidden', terms: 'https://policies.google.com/terms',
+  { id: 'google_trends', hosts: ['trends.google.com'], named: 'Google Trends', verdict: 'forbidden', terms: 'https://policies.google.com/terms',
     basis: 'there is no public Trends API; reading it means automated queries Google\'s terms forbid', matches: (u) => u.hostname === 'trends.google.com' },
-  { id: 'etsy_site', named: 'Etsy\'s website pages', verdict: 'forbidden', terms: 'https://www.etsy.com/legal/terms-of-use',
+  { id: 'etsy_site', hosts: ['www.etsy.com', 'etsy.com'], named: 'Etsy\'s website pages', verdict: 'forbidden', terms: 'https://www.etsy.com/legal/terms-of-use',
     basis: 'Etsy\'s terms forbid scraping its site; its API is the only door', matches: (u) => u.hostname === 'www.etsy.com' || u.hostname === 'etsy.com' },
-  { id: 'amazon', named: 'Amazon', verdict: 'forbidden', terms: 'https://www.amazon.com/gp/help/customer/display.html?nodeId=508088',
+  { id: 'amazon', hosts: ['www.amazon.com', 'amazon.com'], named: 'Amazon', verdict: 'forbidden', terms: 'https://www.amazon.com/gp/help/customer/display.html?nodeId=508088',
     basis: 'Amazon\'s conditions of use forbid data mining and robots', matches: (u) => /(^|\.)amazon\.[a-z.]+$/.test(u.hostname) },
 ]);
 
@@ -80,7 +82,7 @@ export const SOURCE_TERMS: readonly SourceTerms[] = Object.freeze([
 export function termsFor(url: string): SourceTerms | null {
   let u: URL;
   try { u = new URL(url); } catch { return null; }
-  return SOURCE_TERMS.find((t) => t.matches(u)) ?? null;
+  return SOURCE_TERMS.find((t) => t.hosts.includes(u.hostname) && t.matches(u)) ?? null;
 }
 
 /** His word on an unknown source, from his own signed row only (the guard of migration 277 refuses any other signature). */
