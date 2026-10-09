@@ -74,7 +74,7 @@ export function judgeWorld(w: Pick<WorldResult, 'reviewerEvidence' | 'truth'>): 
       const v = ON_TOPIC_JUDGES.map((j) => j.decide(theme, r.subject, row, w.truth));
       verdicts.push(v);
       if (v.filter((x) => x === 'yes').length >= 2) onTopic += 1;
-      if (new Set(v).size > 1) disagreements.push({ row: row.saw.slice(0, 100), verdicts: v.join('/') });
+      if (new Set(v).size > 1) disagreements.push({ row: `[${theme}] ${r.subject.slice(0, 80)} || ${row.saw.slice(0, 100)}`, verdicts: v.join('/') });
     }
   }
   return { rows: verdicts.length, onTopic, untethered, verdicts, disagreements };

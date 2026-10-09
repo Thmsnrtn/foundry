@@ -36,3 +36,22 @@ INSERT INTO origination_policy (id, founder_id, requirement, treatment, value, w
   ('f3_terms_etsy_search', NULL, 'source_terms:etsy_marketplace_search', 'policy', 'not_confirmed',
    'whether Etsy''s API terms let a seller''s application read other shops'' listings for research is not settled; his to confirm (PENDING 49)',
    'owner_decision:pending:49');
+
+-- WHAT A MARKETPLACE'S ANSWER BEARS. Until now `transaction` bore only on
+-- `people_pay`, so a seed asserting a gap or a want could never be asked the
+-- one source that sees purchases. Each row below is a reading a person can
+-- argue with; none of them "proves", and an empty marketplace bears nothing
+-- (silence on a shelf is not evidence nobody pays).
+DROP TRIGGER stance_bearings_constitutional_insert;
+INSERT INTO stance_bearings (stance, about, when_it, bearing, because) VALUES
+  ('transaction', 'gap_exists', 'found', 'narrows',
+   'something on the subject already sells, so the gap is not empty; whether what sells is adequate is another question'),
+  ('transaction', 'enough_people', 'found', 'narrows',
+   'buyers have paid for something on the subject, which is a floor on how many and not a count'),
+  ('transaction', 'pain_exists', 'found', 'narrows',
+   'people pay for something on the subject, which is a want acted on rather than a described cost'),
+  ('transaction', 'reachable', 'found', 'supports',
+   'buyers already find things on the subject by searching a marketplace, so it can be found without buying attention');
+CREATE TRIGGER stance_bearings_constitutional_insert
+BEFORE INSERT ON stance_bearings
+BEGIN SELECT RAISE(ABORT,'stance_bearing:constitutional'); END;

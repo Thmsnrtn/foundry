@@ -1,0 +1,107 @@
+{
+ "writtenAt": "2026-10-09T10:43:22.955Z",
+ "days": 10,
+ "seeds": [
+  {
+   "seed": 1,
+   "rows": 172,
+   "onTopic": 144,
+   "untethered": 0,
+   "disagreements": [
+    {
+     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nothing on the subject is for sale on Etsy for \"plain printable household bills\": 4 listings came ba",
+     "verdicts": "no/no/yes"
+    },
+    {
+     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nobody in the archive has discussed \"plain printable household bills\" — 5 things came back and none ",
+     "verdicts": "no/no/yes"
+    },
+    {
+     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || 1 maintained package already exists for \"plain printable household bills\" — plain-printable-househol",
+     "verdicts": "no/no/yes"
+    },
+    {
+     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nothing on the subject is for sale on Etsy for \"plain printable household bills\": 4 listings came ba",
+     "verdicts": "no/no/yes"
+    },
+    {
+     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nobody in the archive has discussed \"plain printable household bills\" — 5 things came back and none ",
+     "verdicts": "no/no/yes"
+    },
+    {
+     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || 1 maintained package already exists for \"plain printable household bills\" — plain-printable-househol",
+     "verdicts": "no/no/yes"
+    },
+    {
+     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nothing on the subject is for sale on Etsy for \"plain printable household bills\": 4 listings came ba",
+     "verdicts": "no/no/yes"
+    },
+    {
+     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nobody in the archive has discussed \"plain printable household bills\" — 5 things came back and none ",
+     "verdicts": "no/no/yes"
+    },
+    {
+     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || 1 maintained package already exists for \"plain printable household bills\" — plain-printable-househol",
+     "verdicts": "no/no/yes"
+    },
+    {
+     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nothing on the subject is for sale on Etsy for \"plain printable household bills\": 4 listings came ba",
+     "verdicts": "no/no/yes"
+    }
+   ],
+   "leftOut": 7,
+   "reviewed": 20
+  }
+ ],
+ "rows": 172,
+ "onTopic": 144,
+ "share": 0.8372093023255814,
+ "judges": [
+  {
+   "id": "ground-truth",
+   "how": "the twin knows what every item it showed was about; a summary row is judged by the theme its words name"
+  },
+  {
+   "id": "theme-words",
+   "how": "the row names the candidate's theme by the twin's vocabulary for it, more than any other theme"
+  },
+  {
+   "id": "candidate-words",
+   "how": "the row carries a word of the theme's vocabulary or its name, as a reader skimming for the subject would"
+  }
+ ],
+ "kappa": {
+  "fleiss": 0.6203090507726268,
+  "pairs": [
+   {
+    "pair": "ground-truth~theme-words",
+    "cohen": 1
+   },
+   {
+    "pair": "ground-truth~candidate-words",
+    "cohen": 0.3582089552238801
+   },
+   {
+    "pair": "theme-words~candidate-words",
+    "cohen": 0.3582089552238801
+   }
+  ]
+ },
+ "eyesIdleDays": [
+  0
+ ],
+ "newObservationsPerDay": [
+  [
+   46,
+   50,
+   50,
+   51,
+   45,
+   45,
+   49,
+   49,
+   50,
+   49
+  ]
+ ]
+}
