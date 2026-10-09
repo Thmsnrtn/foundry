@@ -3622,6 +3622,24 @@ file, with no production counterpart, and is deleted.
   3-D Secure and Checkout's own challenge are settings of the Stripe account,
   which is shared (`docs/stripe-shared-account.md`) and therefore the owner's.
 
-**Owner minutes, the capable year** (5 seeds × 365 days, p10 / p50 / p90 of
-the last four weeks): see the table below, written from the scorecards in
-`history/twin-2026-10-09-f1/`.
+**Owner minutes, the capable year** (seeds 1–5 × 365 days, the same seeds
+before and after; scorecards in `history/twin-2026-10-09-f1/`; p10 / p50 / p90):
+
+| | before (`3c88134`) | after F1 |
+|---|---|---|
+| minutes a week, last four weeks | 9.2 / 14.3 / 19.3 | **5.3 / 7.6 / 10.6** |
+| minutes a week, whole year | 13.0 / 18.7 / 22.7 | 7.3 / 9.4 / 12.5 |
+| what moves the minutes most (swing, p10→p90) | an unanswered item seen again (9.4), the weekly read (7.4), a new item (3.3) | the weekly read (7.4), an unanswered item (2.0), a new item (1.1) |
+| designs, products placed, sales, money kept, rules broken | identical, seed for seed | identical, seed for seed |
+
+The largest driver before was items he had already read, seen again every day
+— mostly advice and something noticed, standing for months, and the forge's
+designs-waiting item coming and going (in seed 1's first 120 days it reached
+him as new sixteen times). The middle case is now under Foundry's target of 10;
+the high case (10.6) is not, and what is left is mostly the weekly read itself,
+an assumption. No duplicate items were found to fold: the queue already folds
+a held file into one item and the forge's designs into one. Nothing an owner
+decides moved away from him. **Proof debt:** the owner is a policy and the
+minutes a stated model (`tests/simulation/twin/params.ts`); the twin's owner
+model changed with the product (a batched item read in the last seven days is a
+glance), so part of the drop is a modelling choice, stated here.
