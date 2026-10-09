@@ -55,26 +55,15 @@ recalibration.
 4. Run locally: `npx vitest run tests/evals/<suite>.eval.test.ts`.
 5. CI picks it up automatically.
 
-## Per-agent evals
+## Per-agent evals (deleted 9 October 2026)
 
-The 12 SCP agents (atlas, compass, prism, beacon, scribe, forge,
-harbor, sentinel, ledger, shield, oracle, crucible) each have an
-`analyzeAndAct` method that calls `callSonnet` with structured JSON
-outputs. To eval an agent:
-
-1. Pick 5–10 representative scenarios from `agent_messages` /
-   `agent_predictions` history.
-2. Capture the input context (snapshot of metric_snapshots, customer
-   data, recent stressors at that point in time).
-3. Capture the agent's output (signals, decisions, briefing
-   contribution).
-4. Mock `callSonnet` to return the captured JSON, run the agent, assert
-   the deterministic mapping (signal severity, decision gate, message
-   routing) is unchanged.
-
-The point is to catch silent regressions in how the agent's *scaffold*
-processes a stable LLM response — not to evaluate the LLM itself, which
-requires real calls and is out of scope for CI.
+There was one, `per-agent-decision-mapping`, for the twelve SCP agents. It
+tested a confidence-to-gate mapping DEFINED IN THE TEST FILE ITSELF: nothing in
+`src/` computed it, because the agents it described are gone. Mutating its own
+copy turned it red; nothing in production could. An eval of a function the
+product does not call measures nothing, so it was deleted rather than kept
+green. A new eval must import the production function it pins, and be shown
+red by mutating that function.
 
 ## What this suite is **not**
 
