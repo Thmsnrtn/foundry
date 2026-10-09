@@ -1,0 +1,418 @@
+[
+ {
+  "seed": 1,
+  "truth": {
+   "workshop": {
+    "sales": 3,
+    "gross": 2300,
+    "refunds": 0,
+    "refunded": 0,
+    "fees": 158
+   },
+   "etsy": {
+    "sales": 20,
+    "gross": 13900,
+    "refunds": 1,
+    "refunded": 1000,
+    "fees": 2224
+   },
+   "gumroad": {
+    "sales": 1,
+    "gross": 600,
+    "refunds": 0,
+    "refunded": 0,
+    "fees": 180
+   },
+   "lemonsqueezy": {
+    "sales": 1,
+    "gross": 600,
+    "refunds": 0,
+    "refunded": 0,
+    "fees": null
+   }
+  },
+  "line": {
+   "workshop": {
+    "sales": 3,
+    "grossCents": 2300,
+    "refunds": 0,
+    "refundedCents": 0,
+    "feesCents": 158,
+    "netCents": 2142
+   },
+   "etsy": {
+    "sales": 20,
+    "grossCents": 13900,
+    "refunds": 1,
+    "refundedCents": 1000,
+    "feesCents": 2224,
+    "netCents": 10676
+   },
+   "gumroad": {
+    "sales": 1,
+    "grossCents": 600,
+    "refunds": 0,
+    "refundedCents": 0,
+    "feesCents": 180,
+    "netCents": 420
+   },
+   "lemonsqueezy": {
+    "sales": 1,
+    "grossCents": 600,
+    "refunds": 0,
+    "refundedCents": 0,
+    "feesCents": null,
+    "netCents": null
+   }
+  },
+  "visitsPerListingDay": {
+   "workshop": 0.17795918367346938,
+   "etsy": 0.6404893449092344,
+   "gumroad": 0.03038674033149171,
+   "lemonsqueezy": null
+  },
+  "visitToBuy": 0.009831460674157303,
+  "read": {
+   "gumroad": {
+    "read": true,
+    "recorded": 1,
+    "repeated": 0,
+    "notOurs": 0
+   },
+   "lemonsqueezy": {
+    "read": true,
+    "recorded": 1,
+    "repeated": 0,
+    "notOurs": 0
+   }
+  }
+ },
+ {
+  "seed": 2,
+  "truth": {
+   "workshop": {
+    "sales": 16,
+    "gross": 11200,
+    "refunds": 1,
+    "refunded": 600,
+    "fees": 815
+   },
+   "etsy": {
+    "sales": 38,
+    "gross": 27200,
+    "refunds": 1,
+    "refunded": 600,
+    "fees": 4306
+   },
+   "gumroad": {
+    "sales": 0,
+    "gross": 0,
+    "refunds": 0,
+    "refunded": 0,
+    "fees": 0
+   },
+   "lemonsqueezy": {
+    "sales": 1,
+    "gross": 700,
+    "refunds": 0,
+    "refunded": 0,
+    "fees": null
+   }
+  },
+  "line": {
+   "workshop": {
+    "sales": 16,
+    "grossCents": 11200,
+    "refunds": 1,
+    "refundedCents": 600,
+    "feesCents": 815,
+    "netCents": 9785
+   },
+   "etsy": {
+    "sales": 38,
+    "grossCents": 27200,
+    "refunds": 1,
+    "refundedCents": 600,
+    "feesCents": 4306,
+    "netCents": 22294
+   },
+   "lemonsqueezy": {
+    "sales": 1,
+    "grossCents": 700,
+    "refunds": 0,
+    "refundedCents": 0,
+    "feesCents": null,
+    "netCents": null
+   }
+  },
+  "visitsPerListingDay": {
+   "workshop": 0.43690129112869636,
+   "etsy": 1.9984214680347276,
+   "gumroad": 0.02999210734017364,
+   "lemonsqueezy": null
+  },
+  "visitToBuy": 0.008240426563257392,
+  "read": {
+   "gumroad": {
+    "read": true,
+    "recorded": 0,
+    "repeated": 0,
+    "notOurs": 0
+   },
+   "lemonsqueezy": {
+    "read": true,
+    "recorded": 1,
+    "repeated": 0,
+    "notOurs": 0
+   }
+  }
+ },
+ {
+  "seed": 3,
+  "truth": {
+   "workshop": {
+    "sales": 1,
+    "gross": 700,
+    "refunds": 0,
+    "refunded": 0,
+    "fees": 51
+   },
+   "etsy": {
+    "sales": 1,
+    "gross": 600,
+    "refunds": 0,
+    "refunded": 0,
+    "fees": 102
+   },
+   "gumroad": {
+    "sales": 2,
+    "gross": 1300,
+    "refunds": 0,
+    "refunded": 0,
+    "fees": 390
+   },
+   "lemonsqueezy": {
+    "sales": 0,
+    "gross": 0,
+    "refunds": 0,
+    "refunded": 0,
+    "fees": 0
+   }
+  },
+  "line": {
+   "workshop": {
+    "sales": 1,
+    "grossCents": 700,
+    "refunds": 0,
+    "refundedCents": 0,
+    "feesCents": 51,
+    "netCents": 649
+   },
+   "etsy": {
+    "sales": 1,
+    "grossCents": 600,
+    "refunds": 0,
+    "refundedCents": 0,
+    "feesCents": 102,
+    "netCents": 498
+   },
+   "gumroad": {
+    "sales": 2,
+    "grossCents": 1300,
+    "refunds": 0,
+    "refundedCents": 0,
+    "feesCents": 390,
+    "netCents": 910
+   }
+  },
+  "visitsPerListingDay": {
+   "workshop": 0.1517604208822339,
+   "etsy": 0.15151515151515152,
+   "gumroad": 0.053128689492325853,
+   "lemonsqueezy": null
+  },
+  "visitToBuy": 0.004469273743016759,
+  "read": {
+   "gumroad": {
+    "read": true,
+    "recorded": 2,
+    "repeated": 0,
+    "notOurs": 0
+   },
+   "lemonsqueezy": {
+    "read": true,
+    "recorded": 0,
+    "repeated": 0,
+    "notOurs": 0
+   }
+  }
+ },
+ {
+  "seed": 4,
+  "truth": {
+   "workshop": {
+    "sales": 9,
+    "gross": 6300,
+    "refunds": 0,
+    "refunded": 0,
+    "fees": 458
+   },
+   "etsy": {
+    "sales": 16,
+    "gross": 11800,
+    "refunds": 2,
+    "refunded": 2000,
+    "fees": 1844
+   },
+   "gumroad": {
+    "sales": 2,
+    "gross": 1300,
+    "refunds": 1,
+    "refunded": 600,
+    "fees": 390
+   },
+   "lemonsqueezy": {
+    "sales": 0,
+    "gross": 0,
+    "refunds": 0,
+    "refunded": 0,
+    "fees": 0
+   }
+  },
+  "line": {
+   "workshop": {
+    "sales": 9,
+    "grossCents": 6300,
+    "refunds": 0,
+    "refundedCents": 0,
+    "feesCents": 458,
+    "netCents": 5842
+   },
+   "etsy": {
+    "sales": 16,
+    "grossCents": 11800,
+    "refunds": 2,
+    "refundedCents": 2000,
+    "feesCents": 1844,
+    "netCents": 7956
+   },
+   "gumroad": {
+    "sales": 2,
+    "grossCents": 1300,
+    "refunds": 1,
+    "refundedCents": 600,
+    "feesCents": 390,
+    "netCents": 310
+   }
+  },
+  "visitsPerListingDay": {
+   "workshop": 0.9595448798988622,
+   "etsy": 1.0916961826052736,
+   "gumroad": 0.053128689492325853,
+   "lemonsqueezy": null
+  },
+  "visitToBuy": 0.00520632472040108,
+  "read": {
+   "gumroad": {
+    "read": true,
+    "recorded": 3,
+    "repeated": 0,
+    "notOurs": 0
+   },
+   "lemonsqueezy": {
+    "read": true,
+    "recorded": 0,
+    "repeated": 0,
+    "notOurs": 0
+   }
+  }
+ },
+ {
+  "seed": 5,
+  "truth": {
+   "workshop": {
+    "sales": 8,
+    "gross": 5200,
+    "refunds": 1,
+    "refunded": 700,
+    "fees": 396
+   },
+   "etsy": {
+    "sales": 15,
+    "gross": 11000,
+    "refunds": 0,
+    "refunded": 0,
+    "fees": 1723
+   },
+   "gumroad": {
+    "sales": 5,
+    "gross": 3600,
+    "refunds": 0,
+    "refunded": 0,
+    "fees": 1010
+   },
+   "lemonsqueezy": {
+    "sales": 2,
+    "gross": 1400,
+    "refunds": 0,
+    "refunded": 0,
+    "fees": null
+   }
+  },
+  "line": {
+   "workshop": {
+    "sales": 8,
+    "grossCents": 5200,
+    "refunds": 1,
+    "refundedCents": 700,
+    "feesCents": 396,
+    "netCents": 4104
+   },
+   "etsy": {
+    "sales": 15,
+    "grossCents": 11000,
+    "refunds": 0,
+    "refundedCents": 0,
+    "feesCents": 1723,
+    "netCents": 9277
+   },
+   "gumroad": {
+    "sales": 5,
+    "grossCents": 3600,
+    "refunds": 0,
+    "refundedCents": 0,
+    "feesCents": 1010,
+    "netCents": 2590
+   },
+   "lemonsqueezy": {
+    "sales": 2,
+    "grossCents": 1400,
+    "refunds": 0,
+    "refundedCents": 0,
+    "feesCents": null,
+    "netCents": null
+   }
+  },
+  "visitsPerListingDay": {
+   "workshop": 0.5340531561461794,
+   "etsy": 1.0083102493074791,
+   "gumroad": 0.16580925999208548,
+   "lemonsqueezy": null
+  },
+  "visitToBuy": 0.006348459910651305,
+  "read": {
+   "gumroad": {
+    "read": true,
+    "recorded": 5,
+    "repeated": 0,
+    "notOurs": 0
+   },
+   "lemonsqueezy": {
+    "read": true,
+    "recorded": 2,
+    "repeated": 0,
+    "notOurs": 0
+   }
+  }
+ }
+]

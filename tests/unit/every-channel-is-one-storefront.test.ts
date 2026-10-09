@@ -256,3 +256,24 @@ describe('wired, not only built', () => {
     expect(calls).toBe(1);
   });
 });
+
+describe('reading across pages, as each API pages', () => {
+  it('Lemon Squeezy: every page up to meta.page.lastPage, newest first, stopping at the window (fixture pages)', async () => {
+    const LS = await import('../../src/services/venture/storefront/lemonsqueezy.js');
+    const all = Array.from({ length: 7 }, (_, i) => ({ type: 'orders', id: String(i + 1), attributes: {
+      identifier: `fixture-paged-${String(i + 1)}`, currency: 'USD', subtotal: 900, tax: 0, total: 900, status: 'paid', refunded: false, refunded_amount: 0,
+      test_mode: false, created_at: new Date(Date.UTC(2026, 9, 9 - i)).toISOString(), first_order_item: { product_id: 7001 } } }));
+    const asked: number[] = [];
+    CN.useChannelHttp(async (url) => {
+      const page = Number(new URL(url).searchParams.get('page[number]'));
+      asked.push(page);
+      return new Response(JSON.stringify({ data: all.slice((page - 1) * 3, page * 3), meta: { page: { currentPage: page, lastPage: 3 } } }), { status: 200 });
+    });
+    expect((await LS.readOrders('k', '1', new Date('2026-09-01'))).map((o) => o.providerRef)).toEqual(all.map((o) => o.attributes.identifier));
+    expect(asked).toEqual([1, 2, 3]);
+    // The window's edge: orders before it end the read without asking for more pages.
+    asked.length = 0;
+    expect((await LS.readOrders('k', '1', new Date(Date.UTC(2026, 9, 6)))).length).toBe(4);
+    expect(asked).toEqual([1, 2]);
+  });
+});

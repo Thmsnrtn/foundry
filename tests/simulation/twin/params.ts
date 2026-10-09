@@ -112,6 +112,27 @@ export const PARAMS = {
     dist: { kind: 'uniform', min: 0.45, max: 0.8 },
     source: { kind: 'assumption', cite: 'no measurement of competitor quality exists' },
   },
+  // ── Every channel (F2, 9 October 2026) ────────────────────────────────────
+  'channel.etsyReach': {
+    what: 'impressions a listing gets in Etsy\'s own search, relative to the Workshop page\'s search impressions', unit: 'x',
+    dist: { kind: 'logUniform', min: 1, max: 6 },
+    source: { kind: 'assumption', cite: 'a marketplace brings buyers already searching for printables, which a new domain does not; no Etsy impression data for Foundry exists, and the calibration seller\'s ~15 views/day/product bounds the top' },
+  },
+  'channel.marketplaceLagDays': {
+    what: 'days before a marketplace\'s own search shows a new listing', unit: 'days',
+    dist: { kind: 'triangular', min: 1, mode: 3, max: 10 },
+    source: { kind: 'assumption', cite: 'marketplace search indexes its own listings within days, not the weeks a new domain waits; not observed' },
+  },
+  'channel.gumroadReach': {
+    what: 'impressions Gumroad\'s Discover gives a new seller\'s listing, relative to the Workshop page\'s search impressions', unit: 'x',
+    dist: { kind: 'logUniform', min: 0.05, max: 0.6 },
+    source: { kind: 'assumption', cite: 'Discover recommends products with a sales history (Gumroad charges 30% on a sale it brings, gumroad.com/pricing read 2026-10-09); a new seller has none; not observed' },
+  },
+  'channel.euBuyerShare': {
+    what: 'share of the Workshop page\'s buyers who are in the EU or the UK, routed to a merchant of record', unit: 'share',
+    dist: { kind: 'triangular', min: 0.03, mode: 0.12, max: 0.3 },
+    source: { kind: 'assumption', cite: 'an English-language page found by search; no buyer country has been recorded (the Workshop carries no tracking)' },
+  },
   // ── After a sale ──────────────────────────────────────────────────────────
   'outcome.refundRate': {
     what: 'share of buyers of a sound product who ask for their money back', unit: 'share',
