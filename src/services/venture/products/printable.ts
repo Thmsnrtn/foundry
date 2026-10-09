@@ -49,6 +49,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { query } from '../../../db/client.js';
+import { dataBlockInstruction, wrapDataBlock } from '../../ai/sanitize.js';
 import { BANNED_CLAIMS, HAND, recordMaterial } from '../hand.js';
 import type { Material, OfferShapePlan } from '../hand.js';
 
@@ -259,6 +260,7 @@ const HONESTY_SYSTEM = [
   'Reply with one JSON object and nothing else:',
   '{"invented": [{"kind": "statistic|testimonial|review|credential|source|result", "quote": <exact words>}],',
   ' "regulated_advice": true|false, "regulated_why": <one sentence or null>}',
+  dataBlockInstruction('file'),
 ].join('\n');
 
 /**
@@ -272,7 +274,7 @@ export async function modelHonestyCheck(text: string, ctx: { founderId: string; 
   const { institutionSpend } = await import('../../ai/what-it-is-for.js');
   let content: string;
   try {
-    content = (await callSonnet(HONESTY_SYSTEM, `<file>\n${text.slice(0, 40_000)}\n</file>`, 900,
+    content = (await callSonnet(HONESTY_SYSTEM, wrapDataBlock('file', text, 40_000), 900,
       institutionSpend('checking a printable the hands made for invented facts before it is sold', 'scoring an audit', { kind: 'experiment', id: ctx.experimentId }))).content;
   } catch (err) {
     if (ModelDoorError && err instanceof ModelDoorError) throw err;
@@ -337,12 +339,13 @@ export async function askThePanel(input: { experimentId: string; listing: string
     const system = [
       `You are ${persona}. You are shown a listing and the full text of the file it sells, for $${String(input.priceDollars)}, one-time.`,
       'Decide as that buyer, with your own money, not as a reviewer; politeness helps nobody.',
+      dataBlockInstruction('listing'), dataBlockInstruction('file'),
       'Reply with one JSON object and nothing else:',
       '{"verdict": "yes"|"maybe"|"no", "max_price_dollars": <the most you would pay, a number>, "why": <one sentence>}',
     ].join('\n');
     let content = '';
     try {
-      content = (await callSonnet(system, `<listing>\n${input.listing}\n</listing>\n<file>\n${input.text.slice(0, 24_000)}\n</file>`, 400,
+      content = (await callSonnet(system, `${wrapDataBlock('listing', input.listing, 4000)}\n${wrapDataBlock('file', input.text, 24_000)}`, 400,
         institutionSpend('asking whether a stranger would pay for a printable before it is sold', 'scoring an audit', { kind: 'experiment', id: input.experimentId }))).content;
     } catch (err) {
       if (ModelDoorError && err instanceof ModelDoorError) throw err;
@@ -457,9 +460,6 @@ export const CHROMIUM_LAUNCH_ARGS: readonly string[] = Object.freeze([
 ]);
 
 let queue: Promise<unknown> = Promise.resolve();
-let waiting = 0;
-/** How many prints are waiting or running, for the owner's health reading and for tests. */
-export function printsQueued(): number { return waiting; }
 
 /**
  * PRINT ONE DOCUMENT, IN TURN. Waits for any print before it, then gives the
@@ -468,7 +468,6 @@ export function printsQueued(): number { return waiting; }
  */
 export function printOne(html: string, renderer: Renderer): Promise<RenderResult> {
   const limit = timeoutOverride ?? PRINT_TIMEOUT_MS;
-  waiting += 1;
   const run = async (): Promise<RenderResult> => {
     const controller = new AbortController();
     let timer: NodeJS.Timeout | undefined;
@@ -485,7 +484,7 @@ export function printOne(html: string, renderer: Renderer): Promise<RenderResult
     }
   };
   const mine = queue.then(run, run);
-  queue = mine.then(() => undefined, () => undefined).finally(() => { waiting -= 1; });
+  queue = mine.then(() => undefined, () => undefined);
   return mine;
 }
 

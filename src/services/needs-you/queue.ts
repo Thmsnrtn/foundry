@@ -43,6 +43,8 @@ export interface NeedsYouItem {
   /** Whether "not now" is allowed, and when it would lapse at the latest. */
   snoozable: boolean;
   snoozedUntil: string | null;
+  /** Waiting for the week's batch rather than put off by him (F1). */
+  batched?: boolean;
 }
 
 const EFFECT_COST: Record<NonNullable<AttentionItem['effect']>, string> = {
@@ -104,6 +106,54 @@ export function answersFor(i: AttentionItem): SixAnswers {
     };
     default: return { what: i.summary, whyNow: i.detail, ifYes: `${i.yes.label}.`, mostItCanCost: cost ?? 'Not stated.', undo: 'Not stated.', ifNothing: 'It waits.' };
   }
+}
+
+// ─── What can wait for the week (F1, 9 October 2026) ─────────────────────────
+//
+// The year in the twin put about 14 minutes a week on the owner, and the
+// largest share was items he had already read, seen again every day: advice he
+// may take up, something Foundry noticed and could look after, the designs the
+// forge could not seal. Each has no date of its own and says "if you do
+// nothing: nothing happens" — they keep, or resolve, without him.
+// INSTITUTION_MODEL §5.1 lets the check-in style set the batching, so these
+// reach Needs you ONCE A WEEK, on his batch day, and wait under "Put off until
+// later" the rest of the week with the day they come back. "Hands-on" turns it
+// off. Nothing is decided for him and nothing is closed: the item is his, on a
+// weekly rhythm. A decision, an obligation, the charter, mail, a held file and
+// a test to allow are never batched.
+
+/** The forge's one item for designs it could not seal (forge-deliberation.ts). */
+const DESIGNS_WAITING_ID = 'forge-designs-waiting';
+
+/** May this item wait for the week's batch? Only what has no date and changes nothing by waiting. */
+export function waitsForTheWeek(i: AttentionItem): boolean {
+  return i.kind === 'advice' || i.kind === 'noticed' || (i.kind === 'experiment' && i.id === DESIGNS_WAITING_ID);
+}
+
+export interface TheWeek { today: boolean; next: string; handsOn: boolean }
+
+/**
+ * HIS BATCH DAY: the weekday he began, every seventh day after, read from the
+ * database clock so it is the same day every week. `next` is the start of the
+ * next batch day after today.
+ */
+export async function theWeeksBatch(founderId: string, now: Date = new Date()): Promise<TheWeek> {
+  const r = (await query(`SELECT CAST(julianday('now') - julianday(COALESCE(created_at, datetime('now'))) AS INTEGER) AS age FROM founders WHERE id = ?`,
+    [founderId])).rows[0] as Row | undefined;
+  const age = Math.max(0, Number(r?.age ?? 0));
+  const into = age % 7;
+  const start = new Date(now.getTime());
+  start.setUTCHours(0, 0, 0, 0);
+  const next = new Date(start.getTime() + (7 - into) * 86_400_000).toISOString();
+  const { mandateOf } = await import('../mandate/statements.js');
+  const handsOn = (await mandateOf(founderId, now)).some((m) => m.dimension === 'involvement' && m.subject === 'hands_on');
+  return { today: into === 0, next, handsOn };
+}
+
+/** 'now', or the moment a batched item comes back to Needs you. Pure. */
+export function whenItAsks(i: AttentionItem, week: TheWeek): 'now' | string {
+  if (!waitsForTheWeek(i) || week.today || week.handsOn) return 'now';
+  return week.next;
 }
 
 /** Obligations to people, and the charter's last days, cannot be put off. */
@@ -181,9 +231,13 @@ export async function needsYou(founderId: string, now: Date = new Date()): Promi
 
   const items: NeedsYouItem[] = [];
   const later: NeedsYouItem[] = [];
+  const week = await theWeeksBatch(founderId, now);
   for (const n of all) {
     const until = n.snoozable ? snoozes.get(n.key) ?? null : null;
-    if (until) later.push({ ...n, snoozedUntil: until }); else items.push(n);
+    const batch = n.item ? whenItAsks(n.item, week) : 'now';
+    if (until) later.push({ ...n, snoozedUntil: until });
+    else if (batch !== 'now') later.push({ ...n, snoozedUntil: batch, batched: true });
+    else items.push(n);
   }
   // URGENT FIRST, then the queue's own consequence order, which it already is.
   items.sort((a, b) => (a.level === b.level ? 0 : a.level === 'urgent' ? -1 : 1));
