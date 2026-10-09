@@ -990,6 +990,12 @@ caller appears for one without the other. Wiring both needs a real answer to
 | Every model call through one door (F1) | **E2** | zero direct provider calls outside `services/ai/client.ts` over all 408 files under `src/`, parsed, five shapes each with a canary: `every-model-call-goes-through-the-door.test.ts`. No real call made |
 | Thinking ceiling with revenue; cost to serve per product (F1) | **E2** | local runtime through the real door and the Economics page, never against real revenue: `the-thinking-ceiling-grows-with-revenue.test.ts`, `what-each-product-costs-to-serve.test.ts` |
 | Owner minutes under 10 a week (F1) | **E2** | the twin's capable year, 5 seeds × 365 days, the owner a policy and the minutes a stated model: `what-can-wait-for-the-week-waits.test.ts`, scorecards in `history/twin-2026-10-09-f1/` |
+| Fillable, tagged printables (FQ) | **E2** | every blank the design system draws becomes an AcroForm field on that blank, named for what it asks; Chromium writes a tagged PDF with an outline, and the fields keep the tags. Read by readers that did not write it (poppler's pdfinfo and word boxes, Mozilla's pdf.js filling a field and a box): `a-printable-has-fields-a-reader-can-fill.test.ts`, `a-printable-is-tagged-for-a-screen-reader.test.ts`. The image's Debian Chromium has not printed one |
+| Price against every channel's fees; the floor is his (FQ) | **E2** | dated, cited schedules for the Workshop (Stripe), Etsy, Gumroad and Lemon Squeezy, a range where a schedule leaves a surcharge unsaid; listings refused with no floor of his (PENDING 44): `a-price-is-read-against-every-channels-fees.test.ts`. No floor is set |
+| One storefront over every channel (F2) | **E2** | adapters behind one interface, closed until his grant and a verified key; Gumroad's acts bound at the outbound door, which refuses them for an experimental asset until an approved test carries the act (PENDING 47); contract tests over labelled fixtures: `every-channel-is-one-storefront.test.ts`. No channel account exists; no request has been answered by Gumroad, Lemon Squeezy or Etsy's write API |
+| Found from day one: guide, free page, llms.txt (F2) | **E2** | published by the real site pass with the product, announced through IndexNow, taken down with it: `every-product-is-found-from-day-one.test.ts`, `a-printable-reaches-a-buyer.test.ts`. Not deployed |
+| Tax on the own page; seasons recorded (F2) | **E2** | Stripe Tax only on his signed row; dated, cited thresholds; monthly demand signals counted from the ledgers: `stripe-tax-is-his-to-turn-on.test.ts`, `the-seasons-are-recorded-from-day-one.test.ts` |
+| A year on every channel (F2 gate) | **E2** | 5 seeds × 365 days through the real adapters, recording and per-stream line, reconciled cent for cent; the middle seed inside the first campaign's band, below its base: `a-year-on-every-channel.test.ts`, `history/twin-2026-10-09-f2/channel-year.json`. Every channel's reach is an assumption |
 
 ## Open proof debt
 
@@ -3493,6 +3499,90 @@ assumptions; its eyes are the twin's own people; the model is scripted; the
 printer is a stand-in (Chromium printing is proven elsewhere); the owner is a
 policy, not a person; the sensitivity sweep is open loop (one closed-loop check
 of the top parameter per long run).
+
+## FQ and F2: products a stranger would pay for, and being found on every channel (9 October 2026)
+
+Built on `claude/foundry-f2-reach`, on top of F1 (`claude/foundry-f1-lean`).
+Not deployed: no deploy marker, and nothing here has met a real channel, a real
+buyer or the Fly machine.
+
+**F1, audited by a session that did not build it.** Each claim was treated as a
+hypothesis and attacked with a mutation of the auditor's own:
+- *Printing serialized and killed on overrun: held, with a gap closed.* The
+  queue moved on the moment the timer fired while the kill was still in
+  flight, so a new browser could start beside a dying one; the queue now waits
+  for the stopped renderer to return, bounded by a 10 s grace. Re-measured on
+  the audited tree under the 1 GB cap: group peak 335 MB, ten prints, no OOM.
+- *Every model call through the door: held over its population, broken by an
+  equivalent spelling.* A host split across `+`, a path from consts and a key
+  read through a const name all passed; the census now folds `+` chains,
+  templates and const strings.
+- *Owner minutes, never batching a decision: the rule held, its proof did not.*
+  Every suite met Needs you on the owner's batch day (a founder made in a test
+  begins today), so holding back every item, decisions included, stayed green
+  in all nine suites; a test now drives the real queue off the batch day.
+- *Cost to serve: a defect.* "Every fee read" counted fulfilments, not charges,
+  so a fulfilment charged twice with one fee read reported its fees known and
+  the net overstated; now per charge.
+- *Untrusted text: held for its shape, blind to two equivalents.* Words between
+  the tag and the value, or the block built with `+`, put raw text inside an
+  open fence; the rule now tracks which fence is open where each value lands.
+- *Thinking ceiling, judges, the twelve webhook doors: held* (refunds out of the
+  revenue net, a price-blind judge, a garbage floor variable — the reservation
+  refuses a NaN cap — each tried).
+
+**FQ.** *Fillable:* each blank the design system draws (labelled underline,
+writing lines, empty worksheet cells, checklist squares) is measured where
+Chromium laid it out and gets a transparent AcroForm field, named for what it
+asks (`addFormFields`, pdf-lib 1.17.1). *Tagged:* `tagged: true, outline: true`;
+title carries the version; language read from the HTML. *Fees:* Gumroad (10% +
+50¢; 30% on a Discover sale; merchant of record) and Lemon Squeezy (5% + 50¢,
++1.5% abroad, +1.5% PayPal; merchant of record) join the dated card; Stripe Tax
+(0.5%) beside it. *Floor:* his `price_floor` row only; with none, no channel
+listing. *Real-model panel:* `tests/simulation/panel/run-real-panel.mts` plans
+by default (270 judgements, about $0.45 at $2/$10 per million tokens) and calls
+only on `--go` under `PANEL_REAL=1` and a ceiling; not run.
+
+**F2.** *Storefront* (`services/venture/storefront/`): channels, canonical
+listing, price floor, Gumroad, Lemon Squeezy and Etsy adapters, reconciliation,
+tax, seasonality. Verification per channel: Gumroad against its open source
+(antiwork/gumroad bffaa9b8: routes, files presign/complete, product create and
+enable, sales serializer) — source-verified, not live; Lemon Squeezy against its
+API pages (orders; no product-create endpoint, so the owner makes the product)
+— docs-verified, not live; Etsy against its OpenAPI 3.0.0 (createDraftListing,
+uploadListingFile, updateListing) — shaped and unbound, because listing needs
+the write scope the constitution's scope table does not hold. *Where it stops
+on doctrine:* the door refuses a channel act for an experimental asset unless
+the approved test carries it; whether allowing a test also allows listing it
+on his open channels is his (PENDING 47). *Being found:* each printable on
+sale gets `/experiments/<slug>/guide` (its own section headings and
+introductions, Article structured data) and `/free` (one page of it), in the
+sitemap and announced through IndexNow; `/llms.txt`; both come down with the
+product. *Tax:* Stripe Tax on his row only; thresholds EU/UK zero for a seller
+outside them, US $100,000 (the most common state threshold), the buyer's
+country and state not recorded so per-place exposure is "not known"; EU and UK
+buyers routed to a merchant of record that carries the product. *Seasons:*
+`demand_signals` monthly from the ledgers; priors labelled assumptions.
+*Found on the way:* one experiment has one live exposure (migration 278), so a
+product's Workshop link and an Etsy listing cannot both be live exposures of
+one experiment: a multi-channel product's Etsy sales belong in `channel_sales`,
+and the reader for that case (receipts filtered by the listing ids the
+storefront placed) is not built because Etsy listing itself is not; and the
+consequential-effects audit could not see a call through the storefront's
+HTTP seam until a rule for it was added.
+
+**The gate** (`a-year-on-every-channel.test.ts`, 5 seeds × 365 days, every
+channel open as a counterfactual pilot): sales per seed 4–55 across channels,
+Etsy carrying the most in four seeds; Workshop search visits per listing-day
+0.15–0.96 (median 0.44), visit-to-purchase 0.0045–0.0098 (median 0.0063) —
+inside the first campaign's band (0.2–8 and 0.005–0.045), below its base (1.0
+and 0.01); every channel's line equals the twin's truth for every seed. The
+reach of each channel is an assumption; nothing here is a forecast.
+
+**Proof debt.** No channel account, key or grant exists; no adapter request has
+been answered live; the image's Chromium has not printed a fillable, tagged
+file; Stripe Tax is unactivated on the shared account; the Etsy multi-channel
+reader is not built; the real-model panel has not run.
 
 ## F1: ready to run cheaply (9 October 2026)
 
