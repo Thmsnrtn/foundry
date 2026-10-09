@@ -103,3 +103,22 @@ CREATE TABLE demand_signals (
   recorded_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(founder_id, month, signal, theme, channel, evidence_mode)
 );
+
+-- ─── Gumroad at the door, graded by the capabilities that already exist ──────
+-- Migration 339 named and graded the three acts of putting a file on sale:
+-- draft and upload are `prepare` (nothing public), activation is the existing
+-- `list_on_marketplace` at `public`, drawing on the allowance. Gumroad's are
+-- the same three acts, so they are bound to the same three capabilities and
+-- judged by rows they did not get to choose. DECLARED: no request has been
+-- answered by Gumroad; nothing arrives proven. Etsy's remain unbound (its
+-- write scope is not granted, PENDING 25).
+INSERT INTO capability_providers
+  (id, capability_key, provider, how, tool, cost_note, maturity, sort_order)
+VALUES
+  ('cp_gumroad_file', 'upload_product_file', 'gumroad', 'api', 'gumroad_upload_product_file',
+   'nothing', 'declared', 2),
+  ('cp_gumroad_draft', 'draft_on_marketplace', 'gumroad', 'api', 'gumroad_create_draft_product',
+   'nothing; a draft is not for sale', 'declared', 2),
+  ('cp_gumroad_activate', 'list_on_marketplace', 'gumroad', 'api', 'gumroad_enable_product',
+   'no listing fee; 10% + $0.50 of each direct sale (30% of a sale Gumroad''s Discover brings), per gumroad.com/pricing read 2026-10-09',
+   'declared', 2);

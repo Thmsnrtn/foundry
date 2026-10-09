@@ -482,7 +482,7 @@ export async function addFormFields(pdf: Buffer, boxes: FieldBox[]): Promise<Buf
     counts.set(key, n);
     const name = `${key}_${String(n)}`;
     // The accessible name on the field AND its widget: readers differ in which they read.
-    const named = (acro: { dict: { set: (k: unknown, v: unknown) => void }; getWidgets: () => Array<{ dict: { set: (k: unknown, v: unknown) => void } }> }): void => {
+    const named = (acro: import('pdf-lib').PDFAcroTerminal): void => {
       acro.dict.set(PDFName.of('TU'), PDFHexString.fromText(b.label));
       for (const w of acro.getWidgets()) w.dict.set(PDFName.of('TU'), PDFHexString.fromText(b.label));
     };
