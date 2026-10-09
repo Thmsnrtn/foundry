@@ -67,12 +67,20 @@ export interface PublicExperiment {
   supersedes: { slug: string; title: string } | null;
   successor: { slug: string; title: string } | null;
   graduatedTo: string | null;
+  /**
+   * WHAT A PRINTABLE SHIPS WITH TO BE FOUND (F2): the guide its own sections
+   * make and one page of it free, from the words the file already carries and
+   * that passed every gate the file did. Null for anything not on sale here.
+   */
+  guide: { version: number; outline: Array<{ heading: string; lede: string }>; freePage: { heading: string; lede: string; html: string } | null } | null;
+  /** Other channels carrying this version, with where a buyer reaches it; a merchant of record collects the tax itself. */
+  elsewhere: Array<{ channel: string; venueName: string; url: string; merchantOfRecord: boolean }>;
 }
 
 /** The fields the public shape carries, as a record the tests can read. */
 export const PUBLIC_EXPERIMENT_FIELDS = [
   'number', 'slug', 'path', 'listed', 'title', 'summary', 'who', 'what', 'limits', 'sources', 'selection', 'note', 'sample', 'tool', 'freeToRead',
-  'status', 'statusLabel', 'statusLine', 'outcome', 'clarification', 'whereToGetIt', 'shape', 'price', 'recurring', 'payUrl', 'openedOn', 'closedOn', 'updatedOn', 'supersedes', 'successor', 'graduatedTo',
+  'status', 'statusLabel', 'statusLine', 'outcome', 'clarification', 'whereToGetIt', 'shape', 'price', 'recurring', 'payUrl', 'openedOn', 'closedOn', 'updatedOn', 'supersedes', 'successor', 'graduatedTo', 'guide', 'elsewhere',
 ] as const;
 
 type Row = Record<string, unknown>;
@@ -248,6 +256,34 @@ export async function projectExperiment(experimentId: string): Promise<PublicExp
     } catch { price = null; tool = null; }
   }
   const slug = String(r.slug);
+  // THE GUIDE AND THE FREE PAGE (F2), only while the file is offered here at one price.
+  let guide: PublicExperiment['guide'] = null;
+  const offered = (status === 'testing' || status === 'operating') && shape !== 'portfolio_entry' && shape !== 'identity_only' && !!price && !price.chosen && !price.recurring;
+  if (offered && r.shape_json != null) {
+    try {
+      const plan = JSON.parse(String(r.shape_json)) as { kind?: string; printable?: { version?: number; held?: unknown; public?: { outline?: Array<{ heading?: string; lede?: string }>; freePage?: { heading?: string; lede?: string; html?: string } } } };
+      const pub = plan.kind === 'printable_pdf' && plan.printable && !plan.printable.held ? plan.printable.public : undefined;
+      const outline = (pub?.outline ?? []).filter((o) => typeof o.heading === 'string' && typeof o.lede === 'string')
+        .map((o) => ({ heading: said(o.heading), lede: said(o.lede) }));
+      if (pub && outline.length && Number.isInteger(plan.printable!.version)) {
+        const { sanitizePageHtml } = await import('../venture/products/printable.js');
+        const fp = pub.freePage;
+        const freePage = fp && typeof fp.html === 'string' && sanitizePageHtml(fp.html).length === 0 && typeof fp.heading === 'string' && typeof fp.lede === 'string'
+          ? { heading: said(fp.heading), lede: said(fp.lede), html: fp.html } : null;
+        guide = { version: plan.printable!.version!, outline, freePage };
+      }
+    } catch { guide = null; }
+  }
+  const elsewhere: PublicExperiment['elsewhere'] = [];
+  if (guide) {
+    const { channelGrant, CHANNEL_NAMES } = await import('../venture/storefront/channels.js');
+    const { FEE_CARDS } = await import('../venture/fee-floor.js');
+    for (const l of await rows(`SELECT channel, url, founder_id FROM channel_listings WHERE experiment_id = ? AND version = ? AND url IS NOT NULL ORDER BY channel`, [experimentId, guide.version])) {
+      const ch = String(l.channel) as 'gumroad' | 'lemonsqueezy' | 'etsy';
+      if (!(await channelGrant(String(l.founder_id), ch)).granted) continue;
+      elsewhere.push({ channel: ch, venueName: CHANNEL_NAMES[ch], url: String(l.url), merchantOfRecord: FEE_CARDS[ch].merchantOfRecord });
+    }
+  }
   return {
     number: Number(r.number), slug, path: `/experiments/${slug}`, listed: Number(r.listed) === 1,
     title: said(r.public_title), summary: said(r.public_summary), who: said(r.public_who), what: said(r.public_what),
@@ -274,6 +310,7 @@ export async function projectExperiment(experimentId: string): Promise<PublicExp
     supersedes: r.supersedes_slug == null ? null : { slug: String(r.supersedes_slug), title: String(r.supersedes_title) },
     successor: r.successor_slug == null ? null : { slug: String(r.successor_slug), title: String(r.successor_title) },
     graduatedTo: r.graduated_to_url == null ? null : String(r.graduated_to_url),
+    guide, elsewhere,
   };
 }
 

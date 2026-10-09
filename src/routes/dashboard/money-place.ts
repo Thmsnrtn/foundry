@@ -115,6 +115,8 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
   const { CHANNEL_NAMES } = await import('../../services/venture/storefront/channels.js');
   const channelName = (ch: string): string => (CHANNEL_NAMES as Record<string, string>)[ch] ?? ch;
   const pnl = await channelPnl(founderId, 30);
+  const { taxThresholdAlert } = await import('../../services/venture/storefront/tax.js');
+  const taxAlerts = await taxThresholdAlert(founderId);
   const concentration = await channelConcentration(founderId, 90);
   const hisFloor = await priceFloorOf(founderId);
   const floorLine = hisFloor
@@ -341,6 +343,8 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
           · fees ${ch.feesCents === null ? 'not known' : dollars(ch.feesCents)} · net <b>${ch.netCents === null ? 'not known' : dollars(ch.netCents)}</b>
           <br /><small class="quiet">${ch.because}</small></li>`))}</ul>`}
       <p class="quiet">${concentration.sentence}</p>
+      <h3>Tax on the Workshop page</h3>
+      <ul class="sales">${taxAlerts.map((a) => html`<li>${a.level === 'approaching' || a.level === 'over' ? html`<strong>${a.sentence}</strong>` : a.sentence}</li>`)}</ul>
       <form class="inline" method="POST" action="/foundry/money/channel-listing">
         <label for="cl-exp">Test id</label>
         <input id="cl-exp" name="experiment_id" type="text" />

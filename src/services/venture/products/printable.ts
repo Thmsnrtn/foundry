@@ -710,6 +710,8 @@ export function printableOf(m: Pick<Material, 'body'> | null): PrintableManifest
 
 /** What the offer shape records about the file it sells. */
 export interface PrintablePlan { version: number; sha256: string; pages: number; filename: string; topics: SensitiveTopic[];
+  /** WHAT IT SHIPS WITH TO BE FOUND (F2): its sections' headings and introductions, and one page of it free. Words the file already carries. */
+  public?: { outline: Array<{ heading: string; lede: string }>; freePage: { heading: string; lede: string; html: string } | null };
   panel: { outcome: 'ship' | 'hold'; because: string; answers: PanelAnswer[] };
   /** Set while the panel was split and the owner has not said; cleared only by him. */
   held: string | null; releasedBy?: string; releasedAt?: string }
@@ -820,7 +822,14 @@ export async function makePrintable(input: {
   const manifest: PrintableManifest = { kind: 'printable_pdf', version, title: input.spec.title, filename, pages, bytes: printed.pdf.length,
     sha256, madeAt: now.toISOString(), topics, pdfBase64: printed.pdf.toString('base64') };
   const held = panel.outcome === 'hold' ? panel.because : null;
-  const printable: PrintablePlan = { version, sha256, pages, filename, topics, panel: { outcome: panel.outcome, because: panel.because, answers }, held };
+  // The free page is the first that has blanks to fill (a worksheet sells itself
+  // better than an introduction), else the first; checked by the same vocabulary.
+  const free = input.spec.pages.find((pg) => /class="(?:[^"]*\s)?(?:field|check|ws|lines)\b/.test(pg.html)) ?? input.spec.pages[0] ?? null;
+  const pub: PrintablePlan['public'] = {
+    outline: input.spec.pages.map((pg) => ({ heading: pg.heading, lede: pg.lede })),
+    freePage: free && sanitizePageHtml(free.html).length === 0 ? { heading: free.heading, lede: free.lede, html: free.html } : null,
+  };
+  const printable: PrintablePlan = { version, sha256, pages, filename, topics, panel: { outcome: panel.outcome, because: panel.because, answers }, held, public: pub };
   const plan: OfferShapePlan = { ...input.plan, price: { ...input.plan.price, productName: `${input.plan.price.productName} (version ${String(version)})` } };
   const offerShapeId = await recordMaterial({ founderId: input.founderId, experimentId: input.experimentId, kind: 'offer_shape', title: 'offer shape',
     body: JSON.stringify({ ...plan, kind: 'printable_pdf', spec: { ...input.spec, pages: input.spec.pages.length }, printable }), by: HAND });

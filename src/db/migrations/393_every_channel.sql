@@ -36,6 +36,9 @@ INSERT INTO origination_policy (id, founder_id, requirement, treatment, value, w
   ('f2_channel_lemonsqueezy', NULL, 'channel_grant:lemonsqueezy', 'policy', 'not_granted',
    'selling on Lemon Squeezy needs his store and an API key he makes (PENDING 43)',
    'owner_decision:2026-10-09:every_channel'),
+  ('f2_stripe_tax', NULL, 'stripe_tax', 'policy', 'not_decided',
+   'whether the Workshop''s own payment links charge tax through Stripe Tax (0.5% a sale) is his decision (PENDING 35); only his own row, value on, turns it on',
+   'owner_decision:2026-10-09:every_channel'),
   ('f2_price_floor', NULL, 'price_floor', 'policy', 'not_set',
    'the lowest price a product may carry against its fees is a pricing decision, and pricing is his (PENDING 44); until he sets one, no channel listing is placed',
    'owner_decision:2026-10-09:every_channel');
@@ -77,6 +80,8 @@ CREATE TABLE channel_listings (
   version         INTEGER NOT NULL CHECK (version >= 1),
   channel         TEXT NOT NULL CHECK (channel IN ('etsy','gumroad','lemonsqueezy')),
   external_ref    TEXT NOT NULL,
+  -- Where a buyer reaches it on the channel, when known.
+  url             TEXT,
   price_cents     INTEGER NOT NULL CHECK (price_cents > 0),
   -- What the adapter applied for the channel's AI-disclosure rule, in words.
   ai_disclosure   TEXT NOT NULL CHECK (trim(ai_disclosure) <> ''),
@@ -122,3 +127,32 @@ VALUES
   ('cp_gumroad_activate', 'list_on_marketplace', 'gumroad', 'api', 'gumroad_enable_product',
    'no listing fee; 10% + $0.50 of each direct sale (30% of a sale Gumroad''s Discover brings), per gumroad.com/pricing read 2026-10-09',
    'declared', 2);
+
+-- ─── Being found: llms.txt beside robots.txt and the sitemap (F2) ────────────
+-- The guard of migration 323, unchanged but for one more file a crawler reads.
+-- A product's guide and free page are pages (/experiments/<slug>/guide|free):
+-- already within the path rule, published as pages, never as the experiment.
+DROP TRIGGER IF EXISTS public_publication_guard;
+CREATE TRIGGER public_publication_guard
+BEFORE INSERT ON public_publications
+BEGIN
+  SELECT RAISE(ABORT,'public_publication:path_invalid')
+    WHERE NEW.path NOT LIKE '/%' OR NEW.path LIKE '%..%' OR NEW.path LIKE '%?%' OR NEW.path LIKE '%#%'
+       OR (NEW.path GLOB '*[^a-z0-9/-]*' AND NEW.path NOT IN ('/robots.txt', '/sitemap.xml', '/llms.txt'));
+  SELECT RAISE(ABORT,'public_publication:incomplete')
+    WHERE trim(NEW.digest) = '' OR NEW.bytes <= 0 OR trim(NEW.published_by) = '';
+  SELECT RAISE(ABORT,'public_publication:cannot_arrive_verified')
+    WHERE NEW.verified_at IS NOT NULL OR NEW.verified_status IS NOT NULL;
+  SELECT RAISE(ABORT,'public_publication:experiment_needs_a_public_identity')
+    WHERE NEW.kind = 'experiment' AND NOT EXISTS (
+      SELECT 1 FROM public_experiments w WHERE w.experiment_id = NEW.experiment_id AND w.founder_id = NEW.founder_id
+        AND NEW.path = '/experiments/' || w.slug);
+  SELECT RAISE(ABORT,'public_publication:page_carries_no_experiment')
+    WHERE NEW.kind = 'page' AND NEW.experiment_id IS NOT NULL;
+  SELECT RAISE(ABORT,'public_publication:experiment_not_approved')
+    WHERE NEW.kind = 'experiment' AND NOT EXISTS (
+      SELECT 1 FROM venture_experiments e WHERE e.id = NEW.experiment_id AND e.decision = 'approved');
+  SELECT RAISE(ABORT,'public_publication:version_must_follow')
+    WHERE NEW.version <> 1 + coalesce((SELECT max(version) FROM public_publications p
+                                        WHERE p.founder_id = NEW.founder_id AND p.path = NEW.path), 0);
+END;

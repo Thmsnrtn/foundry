@@ -22,6 +22,7 @@
 // =============================================================================
 import { TOOL_RUNTIME_JS } from '../venture/products/tool.js';
 import { INDEXNOW_KEY, INDEXNOW_KEY_PATH } from './indexnow.js';
+import { PUBLIC_FILE_TYPES } from './site.js';
 
 export const WORKER_SOURCE = `// Apex Micro public workshop. Serves finished pages from a store; nothing else.
 const HOSTS = new Set(['apexmicro.ai', 'www.apexmicro.ai']);
@@ -39,7 +40,7 @@ const HEADERS = {
 const TOOL_JS = ${JSON.stringify(TOOL_RUNTIME_JS)};
 // The files that are not pages. Named one by one: no other dot passes. The
 // IndexNow key is public by design and served from the program itself (R38).
-const FILES = { '/robots.txt': 'text/plain; charset=utf-8', '/sitemap.xml': 'application/xml; charset=utf-8', ${JSON.stringify(INDEXNOW_KEY_PATH)}: 'text/plain; charset=utf-8' };
+const FILES = ${JSON.stringify({ ...PUBLIC_FILE_TYPES, [INDEXNOW_KEY_PATH]: 'text/plain; charset=utf-8' })};
 const INDEXNOW_KEY_PATH = ${JSON.stringify(INDEXNOW_KEY_PATH)};
 const INDEXNOW_KEY = ${JSON.stringify(INDEXNOW_KEY)};
 function normalise(pathname) {
