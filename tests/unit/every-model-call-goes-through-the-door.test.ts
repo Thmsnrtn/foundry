@@ -73,7 +73,47 @@ export function directCalls(file: string, source: string): Hit[] {
     if (ts.isImportEqualsDeclaration(n) && ts.isExternalModuleReference(n.moduleReference) && ts.isStringLiteral(n.moduleReference.expression)) return n.moduleReference.expression.text;
     return null;
   };
+  // CONSTANT FOLDING (F2 audit of F1). A call assembled from parts is the
+  // same call: a '+' chain or a template is folded to one text, a const that
+  // holds a string is read through, and anything unknown is a placeholder,
+  // so 'https://openrouter' + '.ai/…' and base + P + '/completions' both read
+  // as what they send.
+  const consts = new Map<string, ts.Expression>();
+  const collect = (n: ts.Node): void => {
+    if (ts.isVariableDeclarationList(n) && (n.flags & ts.NodeFlags.Const)) {
+      for (const d of n.declarations) if (ts.isIdentifier(d.name) && d.initializer) consts.set(d.name.text, d.initializer);
+    }
+    ts.forEachChild(n, collect);
+  };
+  collect(sf);
+  const UNKNOWN = '\u0001';
+  const fold = (n: ts.Node, depth = 0): string => {
+    if (depth > 20) return UNKNOWN;
+    const t = textOf(n);
+    if (t !== null) return t;
+    if (ts.isParenthesizedExpression(n) || ts.isAsExpression(n) || ts.isNonNullExpression(n)) return fold(n.expression, depth + 1);
+    if (ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.PlusToken) return fold(n.left, depth + 1) + fold(n.right, depth + 1);
+    if (ts.isTemplateExpression(n)) return n.head.text + n.templateSpans.map((sp) => fold(sp.expression, depth + 1) + sp.literal.text).join('');
+    if (ts.isIdentifier(n) && consts.has(n.text)) return fold(consts.get(n.text)!, depth + 1);
+    return UNKNOWN;
+  };
+  const isPlus = (n: ts.Node): boolean => ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.PlusToken;
+  const seen = new Set<string>();
+  const once = (n: ts.Node, shape: Shape, text: string): void => {
+    const k = `${String(sf.getLineAndCharacterOfPosition(n.getStart(sf)).line)}#${shape}`;
+    if (!seen.has(k)) { seen.add(k); at(n, shape, text); }
+  };
   const visit = (n: ts.Node): void => {
+    // The outermost '+' chain or template, folded.
+    if ((isPlus(n) && !(n.parent && isPlus(n.parent))) || ts.isTemplateExpression(n)) {
+      const f = fold(n);
+      if (f.replaceAll(UNKNOWN, '').length > 0) {
+        if (HOSTS.test(f)) once(n, 'host', f);
+        if (COMPLETION.test(f)) once(n, 'completion', f);
+        if (MODEL_ID.test(f)) once(n, 'model-id', f);
+      }
+    }
+    if (ts.isElementAccessExpression(n) && !ts.isStringLiteralLike(n.argumentExpression) && KEYS.test(fold(n.argumentExpression))) once(n, 'key', n.getText(sf));
     const m = moduleOf(n);
     if (m !== null && SDKS.test(m)) at(n, 'sdk', m);
     const t = textOf(n);
@@ -209,6 +249,16 @@ describe('a canary per shape: each planted call is found, each comment is not', 
     expect(directCalls('src/x.ts', 'await fetch(`https://openrouter.ai/api/v1/${path}`);').map((h) => h.shape)).toContain('host');
     expect(directCalls('src/x.ts', 'const { ANTHROPIC_API_KEY } = process.env;').map((h) => h.shape)).toContain('key');
     expect(directCalls('src/x.mjs', `fetch(BASE + '/v1/messages', {})`).map((h) => h.shape)).toContain('completion');
+  });
+  // F2 audit of F1: the same call, spelled by concatenation. A host split
+  // across a '+', a completion path assembled from parts, and a key read
+  // through a const holding its name were all green over a real call.
+  it('the same call assembled from parts: a split host, a split path, a key read through a const name', () => {
+    expect(directCalls('src/x.ts', `const u = 'https://openrouter' + '.ai/api/v1/x';`).map((h) => h.shape)).toContain('host');
+    expect(directCalls('src/x.ts', `const P = '/chat'; fetch(base + P + '/completions');`).map((h) => h.shape)).toContain('completion');
+    expect(directCalls('src/x.ts', 'const H = `api.anthropic`; fetch(`https://${H}.com/v1/x`);').map((h) => h.shape)).toContain('host');
+    expect(directCalls('src/x.ts', `const NAME = 'OPENROUTER_API_KEY'; const k = process.env[NAME];`).map((h) => h.shape)).toContain('key');
+    expect(directCalls('src/x.ts', `const k = process.env['OPENROUTER_' + 'API_KEY'];`).map((h) => h.shape)).toContain('key');
   });
   it('a name in a list of names is not a read', () => {
     expect(directCalls('src/x.ts', `export const NEEDED = [{ name: 'OPENROUTER_API_KEY' }];`)).toEqual([]);
