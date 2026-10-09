@@ -4,7 +4,7 @@ process.env.FOUNDRY_INSTANCE_POSTURE = 'private_owner';
 process.env.FOUNDRY_OWNER_EMAIL = 'owner@example.com';
 
 import { Hono } from 'hono';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { mandateOf, readMandate, stateMandate } from '../../src/services/mandate/statements.js';
@@ -78,7 +78,12 @@ describe('seven days away', () => {
   });
 
   it('says so first on Home, with what waits and the way back, and lapses by itself', async () => {
-    const html = await (await app.request('/foundry')).text();
+    // HOME READS THE CLOCK. Written on 30 September against "until October 9", it
+    // went red by itself on 9 October; the page is read at NOW, as the rest is.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+    let html = '';
+    try { html = await (await app.request('/foundry')).text(); } finally { vi.useRealTimers(); }
     const panel = /<section class="panel away" aria-label="You are away">[\s\S]*?<\/section>/.exec(html)?.[0] ?? '';
     expect(panel).toContain('You are away until 2026-10-09.');
     expect(panel).toContain('Being away lets me do nothing I could not already do.');
@@ -86,6 +91,8 @@ describe('seven days away', () => {
     expect((await mandateOf(OWNER, new Date('2026-10-10T00:00:00Z'))).some((m) => m.subject === 'away')).toBe(false);
     const away = (await mandateOf(OWNER, NOW)).find((m) => m.subject === 'away')!;
     expect((await app.request(`/foundry/mandate/${away.id}/withdraw`, { method: 'POST' })).status).toBe(302);
-    expect(await (await app.request('/foundry')).text()).not.toContain('class="panel away"');
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+    try { expect(await (await app.request('/foundry')).text()).not.toContain('class="panel away"'); } finally { vi.useRealTimers(); }
   });
 });

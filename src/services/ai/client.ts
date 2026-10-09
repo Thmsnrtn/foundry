@@ -482,14 +482,19 @@ async function authorizeSpend(
   // The founder-scope cap handed to the guard is now the lower of the two, so
   // "I stop thinking at $1 a day until you sign" is enforced where thinking
   // is bought, and the reservation row records the cap that applied.
-  let founderCap = FOUNDER_COST_CEILING_CENTS;
+  // THE DEPLOYMENT'S CAPS GROW WITH REAL REVENUE (F1): the floors raised by a
+  // stated share of trailing real net revenue, fail closed to the floors, and
+  // never above the charter's rate, which `thinkingCapFor` folds in below.
+  const { deploymentCeilings } = await import('../deployment/ai-ceilings.js');
+  const caps = await deploymentCeilings();
+  let founderCap = caps.founder;
   if (founderId) {
     const { thinkingCapFor } = await import('../institution/spending.js');
     founderCap = Math.min(founderCap, await thinkingCapFor(founderId));
   }
   return reserveSpend({
     productId, founderId: founderId ?? undefined, model, amountCents,
-    caps: { global: GLOBAL_COST_CEILING_CENTS, product: DAILY_COST_CEILING_CENTS, founder: founderCap },
+    caps: { global: caps.global, product: caps.product, founder: founderCap },
     purpose, work,
   });
 }

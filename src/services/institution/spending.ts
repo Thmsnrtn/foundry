@@ -58,8 +58,11 @@ export interface ThinkingToday {
  * than the client's.
  */
 async function providerCaps(): Promise<{ product: number; founder: number; global: number }> {
-  const { AI_CEILINGS } = await import('../deployment/ai-ceilings.js');
-  return AI_CEILINGS();
+  // The floors raised by real revenue (deployment/ai-ceilings.ts), fail closed
+  // to the floors. Still one ceiling in the minimum below: never above his charter.
+  const { deploymentCeilings } = await import('../deployment/ai-ceilings.js');
+  const c = await deploymentCeilings();
+  return { product: c.product, founder: c.founder, global: c.global };
 }
 
 /**
@@ -104,7 +107,7 @@ export async function thinkingToday(founderId: string, now = new Date()): Promis
       : { name: 'Until a charter is signed', cents: PRE_CHARTER_THINKING_CENTS, source: 'the bound Foundry thinks under before you sign anything', stops: 'call', per: 'a day' },
     // ONE OWNER: "for you" is all the thinking there is, so the per-company
     // and everything caps stand behind it, never beside it.
-    { name: 'This deployment, for you (all of my thinking)', cents: caps.founder, source: 'AI_DAILY_COST_CEILING_FOUNDER_CENTS in the deployment', stops: 'call', per: 'a day' },
+    { name: 'This deployment, for you (all of my thinking)', cents: caps.founder, source: 'AI_DAILY_COST_CEILING_FOUNDER_CENTS in the deployment, raised by a stated share of real revenue (never above your charter)', stops: 'call', per: 'a day' },
     { name: 'This deployment, any one company', cents: caps.product, source: 'AI_DAILY_COST_CEILING_CENTS in the deployment', stops: 'call', per: 'a day' },
     { name: 'This deployment, everything it runs (only you)', cents: caps.global, source: 'AI_DAILY_COST_CEILING_GLOBAL_CENTS in the deployment', stops: 'call', per: 'a day' },
     ...(lessCents !== null ? [{ name: 'You asked me to spend less', cents: lessCents,
