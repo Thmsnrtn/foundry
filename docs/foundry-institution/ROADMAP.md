@@ -176,6 +176,64 @@ archive tag. Then E1 (the deliberation against one strong
 model, on frozen cases) needs real model calls and is the owner's spend to
 authorise. D2 waits on sources Foundry can read.
 
+## The master build plan's Foundry waves (9 October 2026)
+
+The owner's master build plan of 9 October 2026 (kept outside this repository)
+sets Foundry's next waves. Its own words: Foundry is an institution that makes
+and sells its own digital products to strangers, governed by its charter, with
+the owner present about 1% of the time; cost and hardening are necessary and
+are not the lever — products a stranger will pay for, and being found, are.
+Where it disagrees with the constitution or this directory's doctrine, the
+doctrine wins (noted against each item below). Its success measures: the first
+real sale; revenue net of fees and refunds per stream; the held-out panel's
+"yes" rate; owner minutes under 10 a week; zero charter breaches and zero
+fabrications.
+
+**FQ — products a stranger would pay for** (alongside F2, before any paid push):
+- **[code]** fillable PDF forms (every panel persona asked for them), if not built;
+- **[owner]** a held-out buyer panel run on a real model, within the real-model
+  budget, on the products made; target a majority of yes or "maybe at the price";
+- **[owner]** the pricing floor against fees (PENDING 44); each stream's net is
+  on Economics since F1;
+- **[code]** accessible, tagged PDFs, and the version shown on the listing.
+
+**F1 — ready to run cheaply: done in code on `claude/foundry-f1-lean`**, not
+deployed (see the Done table and `IMPLEMENTATION_STATE.md`, "F1").
+
+**F2 — distribution:** one storefront adapter per channel, decided as every
+channel (PENDING 42), each opened by the owner's own grant (PENDING 43); until
+then the Workshop's own page and Stripe stay the live path. Every product ships
+with a free lead magnet and an article on the Workshop, with IndexNow, started
+as soon as F2 opens because being found takes months (with llms.txt and
+structured data). An optional ad test only from a standing allowance he sets.
+Gate: a calibrated twin year in the base band, then a real pilot he watches.
+
+**F3 — wider, fresher eyes:** marketplace search signals, autocomplete and
+trends, forums, rotating newest-first terms, Foundry's own sales as the
+strongest signal, a relevance check on evidence. Gate: a 90-day run never
+idles and at least 80% of evidence is on-topic.
+
+**F4 and later:** the portfolio manager, quiet operations and more product
+kinds, gated by real sales.
+
+**Carried into those waves:** a merchant of record as the primary channel
+(VAT and US sales tax from the first sale, PENDING 35); seasonality, with
+Foundry's own signals recorded monthly from the first day; each stream paying
+for itself, read from the per-stream line; a trademark and copyright check
+before listing, and each listing recording that its content was AI-written and
+when; accessible PDFs; optional giving (PENDING 45).
+
+**Where the plan meets doctrine, doctrine wins:**
+- "a stream whose trailing cost exceeds its revenue is paused or retired by
+  rule": pausing is inside the charter; retiring sells, deletes or shuts down,
+  which is the destructive rung, and stays the owner's, one act at a time
+  (CONSTITUTION: legal and destructive rungs can never be a workshop's ceiling);
+- "the marketplace's AI-disclosure setting is applied automatically": applied by
+  the adapter on a listing he has allowed, never as a reason to list;
+- the campaign discipline above ends a slice with the deploy marker and a
+  production read-back; F1's brief forbade the marker, so F1 is not deployed
+  and its production proof (the 1 GB machine printing) is debt.
+
 ## A. Pay the proof debt already written down (code only)
 
 1. [code] Read Etsy's `is_vacation` and shop state in `readTheShop` (`src/services/senses/readers/etsy-shop.ts`). The reading is compared with the owner's own statement in `findability.ts` and never replaces it; a disagreement is shown to him.

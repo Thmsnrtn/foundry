@@ -986,6 +986,10 @@ caller appears for one without the other. Wiring both needs a real answer to
 | The owner surface, driven as a person (no migration) | **E2** | `scripts/owner-review-harness.mts` serves production's shape; three reviewers who had not seen the code attempted twelve owner objectives on a phone (20 Sep): 1 achieved, 8 partial, 3 failed. The failures became `the-first-direction-lands.test.ts` and a browser read-back of the exact owner journey. What was left is in `MATURITY_MAP.md`. **No real owner has used it on a real day.** |
 | The market twin, its year runs and the continuous invariant monitor (no migration) | **E2** | Deterministic simulation: the real institution, every routine, day by day, against an imagined market whose every number is a range with a named source, and a scripted model in three kinds (capable, degraded, adversarial). Invariants checked after every simulated day, each with a canary. Says what the institution does under those assumptions; says nothing about real buyers. `tests/simulation/twin/a-year-in-the-twin.test.ts`, run: `docs/foundry-institution/history/twin-2026-10-07/capable-scorecard.json` |
 | Real founders, providers, pilots, production | **E0** (unproven) | nothing has reached E4, E5 or E6 |
+| Printing on a 1 GB machine (F1) | **E2** | measured locally under a 1 GB cgroup with the built server resident: the group's peak 313–339 MB over ten prints including four at once; one print at a time, killed on overrun, closed after each: `printing-fits-the-machine.test.ts`, `run: npx tsx scripts/measure-print-memory.mts`. Not the image's Chromium build; never on Fly |
+| Every model call through one door (F1) | **E2** | zero direct provider calls outside `services/ai/client.ts` over all 408 files under `src/`, parsed, five shapes each with a canary: `every-model-call-goes-through-the-door.test.ts`. No real call made |
+| Thinking ceiling with revenue; cost to serve per product (F1) | **E2** | local runtime through the real door and the Economics page, never against real revenue: `the-thinking-ceiling-grows-with-revenue.test.ts`, `what-each-product-costs-to-serve.test.ts` |
+| Owner minutes under 10 a week (F1) | **E2** | the twin's capable year, 5 seeds × 365 days, the owner a policy and the minutes a stated model: `what-can-wait-for-the-week-waits.test.ts`, scorecards in `history/twin-2026-10-09-f1/` |
 
 ## Open proof debt
 
@@ -3489,3 +3493,135 @@ assumptions; its eyes are the twin's own people; the model is scripted; the
 printer is a stand-in (Chromium printing is proven elsewhere); the owner is a
 policy, not a person; the sensitivity sweep is open loop (one closed-loop check
 of the top parameter per long run).
+
+## F1: ready to run cheaply (9 October 2026)
+
+Built on `claude/foundry-f1-lean` from the master build plan's F1 and F1b. Not
+deployed: the brief forbade the deploy marker, so nothing here is proven on
+the Fly machine.
+
+**Printing fits the 1 GB machine, measured.** `renderPrintable` now prints one
+document at a time through a queue (`printOne`), with a timeout
+(`PRINT_TIMEOUT_MS`, 90 s, `FOUNDRY_PRINT_TIMEOUT_MS`) whose signal KILLS the
+browser: Chromium is started as a server (`launchServer`) so a hung print can
+be killed rather than abandoned, launched with `CHROMIUM_LAUNCH_ARGS` (no GPU,
+no /dev/shm, one renderer, no site isolation, a 128 MB page heap) and closed
+after every print. `scripts/measure-print-memory.mts` runs the BUILT server
+(`node dist/index.js`, NODE_ENV=production, PROCESS_ROLE=all, scheduler on, a
+file database, a placeholder model key pointed at a closed port) and a printing
+process inside one cgroup-v1 memory group capped at 1 GB with memory+swap
+capped at the same 1 GB (no swap, as on Fly), sampling every process's RSS and
+the group's usage every 50 ms. It prints the bench product (the 9-page home
+maintenance log) three times, the largest file the kind allows (40 pages)
+three times, then four at once. Measured with Playwright's headless shell
+(Chromium build 1194), not Debian's package in the image:
+
+| | 1 GB cap, run 1 | 1 GB cap, run 2 | 512 MB cap | 200 MB cap (control) |
+|---|---|---|---|---|
+| the group's peak (what the OOM killer reads) | 339 MB | 313 MB | 295 MB | 200 MB, **OOM-killed** |
+| server idle (RSS) | 133 MB | 134 MB | 130 MB | 125 MB |
+| Chromium's processes, summed RSS (shared pages counted again) | 612 MB | 594 MB | 585 MB | 247 MB |
+| every process, summed RSS | 762 MB | 729 MB | 710 MB | — |
+| prints finished / memory failures | 10 / 0 | 10 / 0 | 10 / 0 | the printer killed; the server stayed up |
+
+A print takes about 0.35 s (9 pages) to 0.45 s (40 pages). **Verdict: it fits
+with headroom** — the group's peak is about a third of 1 GB and the whole run
+completes under 512 MB; the 200 MB control proves the cap binds. The summed RSS
+overstates Chromium, because its processes share mapped pages. No fallback
+machine is needed. `printing-fits-the-machine` (6) pins one-at-a-time, the
+timeout's signal, a failed print not jamming the queue, the flags, and, against
+the real headless shell, that no browser process outlives a print and that a
+page whose script never yields is killed; five mutations (no queue, no abort,
+no kill on abort, no close, a flag removed) each turn it red. **Proof debt:**
+the image's Debian `chromium-headless-shell` build is not the one measured,
+and nothing has printed on the Fly machine.
+
+**Every model call goes through the one door.** Census, parsed over all 408
+script files under `src/`: zero direct provider calls outside
+`services/ai/client.ts`, in five shapes (a provider host, a completion
+endpoint on any host, a model SDK import, a key or base-URL read, a literal
+model id); 25 call sites through the tier functions. Six exemptions, each
+pinned to a file and a shape, none for a completion or an SDK (the credit read,
+the CLI doctor, the health flag, the test setup deleting the keys, the AIModel
+type). `every-model-call-goes-through-the-door` holds the count at 0 with a
+file floor, a canary per shape (and per spelling), comments ignored by
+construction, stale exemptions failing; five mutations (a completion on another
+host, an SDK import, a key read, a new directory, a comment that must stay
+green) behave. `callClaudeMultiTurn` — the one entry naming no spend subject,
+with no caller — is deleted. Every call already had the ceiling check
+(reserve → dispatch → settle), cost recording and an explicit tier; prompt
+caching is supported by `CACHE_BREAKPOINT` and used by no caller: the calls
+that repeat within the cache window (the panel's four personas, the forge's
+lenses) put the varying part first, and reordering them changes what the model
+reads, which needs a real-model eval this wave could not run. No model was
+downgraded.
+
+**The thinking ceiling grows with real revenue, never above the charter.** The
+deployment's founder and global caps are the greater of their floors and
+`AI_CEILING_REVENUE_SHARE` (10%, at most 50%) of trailing 30-day real net
+revenue a day (`deploymentCeilings`, read from `economic_events` with
+`evidence_mode = 'real'`); a failed read gives the floors; the door and
+`thinkingCapFor` read the same caps, and the cap handed to the door stays the
+lower of that and the charter's rate (PENDING 46). Per-company caps stay their
+floor. `the-thinking-ceiling-grows-with-revenue` (7), six mutations.
+
+**What each product costs to serve.** `costToServe` (Economics, a fold): per
+experiment over 30 days, real revenue less refunds and disputes, provider fees
+(not known while any charge's fee is unread), thinking settled for that
+experiment, and hosting as an equal share of the owner's stated Fly bill,
+labelled an estimate; thinking for no one product is its own line. The model
+spend is read in `spend-ledger.ts`, where the table's retention promise is
+kept (`retention-purpose-edges` refused the first cut).
+`what-each-product-costs-to-serve` (3), five mutations.
+
+**What can wait for the week waits.** Advice, something noticed, and the
+forge's designs-waiting item reach Needs you on the owner's weekly batch day
+(the weekday he began) and wait under "Put off until later" with that day
+otherwise; decisions, obligations, the charter, mail, held files and tests to
+allow never wait; "hands-on" turns it off (INSTITUTION_MODEL §5.1: the
+check-in style sets the batching). Nothing is decided for him or closed.
+`what-can-wait-for-the-week-waits` (6), two mutations. The twin's owner charges
+a batched item he read in the last seven days as a glance.
+
+**The judges move with what they judge.** `the-judges-move-with-what-they-judge`
+mutates the products the held-out panel judges (three times the price, an
+over-claimed listing, the words gutted to filler): every judge must move on
+one, and none may like a dearer copy better. The careful reader claimed to read
+the file and read only its counts; it now reads the words. The CI evals call no
+model (mocked; no key in CI): voice-gate, reading-a-signal and
+prompt-golden-cases each went red when the production code they pin was
+mutated; `per-agent-decision-mapping` tested a mapping defined only in its own
+file, with no production counterpart, and is deleted.
+
+**F1b, the shapes found in AcreOS:**
+- *Webhooks behind auth: not found.* `every-inbound-door-is-reachable-and-signed`
+  boots the real app and, for all twelve doors from outside (derived from the
+  declared routes), proves a signed or keyed request reaches the handler's own
+  effect and a wrong one meets the handler's own refusal; five mutations
+  (webhooks behind auth, Clerk's behind auth, no signature check, an unlisted
+  door, the mail key dropped) each turn it red.
+- *Charged, nothing delivered: not found.* `every-way-to-pay-is-a-way-to-be-delivered`
+  classifies every stripe tool at the door and pays each kind of link the
+  params make (fixed, chosen, weekly) with the event Stripe sends, tagged only
+  as the link tags it; a kind the intake does not read fails. The real route
+  with replays is proved for the sale by `a-printable-reaches-a-buyer` and
+  `stripe-replays-mid-campaign`, not yet for the weekly invoice.
+- *Built but unwired:* `grantDelegation` (with `armBreaker`) writes a standing
+  permission and had no caller and no test; it is pinned
+  (`a-grant-nothing-calls-still-refuses`). Readers and test hooks with no
+  production caller are listed in the F1 report, not deleted: removing a reader
+  would make its columns write-only.
+- *Untrusted text: found and fixed.* The offer composition's record and design,
+  the forge's findings and draft, the buyer mail and the printable's file and
+  listing sat raw inside a tag; each is escaped (`dataJson`, `wrapDataBlock`)
+  and told to the model as data. `what-the-world-says-reaches-the-model-as-data`
+  classifies all 22 call sites; reverting any fix turns it red; the repository
+  audit's two raw reads are baselined at 2.
+- *Card testing:* a payment link is Stripe-hosted, and Foundry creates no
+  checkout per visitor, so there is no creation endpoint to rate-limit; Radar,
+  3-D Secure and Checkout's own challenge are settings of the Stripe account,
+  which is shared (`docs/stripe-shared-account.md`) and therefore the owner's.
+
+**Owner minutes, the capable year** (5 seeds × 365 days, p10 / p50 / p90 of
+the last four weeks): see the table below, written from the scorecards in
+`history/twin-2026-10-09-f1/`.

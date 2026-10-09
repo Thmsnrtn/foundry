@@ -13,11 +13,11 @@ around each item.
 ---
 
 <!-- status:begin — generated from the headings below by node scripts/check-record-matches-code.mjs --write -->
-# 20 WAITING ON THE OWNER, 3 WITH COUNSEL, 9 DECIDED IN PLACE
+# 24 WAITING ON THE OWNER, 3 WITH COUNSEL, 10 DECIDED IN PLACE
 
-- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 21, 25, 26, 27, 29, 30, 32, 33, 34, 35, 36, 37, 38, 39, 40.
+- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 21, 25, 26, 27, 29, 30, 32, 33, 34, 35, 36, 37, 38, 39, 40, 43, 44, 45, 46.
 - **Waiting on counsel:** PENDING 9, 13, 15 (interim positions in force; see below).
-- **Decided, and kept where they were asked:** PENDING 16, 19, 20, 22, 23, 24, 28, 31, 41.
+- **Decided, and kept where they were asked:** PENDING 16, 19, 20, 22, 23, 24, 28, 31, 41, 42.
 - **Answered and recorded as RESOLVED:** 15.
 <!-- status:end -->
 
@@ -2379,3 +2379,96 @@ refuses a universal factory, so nothing turns it on but your own
 **Recommendation.** (a) in shadow first: let the forge make printables and hold
 every one for you, whatever the panel says, until you have read three; then
 let the panel decide. Add Chromium only once you have said yes.
+
+---
+
+## PENDING 42 — Sell on every platform: **DECIDED 2026-10-09, one act per channel left to the owner**
+
+**What he decided.** Foundry sells each product on every channel it can reach:
+Etsy, Gumroad, Lemon Squeezy, and the Workshop's own Stripe page. Recorded
+here from the owner's decision of 9 October 2026 (the master build plan,
+Foundry section).
+
+**How it is built, when it is built (F2).**
+- One storefront adapter per channel behind a single interface; one canonical
+  product and version, whatever channel shows it.
+- Each channel's sales and refunds reconciled into the per-stream line that F1
+  put on Economics (`costToServe`).
+- The diversification limit applies per channel, so one suspended account is
+  never the whole business.
+- Each marketplace's AI-disclosure setting is applied by the adapter, never
+  left to memory.
+- Tax on the own-Stripe page: Stripe Tax on, its threshold monitoring read as
+  an alert. Until the tax posture is confirmed (PENDING 35), Foundry may route
+  EU buyers to a merchant-of-record channel.
+
+**What it does not change.** No channel widens what Foundry may do: each
+channel is a door that is opened by the owner's own grant (PENDING 43) and
+carries the charter's limits. Etsy is still read-only today (PENDING 25).
+
+---
+
+## PENDING 43 — An account and an API grant on each channel: **OWNER** (2026-10-09)
+
+**What is true.** PENDING 42 needs, per channel, an account that is his and a
+grant Foundry can use. None exists for Gumroad or Lemon Squeezy; Etsy is
+connected at read scope only (PENDING 25), and listing needs Etsy's write
+scope, whose approval can take time.
+
+**What you would do, one channel at a time.** Open the account; grant API
+access at the narrowest scope that lists, delivers files and reads sales; paste
+the key where Settings asks. Each is separate, and each can be taken back.
+
+**Recommendation.** One channel first, a merchant of record (Gumroad or Lemon
+Squeezy), because it collects and pays the sales tax and VAT PENDING 35 asks
+about; then Etsy's write scope.
+
+---
+
+## PENDING 44 — The lowest price a product may carry, against its fees: **OWNER** (2026-10-09)
+
+**What is true.** On a $9 file the marketplace and payment fees take roughly
+10–15%; `fee-floor.ts` already refuses a price that is mostly fees (R29), and
+Economics now shows each product's revenue, fees, thinking and hosting share
+(F1). Where the floor sits above that refusal is a pricing decision, and
+pricing is his.
+
+**Your choice.** A floor in dollars, or a floor as the share of the price the
+fees may take, per channel.
+
+**Recommendation.** No product below the price at which fees, refunds and its
+share of hosting leave at least half of it, read from the per-stream line once
+there are ten sales.
+
+---
+
+## PENDING 45 — Give from Foundry's own revenue, optionally: **OWNER** (2026-10-09)
+
+**What is true.** AcreOS gives $1 per paying member a month to a local food
+bank, from its own revenue, with real receipts. The master plan offers the same
+to Foundry as an option: "each purchase supports …", paid from Foundry's own
+revenue. Nothing is built, and no product page says anything about giving.
+
+**Your choice.** Not now; or a fixed amount per sale to a named recipient, paid
+from Foundry's revenue, with the receipt kept, and said on the listing only
+once the first receipt exists.
+
+**Recommendation.** Not before the first ten real sales: a promise on a page
+with no receipt behind it would be the kind of claim Foundry refuses to make.
+
+---
+
+## PENDING 46 — How much of its revenue Foundry's thinking may grow to: **OWNER** (2026-10-09)
+
+**What is true (F1).** The deployment's founder and global thinking caps are
+now the greater of their floors (`AI_DAILY_COST_CEILING_*`) and a share of
+trailing 30-day real net revenue a day: 10% by default
+(`AI_CEILING_REVENUE_SHARE`, never above 50%). A failed read gives the floors.
+The cap handed to the model door is still the lower of that and the thinking
+rate in the charter you signed, so revenue can never buy thinking you did not
+allow; with no charter, the pre-charter bound of $1 a day binds.
+
+**Your choice.** Keep 10%; set another share; or 0 (floors only).
+
+**Recommendation.** Keep 10% until there is revenue to read; it changes nothing
+today, when the trailing revenue is $0.
