@@ -76,6 +76,8 @@ const HEADLESS = [
   process.env.FOUNDRY_CHROMIUM_PATH,
   '/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell',
   '/usr/lib/chromium/chromium-headless-shell',
+  // And the full browsers, so the release runner (which has '/usr/bin/google-chrome') runs these too.
+  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/usr/bin/chromium', '/usr/bin/google-chrome',
 ].find((p): p is string => !!p && existsSync(p));
 const withBrowser = HEADLESS ? describe : describe.skip;
 
