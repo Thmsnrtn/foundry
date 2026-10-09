@@ -659,7 +659,10 @@ export function chromiumRenderer(executablePath: string): Renderer {
         const layout = await page.evaluate(LAYOUT_PROBE) as { sections: number; overflow: string[] };
         // Measured under print media, where the page is laid out as it prints.
         const fields = await page.evaluate(FIELD_PROBE) as FieldBox[];
-        const pdf = await page.pdf({ printBackground: true, preferCSSPageSize: true });
+        // TAGGED, WITH AN OUTLINE (FQ): a structure tree built from the HTML
+        // (headings, paragraphs, lists, tables) and bookmarks from the
+        // headings, so a screen reader reads the file as a document.
+        const pdf = await page.pdf({ printBackground: true, preferCSSPageSize: true, tagged: true, outline: true });
         return { pdf: Buffer.from(pdf), sections: layout.sections, overflow: layout.overflow, fields };
       } finally {
         await browser.close().catch(() => undefined);
