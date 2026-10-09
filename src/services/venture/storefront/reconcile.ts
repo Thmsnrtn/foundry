@@ -94,9 +94,17 @@ export async function recordChannelSales(founderId: string, sales: ChannelSale[]
     `SELECT channel, external_ref, experiment_id, version FROM channel_listings WHERE founder_id = ?`, [founderId])).rows as Row[];
   const byRef = new Map(listings.map((r) => [`${String(r.channel)}:${String(r.external_ref)}`, r]));
   let recorded = 0; let repeated = 0; let notOurs = 0;
+  const { exposureOf } = await import('../outcome.js');
   for (const s of sales) {
     const l = byRef.get(`${s.channel}:${s.productRef}`);
     if (!l) { notOurs += 1; continue; }
+    // NEVER TWICE (F3): an Etsy listing that is its test's own exposure reaches
+    // the ledger through that exposure; recording it here as well would count
+    // each sale in two places of one line.
+    if (s.channel === 'etsy') {
+      const x = await exposureOf(String(l.experiment_id));
+      if (x && x.provider === 'etsy' && /\/listing\/(\d+)/.exec(x.exposureRef)?.[1] === s.productRef) { repeated += 1; continue; }
+    }
     const r = await query(
       `INSERT INTO channel_sales (id, founder_id, experiment_id, version, channel, kind, provider_ref, gross_cents, fee_cents, tax_cents, currency, occurred_at, evidence_mode)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(channel, provider_ref, kind) DO NOTHING`,
@@ -220,4 +228,20 @@ export async function channelListingsOf(founderId: string): Promise<Array<{ expe
     `SELECT experiment_id, channel, version, external_ref, ai_disclosure, listed_at FROM channel_listings WHERE founder_id = ? ORDER BY listed_at DESC, rowid DESC`,
     [founderId])).rows as Row[]).map((r) => ({ experimentId: String(r.experiment_id), channel: String(r.channel), version: Number(r.version),
     externalRef: String(r.external_ref), aiDisclosure: String(r.ai_disclosure), listedAt: String(r.listed_at).slice(0, 10) }));
+}
+
+/**
+ * WHAT A TEST'S PRODUCT SOLD ON OTHER CHANNELS (F3; residue of F2): evidence
+ * read beside the settlement, never into it. The sealed prediction settles on
+ * its one exposure; these are sales the same product made elsewhere, in the
+ * test's own world, each channel counted as that channel stated it.
+ */
+export async function soldElsewhere(experimentId: string): Promise<Array<{ channel: MarketChannel; sales: number; refunds: number; grossCents: number; refundedCents: number }>> {
+  return ((await query(
+    `SELECT s.channel, SUM(CASE WHEN s.kind = 'sale' THEN 1 ELSE 0 END) AS sales, SUM(CASE WHEN s.kind = 'refund' THEN 1 ELSE 0 END) AS refunds,
+            SUM(CASE WHEN s.kind = 'sale' THEN s.gross_cents ELSE 0 END) AS gross, SUM(CASE WHEN s.kind = 'refund' THEN s.gross_cents ELSE 0 END) AS refunded
+       FROM channel_sales s JOIN venture_experiments e ON e.id = s.experiment_id AND e.evidence_mode = s.evidence_mode
+      WHERE s.experiment_id = ? GROUP BY s.channel ORDER BY s.channel`, [experimentId])).rows as Row[]).map((r) => ({
+    channel: String(r.channel) as MarketChannel, sales: Number(r.sales), refunds: Number(r.refunds), grossCents: Number(r.gross), refundedCents: Number(r.refunded),
+  }));
 }

@@ -109,8 +109,18 @@ export async function placeOnChannel(founderId: string, experimentId: string, ch
 export async function readChannel(founderId: string, channel: MarketChannel, since: Date, evidenceMode: 'real' | 'sandbox' | 'reference' = 'real'): Promise<{ read: true; recorded: number; repeated: number; notOurs: number } | { read: false; because: string }> {
   const open = await channelOpen(founderId, channel, 'read');
   if (!open.open) return { read: false, because: open.because };
-  // Etsy's sales are already in the ledger (the Etsy sense): counted, never recorded twice.
-  if (channel === 'etsy') return { read: true, recorded: 0, repeated: (await ADAPTERS.etsy.readSales(founderId, since, null)).length, notOurs: 0 };
+  // Etsy: a test's own Etsy exposure is already in the ledger (the Etsy sense),
+  // counted and never recorded twice; an Etsy listing of a product whose
+  // exposure is elsewhere is read into channel_sales (F3).
+  if (channel === 'etsy') {
+    try {
+      const { readEtsyChannelListings } = await import('./etsy.js');
+      const r = await readEtsyChannelListings(founderId, evidenceMode);
+      return { read: true, recorded: r.recorded, repeated: (await ADAPTERS.etsy.readSales(founderId, since, null)).length, notOurs: 0 };
+    } catch (err) {
+      return { read: false, because: `Etsy could not be read: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  }
   try {
     const sales = await ADAPTERS[channel].readSales(founderId, since, open.key, open.grant.storeId);
     return { read: true, ...(await recordChannelSales(founderId, sales, evidenceMode)) };
@@ -138,7 +148,9 @@ export async function readOpenChannels(now: Date = new Date()): Promise<Array<{ 
   const rows = (await query(
     `SELECT DISTINCT founder_id, requirement FROM origination_policy
       WHERE founder_id IS NOT NULL AND requirement IN ('channel_grant:gumroad','channel_grant:lemonsqueezy')
-        AND superseded_at IS NULL AND set_by LIKE 'founder:%' AND value LIKE '%"granted":true%'`, [])).rows as Array<Record<string, unknown>>;
+        AND superseded_at IS NULL AND set_by LIKE 'founder:%' AND value LIKE '%"granted":true%'
+      UNION
+     SELECT DISTINCT founder_id, 'channel_grant:etsy' FROM channel_listings WHERE channel = 'etsy'`, [])).rows as Array<Record<string, unknown>>;
   const out: Array<{ founderId: string; channel: MarketChannel; result: Awaited<ReturnType<typeof readChannel>> }> = [];
   const since = new Date(now.getTime() - READ_BACK_DAYS * 86_400_000);
   for (const r of rows) {

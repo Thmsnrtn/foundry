@@ -81,7 +81,7 @@ export interface TheRecord {
   /** The season of what it would sell (F3): Foundry's own year, or a prior labelled an assumption; null when its words name none. */
   season: import('./storefront/seasonality.js').Season | null;
   /** Each with the test it came from, so a design can record which lessons it read. */
-  lessons: Array<{ experimentId: string; whatWeDid: string; verdict: string | null; couldNotEstablish: string | null }>;
+  lessons: Array<{ experimentId: string; whatWeDid: string; verdict: string | null; couldNotEstablish: string | null; soldElsewhereNotSettledOn?: Array<{ channel: string; sales: number; refunds: number; grossCents: number; refundedCents: number }> }>;
   /** WHAT IS ALREADY KNOWN ABOUT THIS CANDIDATE, with its scope: the settled tests on it, and whether the proposed act repeats one. */
   precedent: { stands: 'clear' | 'asked_before' | 'narrowed'; because: string; settled: string[] };
   legal: { sentence: string; inTheWay: string[] };
@@ -146,7 +146,9 @@ export async function theRecordOf(experimentId: string): Promise<TheRecord | nul
     .map((r) => ({ question: String(r.question), blocking: Number(r.blocking) === 1, cheapestTest: r.cheapest_test == null ? null : String(r.cheapest_test), asks: fourQuestionsOf(String(r.question)) }));
   const { lessonsFor } = await import('./forge.js');
   const lessons = (await lessonsFor(founderId)).filter((l) => l.experimentId !== String(e.id))
-    .map((l) => ({ experimentId: l.experimentId, whatWeDid: l.whatWeDid, verdict: l.verdict, couldNotEstablish: l.couldNotEstablish }));
+    .map((l) => ({ experimentId: l.experimentId, whatWeDid: l.whatWeDid, verdict: l.verdict, couldNotEstablish: l.couldNotEstablish,
+      // The product's sales on other channels: beside the verdict, which settled on its one exposure (F3).
+      ...(l.soldElsewhere.length ? { soldElsewhereNotSettledOn: l.soldElsewhere } : {}) }));
   const { precedentOfExperiment } = await import('./precedent.js');
   const p = await precedentOfExperiment(experimentId);
   const precedent = { stands: p?.stands ?? 'clear' as const, because: p?.because ?? 'no test on this candidate has settled',
