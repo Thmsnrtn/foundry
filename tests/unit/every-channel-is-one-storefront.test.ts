@@ -213,3 +213,46 @@ describe('sales and refunds reconcile, once, into one line per stream and channe
     expect(c.sentence).toMatch(/one suspended account/);
   });
 });
+
+describe('his acts, through the pages he already reads (no new door)', () => {
+  it('Controls asks for the floor and the channels as his decisions; Money sets the floor and shows every channel\'s line', async () => {
+    const { ownerApp, owner, asText } = await import('../helpers/world.js');
+    const app = await ownerApp();
+    const me = owner(app);
+    const { yourDecisions } = await import('../../src/services/control/decisions.js');
+    const d = Object.fromEntries((await yourDecisions(OWNER, process.env)).map((x) => [x.key, x]));
+    expect(d.price_floor!.state).toBe('done');
+    expect(d.channels!).toMatchObject({ state: 'done', seen: expect.stringMatching(/Gumroad/) });
+    const controls = asText(await me.page('/foundry/controls'));
+    expect(controls).toContain('Open the channels Foundry may sell on');
+    // Closing a channel from Controls is his act, and it is read back.
+    expect((await me.post('/foundry/controls/channels', { channel: 'lemonsqueezy', open: 'no' })).status).toBe(302);
+    expect(await CH.channelGrant(OWNER, 'lemonsqueezy')).toMatchObject({ granted: false });
+    // The floor from Money, in his words.
+    expect((await me.post('/foundry/money/price-floor', { min_dollars: '6', max_fee_percent: '25', why: 'fees under a quarter' })).status).toBe(302);
+    expect((await PF.priceFloorOf(OWNER))!.floor).toEqual({ minCents: 600, maxFeeShare: 0.25 });
+    const money = asText(await me.page('/foundry/money'));
+    expect(money).toContain('Every channel: what each sold, kept and returned');
+    expect(money).toMatch(/The Home Maintenance Log ?, version 1: After fees, of \$9\.00: Workshop page: \$8\.43 · Etsy: \$7\.69 · Gumroad: \$7\.03–\$7\.60/);
+  });
+
+  it('the hand\'s daily tick reads every channel he opened, and none he closed', async () => {
+    const reads = await ST.readOpenChannels(new Date('2026-10-09T12:00:00Z'));
+    expect(reads.map((r) => r.channel)).toEqual(['gumroad']);
+  });
+});
+
+describe('wired, not only built', () => {
+  it('the hand\'s daily tick calls readOpenChannels (parsed, so a comment naming it does not count)', async () => {
+    const ts = (await import('typescript')).default;
+    const { readFileSync } = await import('node:fs');
+    const sf = ts.createSourceFile('jobs.ts', readFileSync('src/jobs/index.ts', 'utf8'), ts.ScriptTarget.Latest, true);
+    let calls = 0;
+    const v = (n: import('typescript').Node): void => {
+      if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === 'readOpenChannels') calls += 1;
+      ts.forEachChild(n, v);
+    };
+    v(sf);
+    expect(calls).toBe(1);
+  });
+});

@@ -41,6 +41,7 @@ export async function recordOwnerListing(input: {
   founderId: string; experimentId: string; channel: MarketChannel; externalRef: string; version: number; priceCents: number; by: string;
 }): Promise<{ id: string } | { refused: string }> {
   if (!input.by.startsWith('founder:')) return { refused: 'a listing he made himself is recorded by him' };
+  if (!input.externalRef.trim()) return { refused: 'say the product\'s id on the channel, so its sales can be tied to it' };
   const { canonicalListing } = await import('./canonical.js');
   const l = await canonicalListing(input.founderId, input.experimentId);
   if ('refused' in l) return l;

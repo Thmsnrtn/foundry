@@ -128,3 +128,41 @@ export async function channelOpen(founderId: string, channel: MarketChannel, pur
   if (!key) return { open: false, because: `you opened ${CHANNEL_NAMES[channel]} on ${g.on}, and no API key for it is held here: paste it in Settings` };
   return { open: true, grant: g.grant, key };
 }
+
+// ─── His key, verified before it is kept (the sending identity's convention) ──
+//
+// A key he pastes is asked of the channel with one free read that changes
+// nothing — Gumroad's GET /v2/user (routes.rb, antiwork/gumroad bffaa9b8),
+// Lemon Squeezy's GET /v1/users/me (docs.lemonsqueezy.com/api/users) — and
+// kept, encrypted, only if the channel says it is a real account. The key never
+// appears in a log line, an error or a sentence he is shown.
+
+const WHO_AM_I: Readonly<Record<'gumroad' | 'lemonsqueezy', { url: string; headers: (k: string) => Record<string, string>; idOf: (j: Record<string, unknown>) => string | null }>> = Object.freeze({
+  gumroad: { url: 'https://api.gumroad.com/v2/user', headers: (k) => ({ authorization: `Bearer ${k}`, accept: 'application/json' }),
+    idOf: (j) => { const u = j.user as Record<string, unknown> | undefined; return j.success === true && u && (u.user_id ?? u.id) ? String(u.user_id ?? u.id) : null; } },
+  lemonsqueezy: { url: 'https://api.lemonsqueezy.com/v1/users/me', headers: (k) => ({ authorization: `Bearer ${k}`, accept: 'application/vnd.api+json' }),
+    idOf: (j) => { const d = j.data as Record<string, unknown> | undefined; return d?.id ? String(d.id) : null; } },
+});
+
+/** Keep his key for a channel once the channel says it is a real account. Nothing is stored on any failure. */
+export async function setChannelKey(channel: 'gumroad' | 'lemonsqueezy', key: string, by: string): Promise<{ placed: true; account: string } | { failed: true; ownerWords: string }> {
+  const k = key.trim();
+  if (!k) return { failed: true, ownerWords: 'paste the key; nothing has been stored' };
+  if (!by.startsWith('founder:')) return { failed: true, ownerWords: 'only you place a key; nothing has been stored' };
+  const w = WHO_AM_I[channel];
+  const { channelHttp } = await import('./canonical.js');
+  let res: Response;
+  try { res = await channelHttp(w.url, { headers: w.headers(k) }); } catch {
+    return { failed: true, ownerWords: `I could not reach ${CHANNEL_NAMES[channel]} to check that key just now; nothing has been stored` };
+  }
+  if (res.status === 401 || res.status === 403) return { failed: true, ownerWords: `${CHANNEL_NAMES[channel]} does not accept that key; nothing has been stored` };
+  const id = res.ok ? w.idOf(await res.json().catch(() => ({})) as Record<string, unknown>) : null;
+  if (!id) return { failed: true, ownerWords: `${CHANNEL_NAMES[channel]} answered ${String(res.status)} without saying whose account it is; nothing has been stored` };
+  const { encrypt } = await import('../../encryption.js');
+  await query(
+    `INSERT INTO app_credentials (provider, secret_json, provider_account_ref, verified_at, set_by) VALUES (?,?,?,?,?)
+     ON CONFLICT(provider) DO UPDATE SET secret_json = excluded.secret_json, provider_account_ref = excluded.provider_account_ref,
+       verified_at = excluded.verified_at, set_at = datetime('now'), set_by = excluded.set_by, forgotten_at = NULL, forget_reason = NULL`,
+    [channel, encrypt(JSON.stringify(channel === 'gumroad' ? { token: k } : { apiKey: k })), id, new Date().toISOString(), by]);
+  return { placed: true, account: id };
+}

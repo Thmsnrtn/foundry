@@ -51,8 +51,9 @@ export const ADAPTERS: Readonly<Record<MarketChannel, StorefrontAdapter>> = Obje
   },
   etsy: {
     channel: 'etsy', docs: WHAT_THE_API_ALLOWS.etsy.docs, aiDisclosure: WHAT_THE_API_ALLOWS.etsy.aiSetting,
-    // Read through the ledger the Etsy sense writes; reconciled there, not here.
-    async readSales() { return []; },
+    // Read FROM the ledger the Etsy sense writes, where it is already
+    // reconciled through fulfilments; never recorded a second time.
+    async readSales(founderId, since) { const e = await import('./etsy.js'); return e.etsySalesFromLedger(founderId, since); },
   },
 });
 
@@ -145,11 +146,31 @@ export async function placeOnChannel(founderId: string, experimentId: string, ch
 export async function readChannel(founderId: string, channel: MarketChannel, since: Date, evidenceMode: 'real' | 'sandbox' | 'reference' = 'real'): Promise<{ read: true; recorded: number; repeated: number; notOurs: number } | { read: false; because: string }> {
   const open = await channelOpen(founderId, channel, 'read');
   if (!open.open) return { read: false, because: open.because };
-  if (channel === 'etsy') return { read: true, recorded: 0, repeated: 0, notOurs: 0 };
+  // Etsy's sales are already in the ledger (the Etsy sense): counted, never recorded twice.
+  if (channel === 'etsy') return { read: true, recorded: 0, repeated: (await ADAPTERS.etsy.readSales(founderId, since, null)).length, notOurs: 0 };
   try {
     const sales = await ADAPTERS[channel].readSales(founderId, since, open.key, open.grant.storeId);
     return { read: true, ...(await recordChannelSales(founderId, sales, evidenceMode)) };
   } catch (err) {
     return { read: false, because: `${CHANNEL_NAMES[channel]} could not be read: ${err instanceof Error ? err.message : String(err)}` };
   }
+}
+
+/**
+ * READ EVERY CHANNEL SOMEONE OPENED, for the hand's daily tick. With no grant
+ * this reads nothing and costs nothing; a channel that cannot be read says why
+ * and blocks no other.
+ */
+export async function readOpenChannels(now: Date = new Date()): Promise<Array<{ founderId: string; channel: MarketChannel; result: Awaited<ReturnType<typeof readChannel>> }>> {
+  const rows = (await query(
+    `SELECT DISTINCT founder_id, requirement FROM origination_policy
+      WHERE founder_id IS NOT NULL AND requirement IN ('channel_grant:gumroad','channel_grant:lemonsqueezy')
+        AND superseded_at IS NULL AND set_by LIKE 'founder:%' AND value LIKE '%"granted":true%'`, [])).rows as Array<Record<string, unknown>>;
+  const out: Array<{ founderId: string; channel: MarketChannel; result: Awaited<ReturnType<typeof readChannel>> }> = [];
+  const since = new Date(now.getTime() - 35 * 86_400_000);
+  for (const r of rows) {
+    const channel = String(r.requirement).split(':')[1] as MarketChannel;
+    out.push({ founderId: String(r.founder_id), channel, result: await readChannel(String(r.founder_id), channel, since, 'real') });
+  }
+  return out;
 }

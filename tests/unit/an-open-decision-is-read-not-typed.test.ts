@@ -40,9 +40,9 @@ beforeAll(async () => {
 const byKey = async (env: NodeJS.ProcessEnv) => Object.fromEntries((await yourDecisions(OWNER, env)).map((d) => [d.key, d]));
 
 describe('the acts', () => {
-  it('are all there, in the roadmap\'s order, with subscriptions (PENDING 31), placing offers that still cost minutes (PENDING 32) and printable files (PENDING 41) before the charter', async () => {
+  it('are all there, in the roadmap\'s order, with subscriptions (PENDING 31), placing offers that still cost minutes (PENDING 32) and printable files (PENDING 41), the price floor (PENDING 44) and the channels (PENDING 43) before the charter', async () => {
     expect((await yourDecisions(OWNER, ENV())).map((d) => d.key)).toEqual(
-      ['credentials', 'clerk', 'copy_away', 'witness', 'money', 'sentry', 'phone', 'pending', 'refunds', 'stripe_events', 'money_switch', 'correspondence', 'subscriptions', 'front_loaded_attention', 'printables', 'charter', 'findable']);
+      ['credentials', 'clerk', 'copy_away', 'witness', 'money', 'sentry', 'phone', 'pending', 'refunds', 'stripe_events', 'money_switch', 'correspondence', 'subscriptions', 'front_loaded_attention', 'printables', 'price_floor', 'channels', 'charter', 'findable']);
   });
 
   it('say "cannot see" for what Foundry cannot see, never done', async () => {
