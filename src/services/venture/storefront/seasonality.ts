@@ -24,9 +24,17 @@ export const VISITS_NOT_RECORDED = 'Visits are not recorded: the Workshop carrie
 
 type Mode = 'real' | 'sandbox' | 'reference';
 
-/** The calendar month that has most recently ended, as YYYY-MM. */
+/**
+ * Days after a month ends before it is recorded (F3 audit of F2): a channel
+ * that could not be read on the 1st left the month short for good, because a
+ * month is recorded once. Three days lets a missed read catch up. An assumption.
+ */
+export const SETTLE_DAYS = 3;
+
+/** The most recent calendar month that ended at least SETTLE_DAYS ago, as YYYY-MM. */
 export function monthToRecord(now: Date): string {
-  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+  const settled = new Date(now.getTime() - SETTLE_DAYS * 86_400_000);
+  const d = new Date(Date.UTC(settled.getUTCFullYear(), settled.getUTCMonth() - 1, 1));
   return `${String(d.getUTCFullYear())}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 

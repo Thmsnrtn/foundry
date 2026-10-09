@@ -929,25 +929,27 @@ export interface CostToServe {
  * fees and net NOT KNOWN rather than zero, as `unitContribution` does.
  */
 export async function costToServe(founderId: string, days = 30): Promise<CostToServe> {
-  const since = `-${String(days)} days`;
-  const money = (await query(
-    `SELECT f.experiment_id AS exp,
-            COALESCE(SUM(CASE WHEN e.kind = 'charge' THEN e.amount_cents END), 0) AS charged,
-            COALESCE(SUM(CASE WHEN e.kind IN ('refund','dispute_withdrawal') THEN e.amount_cents END), 0) AS returned,
-            COALESCE(SUM(CASE WHEN e.kind IN ('provider_fee','dispute_fee') THEN e.amount_cents END), 0) AS fees,
-            COALESCE(SUM(CASE WHEN e.kind = 'refund_fee_returned' THEN e.amount_cents END), 0) AS fees_back,
-            -- PER CHARGE, not per fulfilment (F2 audit of F1): a fulfilment
-            -- charged twice with one fee read does not have its fees known.
-            COUNT(CASE WHEN e.kind = 'charge' THEN 1 END) AS charges,
-            COUNT(CASE WHEN e.kind = 'provider_fee' THEN 1 END) AS fee_read
-       FROM economic_events e JOIN experiment_fulfilments f ON f.id = e.fulfilment_id
-      WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND datetime(e.occurred_at) >= datetime('now', ?)
-      GROUP BY f.experiment_id`, [founderId, since])).rows as Array<Record<string, unknown>>;
+  // ONE PER-STREAM LINE (F3 audit of F2). This read the economic ledger alone,
+  // so a product selling on Gumroad or Lemon Squeezy (`channel_sales`) showed
+  // no revenue here while the channel line showed its sales: two answers to
+  // "what did this product earn". It now reads that line, every channel, and
+  // its fees are known only when every channel said what it kept.
+  const { channelPnl } = await import('../venture/storefront/reconcile.js');
+  const money = (await channelPnl(founderId, days, 'real')).map((st) => {
+    const unknownFees = st.channels.filter((ch) => ch.feesCents === null);
+    return {
+      exp: st.experimentId,
+      sales: st.channels.reduce((n, ch) => n + ch.sales, 0),
+      revenueCents: st.channels.reduce((n, ch) => n + ch.grossCents - ch.refundedCents, 0),
+      feesCents: unknownFees.length ? null : st.channels.reduce((n, ch) => n + (ch.feesCents ?? 0), 0),
+      unknownFees: unknownFees.map((ch) => ch.channel),
+    };
+  });
   // Read through the spend ledger, where the erasure promise about that table is kept.
   const { settledByExperiment } = await import('../ai/spend-ledger.js');
   const spent = await settledByExperiment(founderId, days);
   const elsewhere = spent.outside;
-  const ids = [...new Set([...money.map((r) => String(r.exp)), ...spent.byExperiment.keys()])];
+  const ids = [...new Set([...money.map((r) => r.exp), ...spent.byExperiment.keys()])];
   const names = new Map<string, string>();
   if (ids.length) {
     const rows = (await query(`SELECT id, what_we_do FROM venture_experiments WHERE founder_id = ? AND id IN (${ids.map(() => '?').join(',')})`,
@@ -965,13 +967,13 @@ export async function costToServe(founderId: string, days = 30): Promise<CostToS
     : { cents: Math.round((flyCents * days) / 30 / known.length), quality: 'estimated',
       because: `an estimate: the Fly bill you stated, for ${String(days)} days, split equally across ${String(known.length)} ${known.length === 1 ? 'product' : 'products'}` };
   const streams: StreamCost[] = known.map((id) => {
-    const m = money.find((r) => String(r.exp) === id);
-    const charges = Number(m?.charges ?? 0);
-    const revenue = measured(Number(m?.charged ?? 0) - Number(m?.returned ?? 0),
-      charges === 0 ? 'nothing was sold in the window' : 'what buyers paid, less refunds and disputes');
-    const fees: Figure = Number(m?.fee_read ?? 0) < charges
-      ? unavailable(`the provider has not said what it took from ${String(charges - Number(m?.fee_read ?? 0))} of ${String(charges)} charges`)
-      : measured(Number(m?.fees ?? 0) - Number(m?.fees_back ?? 0), charges === 0 ? 'no charge, so no fee' : 'what the provider took, as it said');
+    const m = money.find((r) => r.exp === id);
+    const charges = m?.sales ?? 0;
+    const revenue = measured(m?.revenueCents ?? 0,
+      charges === 0 ? 'nothing was sold in the window' : 'what buyers paid on every channel, less refunds and disputes');
+    const fees: Figure = m && m.feesCents === null
+      ? unavailable(`${m.unknownFees.join(', ')} has not said what it took from every sale`)
+      : measured(m?.feesCents ?? 0, charges === 0 ? 'no charge, so no fee' : 'what each channel took, as it said');
     const thinking = measured(Math.round(spent.byExperiment.get(id) ?? 0), 'settled model spend for this product');
     const net: Figure = fees.cents === null
       ? unavailable('not known until every fee is read')

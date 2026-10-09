@@ -276,13 +276,8 @@ export async function projectExperiment(experimentId: string): Promise<PublicExp
   }
   const elsewhere: PublicExperiment['elsewhere'] = [];
   if (guide) {
-    const { channelGrant, CHANNEL_NAMES } = await import('../venture/storefront/channels.js');
-    const { FEE_CARDS } = await import('../venture/fee-floor.js');
-    for (const l of await rows(`SELECT channel, url, founder_id FROM channel_listings WHERE experiment_id = ? AND version = ? AND url IS NOT NULL ORDER BY channel`, [experimentId, guide.version])) {
-      const ch = String(l.channel) as 'gumroad' | 'lemonsqueezy' | 'etsy';
-      if (!(await channelGrant(String(l.founder_id), ch)).granted) continue;
-      elsewhere.push({ channel: ch, venueName: CHANNEL_NAMES[ch], url: String(l.url), merchantOfRecord: FEE_CARDS[ch].merchantOfRecord });
-    }
+    const { buyerFacingListings } = await import('../venture/storefront/reconcile.js');
+    elsewhere.push(...await buyerFacingListings(experimentId, guide.version));
   }
   return {
     number: Number(r.number), slug, path: `/experiments/${slug}`, listed: Number(r.listed) === 1,

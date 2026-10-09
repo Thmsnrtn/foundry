@@ -149,9 +149,10 @@ describe('Gumroad, through the door', () => {
     if ('refused' in l) throw new Error(l.refused);
     sent.length = 0;
     const fileUrl = await G.uploadFile('fixture-gumroad-token', { filename: l.file.filename, pdf: l.file.pdf });
-    const ref = await G.createDraft('fixture-gumroad-token', l, fileUrl);
-    await G.enable('fixture-gumroad-token', ref);
-    expect(ref).toBe('fixture_product_1');
+    const made = await G.createDraft('fixture-gumroad-token', l, fileUrl);
+    await G.enable('fixture-gumroad-token', made.id);
+    // The product's id, and the address a buyer reaches it at (F3 audit: kept for the EU line).
+    expect(made).toEqual({ id: 'fixture_product_1', url: 'https://fixture-seller.gumroad.com/l/fixture' });
     const presign = JSON.parse(sent.find((s) => s.url.endsWith('/files/presign'))!.body) as Record<string, unknown>;
     expect(presign).toMatchObject({ filename: 'the-home-maintenance-log-v1.pdf', file_size: l.file.pdf.length });
     expect(sent.some((s) => s.url.startsWith('https://s3.fixture.example/') && s.method === 'PUT')).toBe(true);

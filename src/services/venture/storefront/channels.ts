@@ -58,6 +58,29 @@ export const WHAT_THE_API_ALLOWS: Readonly<Record<MarketChannel, { list: boolean
   },
 });
 
+/** The hosts a buyer reaches each channel's listing on. */
+const BUYER_HOSTS: Readonly<Record<MarketChannel, RegExp>> = Object.freeze({
+  gumroad: /^(?:[a-z0-9-]+\.)?gumroad\.com$/,
+  lemonsqueezy: /^[a-z0-9-]+\.lemonsqueezy\.com$/,
+  etsy: /^www\.etsy\.com$/,
+});
+
+/**
+ * THE ADDRESS A BUYER REACHES A LISTING AT, or null when what was given is not
+ * one: https, on the channel's own host, nothing else. A page sends buyers to
+ * this address (the EU line), so a pasted or answered value is never trusted
+ * beyond that.
+ */
+export function buyerUrlOn(channel: MarketChannel, raw: unknown): string | null {
+  if (typeof raw !== 'string' || raw.length > 300) return null;
+  let u: URL;
+  try { u = new URL(raw.trim()); } catch { return null; }
+  if (u.protocol !== 'https:' || u.username || u.password || u.port) return null;
+  if (!BUYER_HOSTS[channel].test(u.hostname.toLowerCase())) return null;
+  if (channel === 'etsy' && !/^\/listing\/\d+/.test(u.pathname)) return null;
+  return u.toString();
+}
+
 export interface ChannelGrant {
   /** Etsy only: his answer to Etsy's required "who made it" (i_did, someone_else, collective). */
   whoMade?: 'i_did' | 'someone_else' | 'collective';
