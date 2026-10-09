@@ -69,7 +69,7 @@ export interface DayRecord {
   violations: number;
   jobDefects: string[];
   modelCalls: number;
-  /** Observations the eyes recorded today (F3): zero is an idle day. */
+  /** Sentences somebody wrote that discovery recorded today for the first time, by address (F3): zero is an idle day. */
   newObservations: number;
   /** Items the public world showed the eyes today that it had never shown before (F3): the twin's own count of freshness. */
   newItemsShown: number;
@@ -384,7 +384,13 @@ export async function runWorld(o: WorldOptions): Promise<WorldResult> {
     verdicts.push(...today_.filter((v) => v.violations.length > 0));
     const designs = await n(`SELECT COUNT(*) AS n FROM probe_designs d JOIN venture_experiments e ON e.id = d.experiment_id WHERE e.founder_id = ? AND d.designed_by = 'forge'`, [OWNER]);
     const made = await n(`SELECT COUNT(DISTINCT experiment_id) AS n FROM experiment_materials WHERE founder_id = ? AND kind = 'deliverable' AND experiment_id NOT IN (${seededExperiments.map(() => '?').join(',') || "''"})`, [OWNER, ...seededExperiments]);
-    const observations = await n(`SELECT COUNT(*) AS n FROM market_observations WHERE founder_id = ? AND evidence_mode = 'real'`, [OWNER]);
+    // NEW SIGNALS, NOT NEW ROWS (F3 gate, found by mutating freshness away): an
+    // asker files a fresh summary row every time it is asked, so a count of rows
+    // never idles even when the eyes re-read the same posts all week. What counts
+    // is a sentence somebody wrote that discovery had never recorded before:
+    // distinct addresses of the observations discovery files ("somebody wrote").
+    const observations = await n(`SELECT COUNT(DISTINCT o.source) AS n FROM market_observations o JOIN market_claims c ON c.id = o.claim_id
+      WHERE o.founder_id = ? AND o.evidence_mode = 'real' AND c.claim LIKE 'somebody wrote:%'`, [OWNER]);
     const newObservations = observations - lastObservations; lastObservations = observations;
     const newItemsShown = pub.truth.size - lastShown; lastShown = pub.truth.size;
     if (newObservations <= 0) eyesIdleDays += 1;
