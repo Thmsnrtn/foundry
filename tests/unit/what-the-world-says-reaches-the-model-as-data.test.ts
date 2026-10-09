@@ -90,19 +90,57 @@ function modelCallSites(): string[] {
 
 export interface OpenFence { line: number; tag: string; expr: string }
 
-/** Every `<tag>${expr}` where expr is not an approved wrapper call, from the parse tree. */
+/**
+ * Every value placed inside a prompt fence that is still OPEN where it lands,
+ * unless the value is an approved wrapper call, from the parse tree. A fence
+ * is open from `<tag>` until its `</tag>`; words between the tag and the value
+ * do not close it, and neither does building the text with '+' (F2 audit of F1:
+ * the first version read only a value immediately after the tag).
+ */
 export function openFences(file: string, source: string): OpenFence[] {
   const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
   const out: OpenFence[] = [];
+  const openIn = (text: string): string | null => {
+    const stack: string[] = [];
+    for (const m of text.matchAll(/<(\/?)([a-z_][\w-]*)>/gi)) {
+      const tag = m[2]!.toLowerCase();
+      if (HTML.has(tag)) continue;
+      if (m[1]) { const i = stack.lastIndexOf(tag); if (i >= 0) stack.splice(i); } else stack.push(tag);
+    }
+    return stack.length ? stack[stack.length - 1]! : null;
+  };
+  const approved = (e: ts.Expression): boolean => ts.isCallExpression(e) && ts.isIdentifier(e.expression) && WRAPPERS.has(e.expression.text);
+  const literal = (e: ts.Node): string | null => (ts.isStringLiteral(e) || ts.isNoSubstitutionTemplateLiteral(e) ? e.text : null);
+  const flag = (e: ts.Node, tag: string): void => {
+    out.push({ line: sf.getLineAndCharacterOfPosition(e.getStart(sf)).line + 1, tag, expr: e.getText(sf).slice(0, 80) });
+  };
+  const isPlus = (n: ts.Node): n is ts.BinaryExpression => ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.PlusToken;
+  const flatten = (n: ts.Expression): ts.Expression[] => (isPlus(n) ? [...flatten(n.left), ...flatten(n.right)] : [ts.isParenthesizedExpression(n) ? n.expression : n]);
   const v = (n: ts.Node): void => {
     if (ts.isTemplateExpression(n)) {
-      let before = n.head.text;
+      let acc = n.head.text;
       for (const span of n.templateSpans) {
-        const m = /<([a-z_][\w-]*)>\s*$/i.exec(before);
-        const e = span.expression;
-        const approved = ts.isCallExpression(e) && ts.isIdentifier(e.expression) && WRAPPERS.has(e.expression.text);
-        if (m && !approved && !HTML.has(m[1]!.toLowerCase())) out.push({ line: sf.getLineAndCharacterOfPosition(span.getStart(sf)).line + 1, tag: m[1]!, expr: e.getText(sf).slice(0, 80) });
-        before = span.literal.text;
+        const tag = openIn(acc);
+        if (tag && !approved(span.expression)) flag(span.expression, tag);
+        acc += `\u0001${span.literal.text}`;
+      }
+    } else if (isPlus(n) && !(n.parent && isPlus(n.parent))) {
+      let acc = '';
+      for (const part of flatten(n)) {
+        const t = literal(part);
+        if (t !== null) { acc += t; continue; }
+        if (ts.isTemplateExpression(part)) {
+          acc += part.head.text;
+          for (const sp of part.templateSpans) {
+            const open = openIn(acc);
+            if (open && !approved(sp.expression)) flag(sp.expression, open);
+            acc += `\u0001${sp.literal.text}`;
+          }
+          continue;
+        }
+        const tag = openIn(acc);
+        if (tag && !approved(part)) flag(part, tag);
+        acc += '\u0001';
       }
     }
     ts.forEachChild(n, v);
@@ -110,7 +148,6 @@ export function openFences(file: string, source: string): OpenFence[] {
   v(sf);
   return out;
 }
-
 const SITES_FOUND = modelCallSites();
 const fileOf = (k: string): string => k.split('::')[0]!;
 
@@ -144,6 +181,18 @@ describe('canaries: the rule finds the open fence, the wrapper closes it', () =>
     // A page's own HTML is not a prompt block.
     expect(openFences('x.ts', 'const h = `<h1>${esc(title)}</h1>`;')).toEqual([]);
     expect(openFences('x.ts', '// const u = `<record>${JSON.stringify(r)}</record>`;\nexport const y = 1;')).toEqual([]);
+  });
+  // F2 audit of F1: the rule read only an expression IMMEDIATELY after a tag.
+  // Words between the tag and the value, or the same block built with '+',
+  // put raw text inside an open fence and stayed green.
+  it('a raw value inside a fence still open, after words or across a +, is found', () => {
+    expect(openFences('x.ts', 'const u = `<message>\\nFrom the sender: ${body}\\n</message>`;')).toHaveLength(1);
+    expect(openFences('x.ts', "const u = '<message>\\n' + body + '\\n</message>';")).toHaveLength(1);
+    expect(openFences('x.ts', "const u = '<file>' + 'Title: ' + t + '</file>';")).toHaveLength(1);
+    expect(openFences('x.ts', "const u = '<file>' + `Title: ${t}` + '</file>';")).toHaveLength(1);
+    // A closed fence is closed: a value after it is not inside it.
+    expect(openFences('x.ts', 'const u = `<a_tag>x</a_tag>\\nNote: ${n}`;')).toEqual([]);
+    expect(openFences('x.ts', "const u = '<file>' + wrapDataBlock('f', t) + '</file>';")).toEqual([]);
   });
   it('a wrapped value is not', () => {
     expect(openFences('x.ts', 'const u = `${wrapDataBlock("record", t)}\\n${dataJson("design", d)}`;')).toEqual([]);
