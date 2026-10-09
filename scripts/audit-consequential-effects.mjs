@@ -40,6 +40,13 @@ const rules = [
   // somewhere it should not would look exactly the same to every other rule.
   { id: 'env_bound_post', re: /(?:\bfetch|\bsafeFetch)\(\s*env\.[A-Z_]+\s*,\s*\{[\s\S]{0,500}?method:\s*['"](POST|PUT|PATCH|DELETE)['"]/g },
   { id: 'process_spawn', re: /from\s+['"]node:child_process['"]|require\(\s*['"]child_process['"]/g },
+  // A CALL THROUGH THE STOREFRONT'S HTTP SEAM (F2). `channelHttp` is the one
+  // way the channel adapters reach Gumroad and Lemon Squeezy (a fake answers in
+  // a test), and its calls pass the method as a variable, so every rule above —
+  // which needs `fetch(` or `safeFetch(` and a literal method — was blind to a
+  // product being listed on a marketplace. Every call is an effect to classify,
+  // whatever its method; the seam's own definition is not a call.
+  { id: 'channel_http', re: /(?<!function\s)\bchannelHttp\(\s*(?!url:)/g },
 ];
 
 const classifications = new Map(Object.entries({
@@ -67,6 +74,10 @@ const classifications = new Map(Object.entries({
   // that called somewhere it should not.
   'src/services/public-workshop/mail-worker-source.ts|env_bound_post': ['read_only', 'edge mail program source — hands a copy to Foundry\'s own intake; deployed through the door, executed only by Cloudflare'],
   'src/services/integration/resend.ts|external_post': ['governed', 'send_email capability handler'],
+  // F2: the storefront's channel calls, each through the seam above.
+  'src/services/venture/storefront/gumroad.ts|channel_http': ['governed', 'Gumroad: file upload, draft and enable run only as gumroad_* tools at the outbound door (upload_product_file, draft_on_marketplace, list_on_marketplace); the sales read is a GET'],
+  'src/services/venture/storefront/lemonsqueezy.ts|channel_http': ['read_only', 'Lemon Squeezy: GET /v1/orders, the owner\'s own orders, read with his key'],
+  'src/services/venture/storefront/channels.ts|channel_http': ['control_path', 'a channel key the owner pasted, checked with one free GET of whose account it is before it is kept, encrypted'],
   'src/services/integration/stripe-gateway.ts|external_post': ['governed', 'Stripe capability handlers'],
   'src/services/integration/github-gateway.ts|external_post': ['governed', 'GitHub capability handlers'],
   'src/services/integration/mcp-client.ts|dynamic_webhook_post': ['governed', 'MCP capability handler'],

@@ -124,6 +124,8 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
     [founderId])).rows as Array<Record<string, unknown>>).map((r) => ({ month: String(r.month), signal: String(r.signal), channel: String(r.channel), value: Number(r.value) }));
   const timings = Object.keys(SEASONAL_PRIORS).map((theme) => ({ theme, ...launchTiming(theme, new Date())! }));
   const concentration = await channelConcentration(founderId, 90);
+  const { channelListingsOf } = await import('../../services/venture/storefront/reconcile.js');
+  const placed = await channelListingsOf(founderId);
   const hisFloor = await priceFloorOf(founderId);
   const floorLine = hisFloor
     ? `Your floor, set on ${hisFloor.on}: ${[hisFloor.floor.minCents !== undefined ? `nothing under ${dollars(hisFloor.floor.minCents)}` : null, hisFloor.floor.maxFeeShare !== undefined ? `fees may take at most ${String(Math.round(hisFloor.floor.maxFeeShare * 100))}% of a price` : null].filter(Boolean).join('; ') || 'set per channel'}.`
@@ -346,8 +348,9 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
       ${pnl.length === 0 ? html`<p class="quiet">No channel has sold anything in the last 30 days.</p>` : html`<ul class="sales">${pnl.flatMap((st) => st.channels.map((ch) => html`<li>
           <a href="/foundry/experiments/${st.experimentId}">${st.experimentId}</a> on ${channelName(ch.channel)}:
           ${String(ch.sales)} sold, ${dollars(ch.grossCents)} · ${String(ch.refunds)} returned, ${dollars(ch.refundedCents)}
-          · fees ${ch.feesCents === null ? 'not known' : dollars(ch.feesCents)} · net <b>${ch.netCents === null ? 'not known' : dollars(ch.netCents)}</b>
+          · fees ${ch.feesCents === null ? 'not known' : dollars(ch.feesCents)} · net <b>${ch.netCents === null ? 'not known' : dollars(ch.netCents)}</b>${ch.taxByMerchantCents > 0 ? ` · ${dollars(ch.taxByMerchantCents)} tax collected and paid by ${channelName(ch.channel)}, not yours` : ''}
           <br /><small class="quiet">${ch.because}</small></li>`))}</ul>`}
+      ${placed.length === 0 ? '' : html`<ul class="sales">${placed.map((pl) => html`<li>On ${channelName(pl.channel)} since ${pl.listedAt}: <a href="/foundry/experiments/${pl.experimentId}">${pl.experimentId}</a>, version ${String(pl.version)} (${pl.externalRef}). AI disclosure: ${pl.aiDisclosure}</li>`)}</ul>`}
       <p class="quiet">${concentration.sentence}</p>
       <h3>Foundry's own seasons</h3>
       ${seasons.length === 0 ? html`<p class="quiet">No month has been recorded yet; the first is recorded when a month ends. ${visitsNote}</p>`

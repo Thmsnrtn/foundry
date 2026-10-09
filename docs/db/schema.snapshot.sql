@@ -629,6 +629,44 @@ CREATE TABLE change_production_isolation (
   may_produce INTEGER NOT NULL,
   why         TEXT NOT NULL
 );
+CREATE TABLE channel_listings (
+  id              TEXT PRIMARY KEY,
+  founder_id      TEXT NOT NULL REFERENCES founders(id),
+  experiment_id   TEXT NOT NULL,
+  version         INTEGER NOT NULL CHECK (version >= 1),
+  channel         TEXT NOT NULL CHECK (channel IN ('etsy','gumroad','lemonsqueezy')),
+  external_ref    TEXT NOT NULL,
+  -- Where a buyer reaches it on the channel, when known.
+  url             TEXT,
+  price_cents     INTEGER NOT NULL CHECK (price_cents > 0),
+  -- What the adapter applied for the channel's AI-disclosure rule, in words.
+  ai_disclosure   TEXT NOT NULL CHECK (trim(ai_disclosure) <> ''),
+  evidence_mode   TEXT NOT NULL CHECK (evidence_mode IN ('real','sandbox','reference')),
+  listed_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(channel, external_ref, version)
+);
+CREATE TABLE channel_sales (
+  id              TEXT PRIMARY KEY,
+  founder_id      TEXT NOT NULL REFERENCES founders(id),
+  experiment_id   TEXT NOT NULL,
+  -- The version of the canonical product the channel sold, when it said.
+  version         INTEGER,
+  channel         TEXT NOT NULL CHECK (channel IN ('etsy','gumroad','lemonsqueezy')),
+  kind            TEXT NOT NULL CHECK (kind IN ('sale','refund')),
+  -- The channel's own id for the sale (or for the refund of it).
+  provider_ref    TEXT NOT NULL,
+  -- What the buyer paid for the product, before any tax, in minor units.
+  gross_cents     INTEGER NOT NULL CHECK (gross_cents >= 0),
+  -- What the channel kept, as it said. NULL: it did not say, so not known.
+  fee_cents       INTEGER CHECK (fee_cents IS NULL OR fee_cents >= 0),
+  -- Tax a merchant of record collected and pays itself. Never revenue.
+  tax_cents       INTEGER NOT NULL DEFAULT 0 CHECK (tax_cents >= 0),
+  currency        TEXT NOT NULL,
+  occurred_at     TEXT NOT NULL,
+  evidence_mode   TEXT NOT NULL CHECK (evidence_mode IN ('real','sandbox','reference')),
+  read_at         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(channel, provider_ref, kind)
+);
 CREATE TABLE chat_messages (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL REFERENCES chat_sessions(id),
@@ -1209,6 +1247,23 @@ CREATE TABLE "delegations" (
   evidence_ref   TEXT,
   revoked_at     TEXT,
   revoked_reason TEXT
+);
+CREATE TABLE demand_signals (
+  id              TEXT PRIMARY KEY,
+  founder_id      TEXT NOT NULL REFERENCES founders(id),
+  -- The calendar month the signal is about, YYYY-MM.
+  month           TEXT NOT NULL CHECK (month GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'),
+  signal          TEXT NOT NULL CHECK (signal IN ('visits','sales','refunds','net_cents')),
+  -- The product's theme, or '' for all of them.
+  theme           TEXT NOT NULL DEFAULT '',
+  -- The channel, or '' for all of them.
+  channel         TEXT NOT NULL DEFAULT '',
+  value           INTEGER NOT NULL,
+  -- Where the number was read from, in words: a count over named rows.
+  source          TEXT NOT NULL CHECK (trim(source) <> ''),
+  evidence_mode   TEXT NOT NULL CHECK (evidence_mode IN ('real','sandbox','reference')),
+  recorded_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(founder_id, month, signal, theme, channel, evidence_mode)
 );
 CREATE TABLE development_change_plans (
   id                    TEXT PRIMARY KEY,
@@ -4584,6 +4639,8 @@ CREATE UNIQUE INDEX idx_capital_one_open_thesis
 CREATE INDEX idx_capital_snapshot_close ON capital_market_snapshots(close_time);
 CREATE UNIQUE INDEX idx_capital_snapshot_moment ON capital_market_snapshots(venue, market_ticker, received_at);
 CREATE INDEX idx_cf_profiles_product ON cofounder_profiles(product_id);
+CREATE INDEX idx_channel_listings_experiment ON channel_listings(founder_id, experiment_id, channel);
+CREATE INDEX idx_channel_sales_stream ON channel_sales(founder_id, experiment_id, occurred_at);
 CREATE INDEX idx_chat_messages_session ON chat_messages(session_id, created_at);
 CREATE INDEX idx_chat_sessions_founder ON chat_sessions(founder_id);
 CREATE INDEX idx_chat_sessions_product ON chat_sessions(product_id, status);
@@ -5425,6 +5482,11 @@ BEGIN SELECT RAISE(ABORT,'change_production_isolation:constitutional'); END;
 CREATE TRIGGER change_production_isolation_constitutional_update
 BEFORE UPDATE ON change_production_isolation
 BEGIN SELECT RAISE(ABORT,'change_production_isolation:constitutional'); END;
+CREATE TRIGGER channel_sales_immutable
+BEFORE UPDATE ON channel_sales
+BEGIN
+  SELECT RAISE(ABORT,'channel_sales:immutable');
+END;
 CREATE TRIGGER cloudflare_mutation_guard
 BEFORE INSERT ON cloudflare_mutations
 BEGIN
@@ -8537,7 +8599,7 @@ BEFORE INSERT ON public_publications
 BEGIN
   SELECT RAISE(ABORT,'public_publication:path_invalid')
     WHERE NEW.path NOT LIKE '/%' OR NEW.path LIKE '%..%' OR NEW.path LIKE '%?%' OR NEW.path LIKE '%#%'
-       OR (NEW.path GLOB '*[^a-z0-9/-]*' AND NEW.path NOT IN ('/robots.txt', '/sitemap.xml'));
+       OR (NEW.path GLOB '*[^a-z0-9/-]*' AND NEW.path NOT IN ('/robots.txt', '/sitemap.xml', '/llms.txt'));
   SELECT RAISE(ABORT,'public_publication:incomplete')
     WHERE trim(NEW.digest) = '' OR NEW.bytes <= 0 OR trim(NEW.published_by) = '';
   SELECT RAISE(ABORT,'public_publication:cannot_arrive_verified')

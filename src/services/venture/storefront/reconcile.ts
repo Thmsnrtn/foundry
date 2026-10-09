@@ -87,6 +87,8 @@ export interface ChannelLine {
   estimatedFeesCents: { low: number; high: number };
   /** Revenue less refunds less stated fees; null while a fee is not known. */
   netCents: number | null;
+  /** Tax a merchant of record collected and pays itself: shown, never counted as revenue. */
+  taxByMerchantCents: number;
   because: string;
 }
 
@@ -99,7 +101,7 @@ export async function channelPnl(founderId: string, days = 30, evidenceMode: 're
   const line = (exp: string, ch: Channel): ChannelLine => {
     let m = lines.get(exp); if (!m) { m = new Map(); lines.set(exp, m); }
     let l = m.get(ch);
-    if (!l) { l = { channel: ch, sales: 0, refunds: 0, grossCents: 0, refundedCents: 0, feesCents: 0, estimatedFeesCents: { low: 0, high: 0 }, netCents: 0, because: '' }; m.set(ch, l); }
+    if (!l) { l = { channel: ch, sales: 0, refunds: 0, grossCents: 0, refundedCents: 0, feesCents: 0, estimatedFeesCents: { low: 0, high: 0 }, netCents: 0, taxByMerchantCents: 0, because: '' }; m.set(ch, l); }
     return l;
   };
   // The Workshop and Etsy: the economic ledger, by the provider that wrote it.
@@ -132,7 +134,7 @@ export async function channelPnl(founderId: string, days = 30, evidenceMode: 're
   }
   // Gumroad and Lemon Squeezy: what they said, in channel_sales.
   const stated = (await query(
-    `SELECT experiment_id AS exp, channel, kind, gross_cents, fee_cents FROM channel_sales
+    `SELECT experiment_id AS exp, channel, kind, gross_cents, fee_cents, tax_cents FROM channel_sales
       WHERE founder_id = ? AND evidence_mode = ? AND datetime(occurred_at) >= datetime('now', ?)`,
     [founderId, evidenceMode, since])).rows as Row[];
   for (const r of stated) {
@@ -140,7 +142,7 @@ export async function channelPnl(founderId: string, days = 30, evidenceMode: 're
     const l = line(String(r.exp), ch);
     const cents = Number(r.gross_cents);
     if (String(r.kind) === 'sale') {
-      l.sales += 1; l.grossCents += cents;
+      l.sales += 1; l.grossCents += cents; l.taxByMerchantCents += Number(r.tax_cents ?? 0);
       const est = feeRangeCents(FEE_VENUE[ch], cents);
       l.estimatedFeesCents.low += est.low; l.estimatedFeesCents.high += est.high;
       l.feesCents = r.fee_cents == null || l.feesCents === null ? null : l.feesCents + Number(r.fee_cents);
@@ -181,4 +183,12 @@ export async function channelConcentration(founderId: string, days = 90, evidenc
   return { shares, over, sentence: over
     ? `${over} carried ${(shares[over]! * 100).toFixed(0)}% of the last ${String(days)} days' revenue, over the ${String(MAX_CHANNEL_SHARE * 100)}% one channel may carry (an assumption you may change): one suspended account would be most of the business.`
     : `No channel carried more than ${String(MAX_CHANNEL_SHARE * 100)}% of the last ${String(days)} days' revenue.` };
+}
+
+/** Every listing placed or recorded on a channel, with the version and the AI disclosure it carries. */
+export async function channelListingsOf(founderId: string): Promise<Array<{ experimentId: string; channel: string; version: number; externalRef: string; aiDisclosure: string; listedAt: string }>> {
+  return ((await query(
+    `SELECT experiment_id, channel, version, external_ref, ai_disclosure, listed_at FROM channel_listings WHERE founder_id = ? ORDER BY listed_at DESC, rowid DESC`,
+    [founderId])).rows as Row[]).map((r) => ({ experimentId: String(r.experiment_id), channel: String(r.channel), version: Number(r.version),
+    externalRef: String(r.external_ref), aiDisclosure: String(r.ai_disclosure), listedAt: String(r.listed_at).slice(0, 10) }));
 }

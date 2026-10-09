@@ -201,6 +201,8 @@ describe('sales and refunds reconcile, once, into one line per stream and channe
     expect(by.get('lemonsqueezy')).toMatchObject({ sales: 2, grossCents: 1800, refunds: 1, refundedCents: 900, feesCents: null, netCents: null });
     expect(by.get('lemonsqueezy')!.because).toMatch(/not known.*estimate/);
     expect(by.get('lemonsqueezy')!.estimatedFeesCents).toEqual({ low: 190, high: 244 });
+    // The EU buyer's VAT, collected and paid by the merchant of record: shown, and never in revenue.
+    expect(by.get('lemonsqueezy')!.taxByMerchantCents).toBe(189);
     expect(stream!.totalNetCents).toBeNull();
     // Real money is untouched by any of it.
     expect((await RC.channelPnl(OWNER, 3650, 'real')).filter((s) => s.experimentId === EXP).flatMap((s) => s.channels.filter((c) => c.channel !== 'workshop' && c.channel !== 'etsy'))).toEqual([]);
@@ -233,6 +235,8 @@ describe('his acts, through the pages he already reads (no new door)', () => {
     expect((await PF.priceFloorOf(OWNER))!.floor).toEqual({ minCents: 600, maxFeeShare: 0.25 });
     const money = asText(await me.page('/foundry/money'));
     expect(money).toContain('Every channel: what each sold, kept and returned');
+    // Each listing on a channel says the version it carries and the AI disclosure applied.
+    expect(money).toMatch(/On Lemon Squeezy since .*version 1 \(7001\)\. AI disclosure: made by the owner/);
     expect(money).toMatch(/The Home Maintenance Log ?, version 1: After fees, of \$9\.00: Workshop page: \$8\.43 · Etsy: \$7\.69 · Gumroad: \$7\.03–\$7\.60/);
   });
 

@@ -20,9 +20,9 @@
 // until he opens a channel.
 // =============================================================================
 import { query } from '../../../db/client.js';
-import { registerToolHandler, invoke, type GatewayRequest } from '../../outbound/gateway.js';
+import { invoke } from '../../outbound/gateway.js';
 import { channelOpen, CHANNEL_NAMES, WHAT_THE_API_ALLOWS, type MarketChannel } from './channels.js';
-import { canonicalListing, type CanonicalListing } from './canonical.js';
+import { canonicalListing } from './canonical.js';
 import { priceMeetsFloor } from './price-floor.js';
 import { recordChannelSales } from './reconcile.js';
 
@@ -63,46 +63,9 @@ function tokenOf(key: Record<string, string> | null): string {
   return t;
 }
 
-// ─── The door: Gumroad's three acts, each with a server-owned policy ─────────
-//
-// The handler never trusts the caller's listing: it recomposes the canonical
-// listing from the rows by experiment id and refuses if the version the
-// caller named is not the one for sale. The key is read inside the handler
-// from the encrypted store; it is never a parameter.
-
-const POLICY = { actor: 'storefront', surface: 'marketplace_listing', dataClass: 'general', requireDedupKey: true, requireCustomerExternalId: false } as const;
-
-async function listingFor(req: GatewayRequest): Promise<{ l: CanonicalListing; token: string }> {
-  const p = req.params as { founderId?: string; experimentId?: string; version?: number };
-  if (!p.founderId || !p.experimentId) throw new Error('a channel act names its test');
-  const l = await canonicalListing(p.founderId, p.experimentId);
-  if ('refused' in l) throw new Error(l.refused);
-  if (l.version !== p.version) throw new Error(`version ${String(p.version)} is not the version for sale (${String(l.version)})`);
-  const open = await channelOpen(p.founderId, 'gumroad', 'list');
-  if (!open.open) throw new Error(open.because);
-  return { l, token: tokenOf(open.key) };
-}
-
-registerToolHandler('gumroad_upload_product_file', async (req) => {
-  const { l, token } = await listingFor(req);
-  const g = await import('./gumroad.js');
-  return { fileUrl: await g.uploadFile(token, { filename: l.file.filename, pdf: l.file.pdf }) };
-}, POLICY);
-registerToolHandler('gumroad_create_draft_product', async (req) => {
-  const { l, token } = await listingFor(req);
-  const fileUrl = String((req.params as { fileUrl?: string }).fileUrl ?? '');
-  if (!fileUrl) throw new Error('a draft carries the file it sells');
-  const g = await import('./gumroad.js');
-  return { productRef: await g.createDraft(token, l, fileUrl) };
-}, POLICY);
-registerToolHandler('gumroad_enable_product', async (req) => {
-  const { token } = await listingFor(req);
-  const ref = String((req.params as { productRef?: string }).productRef ?? '');
-  if (!ref) throw new Error('enabling names the product');
-  const g = await import('./gumroad.js');
-  await g.enable(token, ref);
-  return { enabled: ref };
-}, POLICY);
+// THE DOOR: Gumroad's three acts are registered at the outbound gateway beside
+// the calls they make (gumroad.ts), loaded with the storefront.
+import './gumroad.js';
 
 export type Placed = { placed: true; channel: MarketChannel; externalRef: string; version: number } | { placed: false; channel: MarketChannel; because: string };
 

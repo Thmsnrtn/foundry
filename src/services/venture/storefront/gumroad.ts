@@ -27,8 +27,10 @@
 // above, labelled as fixtures. What the source does not settle is marked TODO.
 // =============================================================================
 import type { CanonicalListing } from './canonical.js';
-import { channelHttp } from './canonical.js';
+import { canonicalListing, channelHttp } from './canonical.js';
 import type { ChannelSale } from './reconcile.js';
+import { registerToolHandler, type GatewayRequest } from '../../outbound/gateway.js';
+import { channelOpen } from './channels.js';
 
 export const GUMROAD_API = 'https://api.gumroad.com/v2';
 
@@ -116,3 +118,43 @@ export function salesOf(s: Record<string, unknown>): ChannelSale[] {
   }
   return rows;
 }
+
+// ─── The door: the three acts, registered beside the calls they make ─────────
+//
+// Each with a server-owned policy. The handler never trusts the caller's
+// listing: it recomposes the canonical listing from the rows by experiment id
+// and refuses if the version the caller named is not the one for sale. The key
+// is read inside the handler from the encrypted store; it is never a parameter.
+
+const POLICY = { actor: 'storefront', surface: 'marketplace_listing', dataClass: 'general', requireDedupKey: true, requireCustomerExternalId: false } as const;
+
+async function listingFor(req: GatewayRequest): Promise<{ l: CanonicalListing; token: string }> {
+  const p = req.params as { founderId?: string; experimentId?: string; version?: number };
+  if (!p.founderId || !p.experimentId) throw new Error('a channel act names its test');
+  const l = await canonicalListing(p.founderId, p.experimentId);
+  if ('refused' in l) throw new Error(l.refused);
+  if (l.version !== p.version) throw new Error(`version ${String(p.version)} is not the version for sale (${String(l.version)})`);
+  const open = await channelOpen(p.founderId, 'gumroad', 'list');
+  if (!open.open) throw new Error(open.because);
+  const token = open.key?.token ?? '';
+  if (!token) throw new Error('no API key is held for Gumroad');
+  return { l, token };
+}
+
+registerToolHandler('gumroad_upload_product_file', async (req) => {
+  const { l, token } = await listingFor(req);
+  return { fileUrl: await uploadFile(token, { filename: l.file.filename, pdf: l.file.pdf }) };
+}, POLICY);
+registerToolHandler('gumroad_create_draft_product', async (req) => {
+  const { l, token } = await listingFor(req);
+  const fileUrl = String((req.params as { fileUrl?: string }).fileUrl ?? '');
+  if (!fileUrl) throw new Error('a draft carries the file it sells');
+  return { productRef: await createDraft(token, l, fileUrl) };
+}, POLICY);
+registerToolHandler('gumroad_enable_product', async (req) => {
+  const { token } = await listingFor(req);
+  const ref = String((req.params as { productRef?: string }).productRef ?? '');
+  if (!ref) throw new Error('enabling names the product');
+  await enable(token, ref);
+  return { enabled: ref };
+}, POLICY);

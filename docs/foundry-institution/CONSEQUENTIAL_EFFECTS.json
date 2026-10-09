@@ -171,14 +171,14 @@
     },
     {
       "file": "src/services/integration/stripe-gateway.ts",
-      "line": 120,
+      "line": 121,
       "detector": "templated_post",
       "status": "governed",
       "capability": "Stripe capability handlers"
     },
     {
       "file": "src/services/integration/stripe-gateway.ts",
-      "line": 188,
+      "line": 189,
       "detector": "templated_post",
       "status": "governed",
       "capability": "Stripe capability handlers"
@@ -203,6 +203,34 @@
       "detector": "dynamic_webhook_post",
       "status": "control_path",
       "capability": "sense credential lifecycle — owner-authorised exchange, revocation and liveness probe, read-only scope"
+    },
+    {
+      "file": "src/services/venture/storefront/channels.ts",
+      "line": 155,
+      "detector": "channel_http",
+      "status": "control_path",
+      "capability": "a channel key the owner pasted, checked with one free GET of whose account it is before it is kept, encrypted"
+    },
+    {
+      "file": "src/services/venture/storefront/gumroad.ts",
+      "line": 38,
+      "detector": "channel_http",
+      "status": "governed",
+      "capability": "Gumroad: file upload, draft and enable run only as gumroad_* tools at the outbound door (upload_product_file, draft_on_marketplace, list_on_marketplace); the sales read is a GET"
+    },
+    {
+      "file": "src/services/venture/storefront/gumroad.ts",
+      "line": 59,
+      "detector": "channel_http",
+      "status": "governed",
+      "capability": "Gumroad: file upload, draft and enable run only as gumroad_* tools at the outbound door (upload_product_file, draft_on_marketplace, list_on_marketplace); the sales read is a GET"
+    },
+    {
+      "file": "src/services/venture/storefront/lemonsqueezy.ts",
+      "line": 34,
+      "detector": "channel_http",
+      "status": "read_only",
+      "capability": "Lemon Squeezy: GET /v1/orders, the owner's own orders, read with his key"
     },
     {
       "file": "src/services/workshop/local-process.ts",
