@@ -30,7 +30,7 @@
 import type { CanonicalListing } from './canonical.js';
 import type { ChannelGrant } from './channels.js';
 import type { ChannelSale } from './reconcile.js';
-import { query } from '../../../db/client.js';
+import { query, realCompany } from '../../../db/client.js';
 
 export const ETSY_API = 'https://openapi.etsy.com/v3/application';
 export const WHEN_MADE = '2020_2026';
@@ -88,7 +88,7 @@ export async function readEtsyChannelListings(founderId: string, evidenceMode: '
   // The shop is connected once, to whichever of his products carries the Etsy sense.
   const sense = (await query(
     `SELECT c.product_id FROM company_senses c JOIN products p ON p.id = c.product_id
-      WHERE c.provider = 'etsy' AND c.disconnected_at IS NULL AND p.owner_id = ? AND p.deleted_at IS NULL ORDER BY c.connected_at LIMIT 1`, [founderId])).rows[0] as Record<string, unknown> | undefined;
+      WHERE c.provider = 'etsy' AND c.disconnected_at IS NULL AND p.owner_id = ? AND p.deleted_at IS NULL AND ${realCompany('p')} ORDER BY c.connected_at LIMIT 1`, [founderId])).rows[0] as Record<string, unknown> | undefined;
   if (!sense) { out.skipped.push('no Etsy shop is connected, so no Etsy listing can be read'); return out; }
   const { exposureOf } = await import('../outcome.js');
   const { readTheShop } = await import('../../senses/readers/etsy-shop.js');
