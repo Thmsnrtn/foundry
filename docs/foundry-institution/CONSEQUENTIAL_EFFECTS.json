@@ -206,7 +206,7 @@
     },
     {
       "file": "src/services/venture/storefront/channels.ts",
-      "line": 155,
+      "line": 178,
       "detector": "channel_http",
       "status": "control_path",
       "capability": "a channel key the owner pasted, checked with one free GET of whose account it is before it is kept, encrypted"
