@@ -58,7 +58,7 @@
    },
    "lemonsqueezy": {
     "sales": 1,
-    "grossCents": 720,
+    "grossCents": 600,
     "refunds": 0,
     "refundedCents": 0,
     "feesCents": null,
@@ -138,7 +138,7 @@
    },
    "lemonsqueezy": {
     "sales": 1,
-    "grossCents": 840,
+    "grossCents": 700,
     "refunds": 0,
     "refundedCents": 0,
     "feesCents": null,
@@ -386,7 +386,7 @@
    },
    "lemonsqueezy": {
     "sales": 2,
-    "grossCents": 1680,
+    "grossCents": 1400,
     "refunds": 0,
     "refundedCents": 0,
     "feesCents": null,
