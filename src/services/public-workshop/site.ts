@@ -638,7 +638,16 @@ export function renderNotFound(f: PublicWorkshopFacts): string {
 /** What a crawler may keep: every indexable page and every listed experiment; the unlisted resolve but are not announced. */
 /** Every path a crawler is meant to keep: the indexed fixed pages and every listed experiment (R38). */
 /** The guide and the free page of a listed product on sale here (F2). */
-const foundPaths = (x: PublicExperiment): string[] => x.listed && x.guide ? [`${x.path}/guide`, ...(x.guide.freePage ? [`${x.path}/free`] : [])] : [];
+// ONE PREDICATE FOR WHETHER A GUIDE EXISTS (F3 audit of F2). The site published
+// a guide only while the file could be bought here, and the sitemap and the
+// indexed set listed it whenever the projection had one — so a product whose
+// link came down kept a noindex notice advertised in the sitemap.
+/** The guide and free page this product publishes, or none: only while it can be bought here. */
+export function foundPagesOf(x: PublicExperiment): string[] {
+  if (!x.guide || !canBuy(x) || x.shape === 'portfolio_entry' || x.shape === 'identity_only') return [];
+  return [`${x.path}/guide`, ...(x.guide.freePage ? [`${x.path}/free`] : [])];
+}
+const foundPaths = (x: PublicExperiment): string[] => (x.listed ? foundPagesOf(x) : []);
 
 export function indexedPaths(registry: PublicExperiment[]): Set<string> {
   return new Set<string>([...INDEXED_PATHS, ...registry.filter((x) => x.listed).flatMap((x) => [x.path, ...foundPaths(x)])]);
@@ -696,7 +705,7 @@ export function renderFoundPageGone(f: PublicWorkshopFacts, path: string): strin
 /** llms.txt: a plain map of the Workshop for answer engines (llmstxt.org's format: a title, a summary, linked sections). */
 export function renderLlms(f: PublicWorkshopFacts, registry: PublicExperiment[]): string {
   const listed = registry.filter((x) => x.listed);
-  const selling = listed.filter((x) => canBuy(x) && x.guide && x.price);
+  const selling = listed.filter((x) => foundPagesOf(x).length > 0 && x.price);
   const lines = [`# ${f.name}`, '', `> ${f.name} is a small digital workshop in ${f.region}. It makes printable files, sells them here, and publishes what it puts in front of people.`, ''];
   if (selling.length) {
     lines.push('## Files for sale', '');
@@ -749,9 +758,7 @@ export function renderSite(f: PublicWorkshopFacts, registry: PublicExperiment[])
   for (const x of registry) pages.set(x.path, renderExperiment(f, x));
   // BEING FOUND (F2): a guide and a free page for each printable on sale here, and llms.txt.
   for (const x of registry) {
-    if (!x.guide || !canBuy(x) || x.shape === 'portfolio_entry' || x.shape === 'identity_only') continue;
-    pages.set(`${x.path}/guide`, renderGuide(f, x));
-    if (x.guide.freePage) pages.set(`${x.path}/free`, renderFree(f, x));
+    for (const path of foundPagesOf(x)) pages.set(path, path.endsWith('/guide') ? renderGuide(f, x) : renderFree(f, x));
   }
   pages.set('/llms.txt', renderLlms(f, registry));
   pages.set('/privacy', renderPrivacy(f, [...pages.values()].some((html) => html.includes('src="/tool.js"'))));

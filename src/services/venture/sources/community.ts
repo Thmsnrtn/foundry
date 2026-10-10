@@ -17,9 +17,10 @@
 // A community is loud about pain and silent about money.
 // =============================================================================
 
-import { safeFetch } from '../../outbound/ssrf.js';
+import { RESEARCH_USER_AGENT, sourceFetch } from './fetching.js';
 
 const SEARCH = 'https://hn.algolia.com/api/v1/search';
+const SEARCH_BY_DATE = 'https://hn.algolia.com/api/v1/search_by_date';
 
 export const CAN_SEE = 'public technical discussion: what people said to each other '
   + 'about a problem, when they said it, and how much attention it got';
@@ -64,10 +65,13 @@ function readable(raw: string): string {
  * a thing, a comment is somebody reacting to it, and reactions are where the
  * complaint lives.
  */
-export async function whatPeopleSaid(terms: string, size = 15): Promise<Discussion> {
-  const url = `${SEARCH}?query=${encodeURIComponent(terms)}&tags=comment`
+export async function whatPeopleSaid(terms: string, size = 15, opts: { newest?: boolean } = {}): Promise<Discussion> {
+  // NEWEST FIRST (F3): the relevance search returns largely the same top hits
+  // every day, which a pass has already read; `search_by_date` is the same
+  // archive in the order it was written, so each morning reads what is new.
+  const url = `${opts.newest ? SEARCH_BY_DATE : SEARCH}?query=${encodeURIComponent(terms)}&tags=comment`
     + `&hitsPerPage=${String(Math.min(Math.max(size, 1), 30))}`;
-  const res = await safeFetch(url, { headers: { accept: 'application/json' } });
+  const res = await sourceFetch(url, { headers: { 'user-agent': RESEARCH_USER_AGENT, accept: 'application/json' } });
   if (!res.ok) throw new Error(`the discussion archive answered ${String(res.status)}`);
   const body = await res.json() as {
     nbHits?: number;

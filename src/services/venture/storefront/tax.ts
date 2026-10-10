@@ -19,16 +19,13 @@
 //     the buyer's state is not recorded, so per-state exposure is NOT KNOWN,
 //     and the alert says so rather than pretending to a per-state count.
 //
-//   * THE ROUTING RULE. A buyer in the EU or the UK is sent to a merchant of
-//     record that carries the product (Gumroad or Lemon Squeezy collect and pay
-//     that VAT themselves), once one is open and carries it; otherwise the
-//     Workshop page stays the live path.
+//   * THE ROUTING RULE. The buyer's country is never known here, so the page
+//     offers a buyer in the EU or the UK the merchant of record that carries
+//     the product (Gumroad or Lemon Squeezy collect and pay that VAT
+//     themselves), once one is open, carries it and has an address a buyer
+//     reaches; the buyer chooses. Otherwise the Workshop page stays the path.
 // =============================================================================
 import { query } from '../../../db/client.js';
-import type { Channel } from './channels.js';
-
-/** The EU's 27 members and the UK, by ISO 3166 alpha-2. */
-export const EU_AND_UK: ReadonlySet<string> = new Set(['AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE', 'GB']);
 
 export const THRESHOLDS = Object.freeze({
   eu: { cents: 0, applies: 'a seller established outside the EU, selling a digital service to an EU consumer',
@@ -73,15 +70,6 @@ export function taxAlertFrom(t: { grossCents: number; sales: number }): TaxAlert
 /** THE ONE RULE for which channel takes an EU or UK buyer: the first merchant of record that carries it with an address. */
 export function merchantOfRecordAmong<T extends { merchantOfRecord: boolean; url: string | null }>(carriers: ReadonlyArray<T>): T | null {
   return carriers.find((x) => x.merchantOfRecord && !!x.url) ?? null;
-}
-
-/** Where a buyer from this country is sent, given the merchant-of-record listings that carry the product. */
-export function routeBuyer(country: string | null, carriers: ReadonlyArray<{ channel: Channel; url: string | null; merchantOfRecord: boolean }>): { to: Channel; url: string | null; because: string } {
-  const c = (country ?? '').toUpperCase();
-  if (!EU_AND_UK.has(c)) return { to: 'workshop', url: null, because: 'outside the EU and the UK, the Workshop page is the live path' };
-  const mor = merchantOfRecordAmong(carriers);
-  if (!mor) return { to: 'workshop', url: null, because: 'no merchant of record carries it yet, so the Workshop page stays the live path (PENDING 35, 43)' };
-  return { to: mor.channel, url: mor.url, because: 'in the EU or the UK VAT is due from the first sale; a merchant of record charges and pays it' };
 }
 
 /** His word on Stripe Tax for the Workshop's links, from his own signed row only. */

@@ -1,0 +1,157 @@
+{
+ "writtenAt": "2026-10-10T16:09:26.163Z",
+ "days": 60,
+ "seeds": [
+  {
+   "seed": 1,
+   "rows": 1127,
+   "onTopic": 1079,
+   "untethered": 0,
+   "disagreements": [
+    {
+     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nothing on the subject is for sale on Etsy for \"plain printable household bills\": 4 listings came ba",
+     "verdicts": "no/no/yes"
+    },
+    {
+     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nobody in the archive has discussed \"plain printable household bills\" — 3 things came back and none ",
+     "verdicts": "no/no/yes"
+    },
+    {
+     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || 1 maintained package already exists for \"plain printable household bills\" — plain-printable-househol",
+     "verdicts": "no/no/yes"
+    },
+    {
+     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nothing on the subject is for sale on Etsy for \"plain printable household bills\": 4 listings came ba",
+     "verdicts": "no/no/yes"
+    },
+    {
+     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nobody in the archive has discussed \"plain printable household bills\" — 6 things came back and none ",
+     "verdicts": "no/no/yes"
+    },
+    {
+     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || 1 maintained package already exists for \"plain printable household bills\" — plain-printable-househol",
+     "verdicts": "no/no/yes"
+    },
+    {
+     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nothing on the subject is for sale on Etsy for \"plain printable household bills\": 4 listings came ba",
+     "verdicts": "no/no/yes"
+    },
+    {
+     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nobody in the archive has discussed \"plain printable household bills\" — 6 things came back and none ",
+     "verdicts": "no/no/yes"
+    },
+    {
+     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || 1 maintained package already exists for \"plain printable household bills\" — plain-printable-househol",
+     "verdicts": "no/no/yes"
+    },
+    {
+     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nothing on the subject is for sale on Etsy for \"plain printable household bills\": 4 listings came ba",
+     "verdicts": "no/no/yes"
+    }
+   ],
+   "leftOut": 33,
+   "reviewed": 120
+  }
+ ],
+ "rows": 1127,
+ "onTopic": 1079,
+ "share": 0.9574090505767524,
+ "judges": [
+  {
+   "id": "ground-truth",
+   "how": "the twin knows what every item it showed was about; a summary row is judged by the theme its words name"
+  },
+  {
+   "id": "theme-words",
+   "how": "the row names the candidate's theme by the twin's vocabulary for it, more than any other theme"
+  },
+  {
+   "id": "candidate-words",
+   "how": "the row carries a word of the theme's vocabulary or its name, as a reader skimming for the subject would"
+  }
+ ],
+ "kappa": {
+  "fleiss": 0.6556675832569643,
+  "pairs": [
+   {
+    "pair": "ground-truth~theme-words",
+    "cohen": 1
+   },
+   {
+    "pair": "ground-truth~candidate-words",
+    "cohen": 0.3896010110128184
+   },
+   {
+    "pair": "theme-words~candidate-words",
+    "cohen": 0.3896010110128184
+   }
+  ]
+ },
+ "eyesIdleDays": [
+  0
+ ],
+ "newObservationsPerDay": [
+  [
+   7,
+   10,
+   10,
+   10,
+   10,
+   10,
+   10,
+   10,
+   10,
+   10,
+   8,
+   10,
+   8,
+   10,
+   10,
+   10,
+   7,
+   9,
+   7,
+   10,
+   10,
+   9,
+   9,
+   9,
+   10,
+   10,
+   8,
+   4,
+   9,
+   8,
+   6,
+   10,
+   6,
+   8,
+   5,
+   3,
+   5,
+   1,
+   4,
+   6,
+   5,
+   4,
+   8,
+   2,
+   8,
+   2,
+   6,
+   2,
+   5,
+   5,
+   5,
+   4,
+   6,
+   3,
+   9,
+   5,
+   5,
+   4,
+   6,
+   1
+  ]
+ ]
+}

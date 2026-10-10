@@ -76,6 +76,12 @@ export interface Lesson {
   settledAt: string | null;
   /** What happened, in the one vocabulary. */
   outcome: Outcome;
+  /**
+   * WHAT THE SAME PRODUCT SOLD ON OTHER CHANNELS (F3): evidence beside the
+   * settlement, never in it. The test settled on its one exposure; these are
+   * the product's sales elsewhere, as each channel stated them.
+   */
+  soldElsewhere: Array<{ channel: string; sales: number; refunds: number; grossCents: number; refundedCents: number }>;
 }
 
 export interface Forge {
@@ -153,9 +159,11 @@ export async function lessonsFor(founderId: string): Promise<Lesson[]> {
         AND e.decision = 'approved'
       ORDER BY COALESCE(e.ran_at, e.decided_at, e.proposed_at) DESC
       LIMIT 10`, [founderId]);
-  return r.rows.map((raw) => {
+  const { soldElsewhere } = await import('./storefront/reconcile.js');
+  return Promise.all(r.rows.map(async (raw) => {
     const row = raw as Record<string, unknown>;
     return {
+      soldElsewhere: await soldElsewhere(String(row.id)),
       experimentId: String(row.id),
       whatWeDid: String(row.what_we_do),
       verdict: row.verdict == null ? null : String(row.verdict),
@@ -164,7 +172,7 @@ export async function lessonsFor(founderId: string): Promise<Lesson[]> {
       settledAt: row.ran_at == null ? null : String(row.ran_at),
       outcome: outcomeFromRow({ ...(row as OutcomeRow), reached: Number(row.reached), purchases: Number(row.purchases), unreached: Number(row.unreached) === 1 }),
     };
-  });
+  }));
 }
 
 /** WHICH LATER DESIGNS HAD THIS TEST'S LESSON IN FRONT OF THEM, oldest first. */

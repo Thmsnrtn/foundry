@@ -71,6 +71,19 @@ async function ask(provider: string, sourceType: string): Promise<{ ok: boolean;
       const { whatIsReportedBroken } = await import('../venture/sources/issue-trackers.js');
       return usable((await whatIsReportedBroken('crash', 3)).found);
     }
+    if (provider === 'stack_exchange') {
+      const { whatPeopleAsked } = await import('../venture/sources/stack-exchange.js');
+      return usable((await whatPeopleAsked('budget', 'money', 3)).found);
+    }
+    if (provider === 'etsy_marketplace_search') {
+      const { mayAsk } = await import('../venture/sources/terms.js');
+      if (!(await mayAsk('etsy_marketplace_search'))) return { ok: false, because: 'its terms are not confirmed yet (PENDING 49), so it was not asked' };
+      const { etsyAppKey, etsyApiKeyHeader } = await import('../senses/app-credential.js');
+      const key = await etsyAppKey();
+      if (!key) return { ok: false, because: 'no Etsy application key is placed, so it was not asked' };
+      const { whatSells } = await import('../venture/sources/marketplace.js');
+      return usable((await whatSells('notebook', etsyApiKeyHeader(key), { limit: 3 })).found);
+    }
     if (provider === 'apple_app_store') {
       const { whatAppsExist } = await import('../venture/sources/app-store.js');
       return usable((await whatAppsExist('notes', 3)).found);

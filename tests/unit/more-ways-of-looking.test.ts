@@ -91,6 +91,12 @@ beforeAll(async () => {
   const m = await openMandate({ founderId: OWNER, statement: 'Small things for trades businesses', shape: null, evidenceMode: 'real' });
   if ('refused' in m) throw new Error(m.refused);
   mandateId = m.id;
+  // HIS ACT THIS SUITE ASSUMES (F3, PENDING 49): the search box's terms are not
+  // settled, so it is read only once he confirms; these tests are about what
+  // it says when it is read.
+  const { supersedeOriginationPolicy } = await import('../../src/services/venture/legal-surface.js');
+  const ok = await supersedeOriginationPolicy({ founderId: OWNER, requirement: 'source_terms:duckduckgo_autocomplete', treatment: 'policy', value: 'confirmed', why: 'the suite assumes he read its terms', by: `founder:${OWNER}` });
+  if ('refused' in ok) throw new Error(ok.refused);
 });
 
 afterEach(() => { vi.restoreAllMocks(); });

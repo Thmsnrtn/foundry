@@ -21,7 +21,7 @@
 // =============================================================================
 import { query } from '../../../db/client.js';
 import { invoke } from '../../outbound/gateway.js';
-import { channelOpen, CHANNEL_NAMES, WHAT_THE_API_ALLOWS, type MarketChannel } from './channels.js';
+import { buyerUrlOn, channelOpen, CHANNEL_NAMES, WHAT_THE_API_ALLOWS, type MarketChannel } from './channels.js';
 import { canonicalListing } from './canonical.js';
 import { priceMeetsFloor } from './price-floor.js';
 import { recordChannelSales } from './reconcile.js';
@@ -98,10 +98,10 @@ export async function placeOnChannel(founderId: string, experimentId: string, ch
   const live = await step('gumroad_enable_product', `put "${l.title}" on sale on Gumroad`, { productRef: draft.productRef }, 0);
   if (typeof live === 'string') return no(live);
   await query(
-    `INSERT INTO channel_listings (id, founder_id, experiment_id, version, channel, external_ref, price_cents, ai_disclosure, evidence_mode)
-     VALUES (?,?,?,?,?,?,?,?,?)`,
-    [`cl_${experimentId}_${channel}_v${String(l.version)}`, founderId, experimentId, l.version, channel, String(draft.productRef), l.priceCents,
-      `${WHAT_THE_API_ALLOWS.gumroad.aiSetting}: "${l.aiMade.sentence}"`, l.evidenceMode]);
+    `INSERT INTO channel_listings (id, founder_id, experiment_id, version, channel, external_ref, url, price_cents, ai_disclosure, evidence_mode)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    [`cl_${experimentId}_${channel}_v${String(l.version)}`, founderId, experimentId, l.version, channel, String(draft.productRef),
+      buyerUrlOn(channel, draft.url), l.priceCents, `${WHAT_THE_API_ALLOWS.gumroad.aiSetting}: "${l.aiMade.sentence}"`, l.evidenceMode]);
   return { placed: true, channel, externalRef: String(draft.productRef), version: l.version };
 }
 
@@ -109,8 +109,18 @@ export async function placeOnChannel(founderId: string, experimentId: string, ch
 export async function readChannel(founderId: string, channel: MarketChannel, since: Date, evidenceMode: 'real' | 'sandbox' | 'reference' = 'real'): Promise<{ read: true; recorded: number; repeated: number; notOurs: number } | { read: false; because: string }> {
   const open = await channelOpen(founderId, channel, 'read');
   if (!open.open) return { read: false, because: open.because };
-  // Etsy's sales are already in the ledger (the Etsy sense): counted, never recorded twice.
-  if (channel === 'etsy') return { read: true, recorded: 0, repeated: (await ADAPTERS.etsy.readSales(founderId, since, null)).length, notOurs: 0 };
+  // Etsy: a test's own Etsy exposure is already in the ledger (the Etsy sense),
+  // counted and never recorded twice; an Etsy listing of a product whose
+  // exposure is elsewhere is read into channel_sales (F3).
+  if (channel === 'etsy') {
+    try {
+      const { readEtsyChannelListings } = await import('./etsy.js');
+      const r = await readEtsyChannelListings(founderId, evidenceMode);
+      return { read: true, recorded: r.recorded, repeated: (await ADAPTERS.etsy.readSales(founderId, since, null)).length, notOurs: 0 };
+    } catch (err) {
+      return { read: false, because: `Etsy could not be read: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  }
   try {
     const sales = await ADAPTERS[channel].readSales(founderId, since, open.key, open.grant.storeId);
     return { read: true, ...(await recordChannelSales(founderId, sales, evidenceMode)) };
@@ -118,6 +128,16 @@ export async function readChannel(founderId: string, channel: MarketChannel, sin
     return { read: false, because: `${CHANNEL_NAMES[channel]} could not be read: ${err instanceof Error ? err.message : String(err)}` };
   }
 }
+
+/**
+ * HOW FAR BACK EACH DAILY READ ASKS (F3 audit of F2). A channel's sales index
+ * is filtered by when the SALE was made, so a refund or chargeback is only
+ * seen while its sale is inside the window. This was 35 days, so a sale
+ * refunded on day 40 kept its money in the line for ever. Card networks allow
+ * a chargeback about 120 days after the sale; 180 covers it with room. Reading
+ * is idempotent, so the wider window costs pages, never double counts.
+ */
+export const READ_BACK_DAYS = 180;
 
 /**
  * READ EVERY CHANNEL SOMEONE OPENED, for the hand's daily tick. With no grant
@@ -128,9 +148,11 @@ export async function readOpenChannels(now: Date = new Date()): Promise<Array<{ 
   const rows = (await query(
     `SELECT DISTINCT founder_id, requirement FROM origination_policy
       WHERE founder_id IS NOT NULL AND requirement IN ('channel_grant:gumroad','channel_grant:lemonsqueezy')
-        AND superseded_at IS NULL AND set_by LIKE 'founder:%' AND value LIKE '%"granted":true%'`, [])).rows as Array<Record<string, unknown>>;
+        AND superseded_at IS NULL AND set_by LIKE 'founder:%' AND value LIKE '%"granted":true%'
+      UNION
+     SELECT DISTINCT founder_id, 'channel_grant:etsy' FROM channel_listings WHERE channel = 'etsy'`, [])).rows as Array<Record<string, unknown>>;
   const out: Array<{ founderId: string; channel: MarketChannel; result: Awaited<ReturnType<typeof readChannel>> }> = [];
-  const since = new Date(now.getTime() - 35 * 86_400_000);
+  const since = new Date(now.getTime() - READ_BACK_DAYS * 86_400_000);
   for (const r of rows) {
     const channel = String(r.requirement).split(':')[1] as MarketChannel;
     out.push({ founderId: String(r.founder_id), channel, result: await readChannel(String(r.founder_id), channel, since, 'real') });

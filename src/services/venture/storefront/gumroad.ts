@@ -30,7 +30,7 @@ import type { CanonicalListing } from './canonical.js';
 import { canonicalListing, channelHttp } from './canonical.js';
 import type { ChannelSale } from './reconcile.js';
 import { registerToolHandler, type GatewayRequest } from '../../outbound/gateway.js';
-import { channelOpen } from './channels.js';
+import { buyerUrlOn, channelOpen } from './channels.js';
 
 export const GUMROAD_API = 'https://api.gumroad.com/v2';
 
@@ -67,16 +67,20 @@ export async function uploadFile(token: string, file: { filename: string; pdf: B
 }
 
 /** Create the product as a DRAFT, carrying the uploaded file. Nothing is public. */
-export async function createDraft(token: string, l: Pick<CanonicalListing, 'title' | 'description' | 'priceCents' | 'file'>, fileUrl: string): Promise<string> {
+export async function createDraft(token: string, l: Pick<CanonicalListing, 'title' | 'description' | 'priceCents' | 'file'>, fileUrl: string): Promise<{ id: string; url: string | null }> {
   const r = await call(token, 'POST', '/products', {
     name: l.title, description: l.description, price: l.priceCents, draft: true, native_type: 'digital',
     files: [{ url: fileUrl, display_name: l.file.filename }],
   });
   // TODO(live): the product's id field is read as `id`, the external id the
   // sales API also uses (`product_id: link.external_id`); not yet seen live.
-  const id = (r.product as Record<string, unknown> | undefined)?.id;
+  const product = (r.product as Record<string, unknown> | undefined) ?? {};
+  const id = product.id;
   if (typeof id !== 'string' || !id) throw new Error('Gumroad did not say which product it made');
-  return id;
+  // WHERE A BUYER REACHES IT (F3 audit of F2): the product's `short_url`, kept
+  // so the routing rule can send an EU or UK buyer there. Only an https address
+  // on Gumroad's own host is kept; anything else is not known.
+  return { id, url: buyerUrlOn('gumroad', product.short_url) };
 }
 
 /** Publish the draft. The one public step. */
@@ -85,14 +89,14 @@ export async function enable(token: string, productId: string): Promise<void> {
 }
 
 /** Every sale and refund since `after`, as the channel said it, page by page. */
-export async function readSales(token: string, after: Date): Promise<ChannelSale[]> {
+export async function readSales(token: string, after: Date, readAt: Date = new Date()): Promise<ChannelSale[]> {
   const out: ChannelSale[] = [];
   let pageKey: string | null = null;
   for (let page = 0; page < 200; page++) {
     const q = new URLSearchParams({ after: after.toISOString().slice(0, 10) });
     if (pageKey) q.set('page_key', pageKey);
     const r = await call(token, 'GET', `/sales?${q.toString()}`);
-    for (const s of (r.sales as Array<Record<string, unknown>> | undefined) ?? []) out.push(...salesOf(s));
+    for (const s of (r.sales as Array<Record<string, unknown>> | undefined) ?? []) out.push(...salesOf(s, readAt));
     pageKey = typeof r.next_page_key === 'string' && r.next_page_key ? r.next_page_key : null;
     if (!pageKey) return out;
   }
@@ -100,7 +104,7 @@ export async function readSales(token: string, after: Date): Promise<ChannelSale
 }
 
 /** One Gumroad sale as Foundry's rows: the sale, and a refund when it was returned. */
-export function salesOf(s: Record<string, unknown>): ChannelSale[] {
+export function salesOf(s: Record<string, unknown>, readAt: Date = new Date()): ChannelSale[] {
   const id = String(s.id ?? '');
   const price = Number(s.price);
   if (!id || !Number.isInteger(price) || price < 0) return [];
@@ -110,11 +114,16 @@ export function salesOf(s: Record<string, unknown>): ChannelSale[] {
   // record is not settled by the serializer; tax is recorded as 0 (not
   // counted as revenue either way) until a live sale shows it.
   const rows: ChannelSale[] = [{ ...base, kind: 'sale', providerRef: id, grossCents: price, feeCents: Number.isInteger(fee) ? fee : null, taxCents: 0 }];
+  // THE REFUND IS DATED WHEN FOUNDRY FIRST LEARNED OF IT (F3 audit of F2): the
+  // sale record carries no refund date, and dating it to the sale put a refund
+  // learned in November into a September already recorded. The row is written
+  // once (the reconciliation is idempotent), so the first reading's date stays.
+  const learned = readAt.toISOString();
   if (s.refunded === true || s.chargedback === true) {
-    rows.push({ ...base, kind: 'refund', providerRef: id, grossCents: price, feeCents: null, taxCents: 0 });
+    rows.push({ ...base, kind: 'refund', providerRef: id, grossCents: price, feeCents: null, taxCents: 0, occurredAt: learned });
   } else if (s.partially_refunded === true) {
     const left = Number(s.amount_refundable_in_currency);
-    if (Number.isInteger(left) && left >= 0 && left < price) rows.push({ ...base, kind: 'refund', providerRef: id, grossCents: price - left, feeCents: null, taxCents: 0 });
+    if (Number.isInteger(left) && left >= 0 && left < price) rows.push({ ...base, kind: 'refund', providerRef: id, grossCents: price - left, feeCents: null, taxCents: 0, occurredAt: learned });
   }
   return rows;
 }
@@ -149,7 +158,8 @@ registerToolHandler('gumroad_create_draft_product', async (req) => {
   const { l, token } = await listingFor(req);
   const fileUrl = String((req.params as { fileUrl?: string }).fileUrl ?? '');
   if (!fileUrl) throw new Error('a draft carries the file it sells');
-  return { productRef: await createDraft(token, l, fileUrl) };
+  const made = await createDraft(token, l, fileUrl);
+  return { productRef: made.id, url: made.url };
 }, POLICY);
 registerToolHandler('gumroad_enable_product', async (req) => {
   const { token } = await listingFor(req);

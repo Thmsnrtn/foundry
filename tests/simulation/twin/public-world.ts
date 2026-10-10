@@ -33,12 +33,14 @@ export interface PublicWorld {
   answer(url: string): Response | null;
   /** How many requests each host received, for the scorecard. */
   calls: Record<string, number>;
+  /** What each item shown to the eyes was about (its theme), or null for chatter: the judges' ground truth (F3). */
+  truth: Map<string, ThemeKey | null>;
 }
 
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
-const PUBLIC = /^https:\/\/(hn\.algolia\.com|registry\.npmjs\.org|api\.npmjs\.org|api\.github\.com|wikimedia\.org|[a-z]+\.wikipedia\.org|duckduckgo\.com|itunes\.apple\.com|remotive\.com)\//;
+const PUBLIC = /^https:\/\/(hn\.algolia\.com|registry\.npmjs\.org|api\.npmjs\.org|api\.github\.com|wikimedia\.org|[a-z]+\.wikipedia\.org|duckduckgo\.com|itunes\.apple\.com|remotive\.com|api\.stackexchange\.com|openapi\.etsy\.com\/v3\/application\/listings)\//;
 
 /**
  * THE TWIN'S PUBLIC WORLD for one seed. `day()` is read on every answer, so
@@ -70,8 +72,12 @@ export function publicWorld(seed: number, p: Drawn, day: () => number): PublicWo
       ? (Object.keys(THEMES) as ThemeKey[]) : [];
   }
 
-  function discussion(query: string, size: number, host: string): Array<{ id: string; text: string; at: string; points: number }> {
-    const week = Math.floor(day() / 7);
+  /** What every item the eyes were shown was about, keyed by its id: the twin's own truth, for the on-topic judges (F3). */
+  const truth = new Map<string, ThemeKey | null>();
+  function discussion(query: string, size: number, host: string, newest = false): Array<{ id: string; text: string; at: string; points: number }> {
+    // NEWEST FIRST (F3): the archive in the order it was written changes every
+    // day; the relevance search changes week by week, as it did.
+    const week = newest ? 10_000 + day() : Math.floor(day() / 7);
     const r = new Rng('hits', seed, host, query.toLowerCase(), week);
     const n = Math.min(size, Math.max(0, Math.round(p['eyes.hitsPerQuery'] * (0.6 + 0.8 * r.next()))));
     const themes = themesFor(query);
@@ -81,7 +87,8 @@ export function publicWorld(seed: number, p: Drawn, day: () => number): PublicWo
       // A post is a voice only when it is about a theme somebody has, weighted by how many people have it.
       const theme = themes.length ? themes[Math.floor(r.next() * themes.length)]! : null;
       const voiced = theme !== null && r.chance(Math.min(0.95, p['eyes.painShare'] * themeDemand(theme) * (themes.length === 1 ? 2 : 1)));
-      out.push({ id, text: voiced && theme ? voiceOf(theme, r, query) : r.pick(NOISE), at: isoDaysAgo(r.int(0, 30)), points: r.int(0, 40) });
+      out.push({ id, text: voiced && theme ? voiceOf(theme, r, query) : r.pick(NOISE), at: isoDaysAgo(newest ? 0 : r.int(0, 30)), points: r.int(0, 40) });
+      truth.set(id, voiced ? theme : null);
     }
     return out;
   }
@@ -94,7 +101,7 @@ export function publicWorld(seed: number, p: Drawn, day: () => number): PublicWo
     switch (u.host) {
       case 'hn.algolia.com': {
         const query = q.get('query') ?? '';
-        const hits = discussion(query, Number(q.get('hitsPerPage') ?? 15), u.host);
+        const hits = discussion(query, Number(q.get('hitsPerPage') ?? 15), u.host, u.pathname.endsWith('/search_by_date'));
         return json({ nbHits: hits.length * 37, hits: hits.map((h) => ({ objectID: h.id, comment_text: h.text, created_at: h.at, points: h.points })) });
       }
       case 'api.github.com': {
@@ -174,9 +181,43 @@ export function publicWorld(seed: number, p: Drawn, day: () => number): PublicWo
         return json({ downloads: 1000, start: isoDaysAgo(7).slice(0, 10), end: isoDaysAgo(0).slice(0, 10) });
       case 'remotive.com':
         return json({ 'job-count': 0, jobs: [] });
+      case 'api.stackexchange.com': {
+        // A second forum, newest first, its rooms rotating (F3): the same people, asking.
+        const query = q.get('q') ?? '';
+        const site = q.get('site') ?? '';
+        const hits = discussion(`${query}`, Number(q.get('pagesize') ?? 5), `${u.host}/${site}`, q.get('sort') === 'creation');
+        return json({ total: hits.length * 11, items: hits.map((h) => ({ question_id: Number(h.id), title: h.text.split('.')[0], body: `<p>${h.text}</p>`,
+          link: `https://${site}.stackexchange.com/questions/${h.id}`, creation_date: Math.floor(Date.parse(h.at) / 1000), score: h.points })) });
+      }
+      case 'openapi.etsy.com': {
+        // A MARKETPLACE THE TWIN'S SELLERS STOCK (F3): for a theme's words, a few
+        // listings on the subject at prices near the theme's, some reviewed;
+        // otherwise unrelated listings. Every number is generated and says so in
+        // its own title; the shape is Etsy's (findAllListingsActive, getReviewsByListing).
+        const rev = /\/listings\/(\d+)\/reviews$/.exec(u.pathname);
+        if (rev) {
+          const r = new Rng('etsy-reviews', seed, rev[1]!);
+          return json({ count: r.chance(0.6) ? r.int(1, 240) : 0, results: [] });
+        }
+        const words = q.get('keywords') ?? '';
+        const theme = themeOf(words);
+        const r = new Rng('etsy', seed, words.toLowerCase(), q.get('sort_on') === 'created' ? day() : 0);
+        const n = theme ? r.int(3, 9) : r.int(0, 4);
+        const results = Array.from({ length: n }, (_, i) => {
+          const onTopic = theme !== null && r.chance(0.8);
+          const id = hashOf(seed, 'etsy', words, i, q.get('sort_on') === 'created' ? day() : 0) % 900_000_000 + 100_000_000;
+          truth.set(String(id), onTopic ? theme : null);
+          const title = onTopic ? `${THEMES[theme!].name.replace(/\b\w/g, (c) => c.toUpperCase())} ${['Printable', 'Binder', 'Planner Pages', 'Log', 'Checklist'][i % 5]!} (twin listing)`
+            : `${['Wedding Sign', 'Sticker Sheet', 'Wall Art', 'Coloring Page'][i % 4]!} (twin listing)`;
+          return { listing_id: id, title, description: onTopic ? `Keep track of ${THEMES[theme!].things[0]!}.` : 'A twin-generated listing.',
+            price: { amount: r.int(300, 1800), divisor: 100, currency_code: 'USD' }, num_favorers: r.int(0, 900),
+            url: `https://www.etsy.com/listing/${String(id)}`, created_timestamp: Math.floor(Date.now() / 1000) - r.int(1, 400) * 86_400 };
+        });
+        return json({ count: n * 13, results });
+      }
       default:
         return json({}, 404);
     }
   }
-  return { answer, calls };
+  return { answer, calls, truth };
 }

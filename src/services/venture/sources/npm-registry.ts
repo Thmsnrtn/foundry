@@ -19,7 +19,7 @@
 // good one, and none of this says whether anybody would pay.
 // =============================================================================
 
-import { safeFetch } from '../../outbound/ssrf.js';
+import { RESEARCH_USER_AGENT, sourceFetch } from './fetching.js';
 
 const REGISTRY = 'https://registry.npmjs.org';
 const DOWNLOADS = 'https://api.npmjs.org';
@@ -92,7 +92,7 @@ function safeName(name: string): string {
 
 export async function packageRecord(name: string): Promise<PackageRecord | null> {
   const url = `${REGISTRY}/${safeName(name)}`;
-  const res = await safeFetch(url, { headers: { accept: 'application/json' } });
+  const res = await sourceFetch(url, { headers: { 'user-agent': RESEARCH_USER_AGENT, accept: 'application/json' } });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`the registry answered ${String(res.status)} for ${name}`);
   const body = await res.json() as {
@@ -118,7 +118,7 @@ export async function packageRecord(name: string): Promise<PackageRecord | null>
 
 export async function downloadsLastMonth(name: string): Promise<DownloadCount | null> {
   const url = `${DOWNLOADS}/downloads/point/last-month/${safeName(name)}`;
-  const res = await safeFetch(url, { headers: { accept: 'application/json' } });
+  const res = await sourceFetch(url, { headers: { 'user-agent': RESEARCH_USER_AGENT, accept: 'application/json' } });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`the download API answered ${String(res.status)} for ${name}`);
   const body = await res.json() as { downloads?: number; start?: string; end?: string };
@@ -188,7 +188,7 @@ export function relevanceOf(query: string, name: string, description: string | n
 export async function whatAlreadyExists(query: string, size = 10): Promise<SearchResult> {
   const url = `${REGISTRY}/-/v1/search?text=${encodeURIComponent(query)}`
     + `&size=${String(Math.min(Math.max(size, 1), 25))}`;
-  const res = await safeFetch(url, { headers: { accept: 'application/json' } });
+  const res = await sourceFetch(url, { headers: { 'user-agent': RESEARCH_USER_AGENT, accept: 'application/json' } });
   if (!res.ok) throw new Error(`the registry answered ${String(res.status)} for a search`);
   const body = await res.json() as {
     total?: number;

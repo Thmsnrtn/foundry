@@ -181,8 +181,19 @@ export function specProblems(spec: PrintableSpec): string[] {
 
 // ─── Nothing invented ────────────────────────────────────────────────────────
 
-const quoteAround = (text: string, index: number, length: number): string =>
-  text.slice(Math.max(0, index - 40), index + length + 40).replace(/\s+/g, ' ').trim();
+// THE WHOLE CLAIM, NOT FORTY CHARACTERS OF IT (F3): a refusal quoted a fixed
+// window either side, which cut "87% of households lose a document they need
+// (…)" off before its end, so the owner read half of what was refused. The
+// quote now runs to the end of the sentence the finding sits in, bounded.
+const quoteAround = (text: string, index: number, length: number): string => {
+  const from = Math.max(0, index - 40);
+  const rest = text.slice(index + length, index + length + 200);
+  // A sentence ends at a stop followed by a capital or the end, not at "Dana R." —
+  // and the quote is never shorter than the forty characters it always gave.
+  const stop = rest.search(/[.!?](?=\s+[A-Z]|\s*$)|\n/);
+  const to = index + length + Math.max(Math.min(rest.length, 40), stop === -1 ? 0 : stop + 1);
+  return text.slice(from, to).replace(/\s+/g, ' ').trim();
+};
 
 const NUMBER_WORD = '(?:\\d+|one|two|three|four|five|six|seven|eight|nine|ten)';
 const FABRICATION: Array<{ kind: string; re: RegExp }> = [

@@ -107,8 +107,8 @@ describe('a buyer in the EU or the UK is sent to a merchant of record, once ther
   it('a channel that is NOT a merchant of record (Etsy here) does not take the EU buyer: no line, and the rule keeps the Workshop', async () => {
     const etsyOnly = { ...base, elsewhere: [{ channel: 'etsy', venueName: 'Etsy', url: 'https://www.etsy.com/listing/1', merchantOfRecord: false }] } as unknown as PublicExperiment;
     expect(S.renderSite(facts, [etsyOnly]).get('/experiments/home-log')!).not.toMatch(/EU or the UK/);
-    const { routeBuyer } = await import('../../src/services/venture/storefront/tax.js');
-    expect(routeBuyer('FR', [{ channel: 'etsy', url: 'https://www.etsy.com/listing/1', merchantOfRecord: false }])).toMatchObject({ to: 'workshop' });
+    const { merchantOfRecordAmong } = await import('../../src/services/venture/storefront/tax.js');
+    expect(merchantOfRecordAmong([{ channel: 'etsy', url: 'https://www.etsy.com/listing/1', merchantOfRecord: false }])).toBeNull();
   });
   it('with Gumroad carrying it: the line, naming that it charges and pays the VAT', () => {
     const withMor = { ...base, elsewhere: [{ channel: 'gumroad', venueName: 'Gumroad', url: 'https://example.gumroad.com/l/home-log', merchantOfRecord: true }] } as unknown as PublicExperiment;
@@ -117,13 +117,20 @@ describe('a buyer in the EU or the UK is sent to a merchant of record, once ther
     expect(p).toContain('href="https://example.gumroad.com/l/home-log"');
     expect(p).toMatch(/charges and pays the VAT/);
   });
-  it('the routing rule itself: EU and UK countries go to a merchant of record when one carries it, others stay', async () => {
-    const { routeBuyer } = await import('../../src/services/venture/storefront/tax.js');
-    const mor = [{ channel: 'gumroad' as const, url: 'https://x', merchantOfRecord: true }];
-    expect(routeBuyer('DE', mor)).toMatchObject({ to: 'gumroad' });
-    expect(routeBuyer('GB', mor)).toMatchObject({ to: 'gumroad' });
-    expect(routeBuyer('US', mor)).toMatchObject({ to: 'workshop' });
-    expect(routeBuyer('DE', [])).toMatchObject({ to: 'workshop', because: expect.stringMatching(/no merchant of record/) });
+  // THE RULE THE PAGE USES, not a copy of it (F3 audit of F2): a country-keyed
+  // `routeBuyer` existed beside this with no production caller — the buyer's
+  // country is never known here, so the page offers the EU/UK buyer the
+  // merchant of record and the buyer chooses. It was deleted; this pins the rule
+  // the page renders through.
+  it('the routing rule itself: the first merchant of record that carries it with an address, or none', async () => {
+    const { merchantOfRecordAmong } = await import('../../src/services/venture/storefront/tax.js');
+    const etsy = { channel: 'etsy', url: 'https://www.etsy.com/listing/1', merchantOfRecord: false };
+    const gum = { channel: 'gumroad', url: 'https://x.gumroad.com/l/y', merchantOfRecord: true };
+    expect(merchantOfRecordAmong([etsy, gum])).toBe(gum);
+    expect(merchantOfRecordAmong([{ ...gum, url: null }])).toBeNull();
+    expect(merchantOfRecordAmong([])).toBeNull();
+    const both = { ...base, elsewhere: [etsy, { ...gum, venueName: 'Gumroad' }] } as unknown as PublicExperiment;
+    expect(S.renderSite(facts, [both]).get('/experiments/home-log')!).toContain('href="https://x.gumroad.com/l/y"');
   });
 });
 

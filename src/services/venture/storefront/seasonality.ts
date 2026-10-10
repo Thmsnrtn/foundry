@@ -24,9 +24,17 @@ export const VISITS_NOT_RECORDED = 'Visits are not recorded: the Workshop carrie
 
 type Mode = 'real' | 'sandbox' | 'reference';
 
-/** The calendar month that has most recently ended, as YYYY-MM. */
+/**
+ * Days after a month ends before it is recorded (F3 audit of F2): a channel
+ * that could not be read on the 1st left the month short for good, because a
+ * month is recorded once. Three days lets a missed read catch up. An assumption.
+ */
+export const SETTLE_DAYS = 3;
+
+/** The most recent calendar month that ended at least SETTLE_DAYS ago, as YYYY-MM. */
 export function monthToRecord(now: Date): string {
-  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+  const settled = new Date(now.getTime() - SETTLE_DAYS * 86_400_000);
+  const d = new Date(Date.UTC(settled.getUTCFullYear(), settled.getUTCMonth() - 1, 1));
   return `${String(d.getUTCFullYear())}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
@@ -75,6 +83,33 @@ export async function recordDemandSignals(founderId: string, month: string): Pro
       [nanoid(), founderId, month, signal, channel, value, source, mode as Mode]);
     recorded += Number(r.rowsAffected ?? 0);
   };
+  // PER THEME (F3): each sale counted again under the theme its test's own
+  // words name, so the forge can read Foundry's own season once a year exists.
+  const themed = new Map<string, number>();
+  for (const r of (await query(
+    `SELECT x.mode, x.exp, e.what_we_do, o.headline FROM (
+        SELECT evidence_mode AS mode, experiment_id AS exp FROM channel_sales
+         WHERE founder_id = ? AND kind = 'sale' AND datetime(occurred_at) >= datetime(?) AND datetime(occurred_at) < datetime(?, '+1 month')
+        UNION ALL
+        SELECT ev.evidence_mode, f.experiment_id FROM economic_events ev JOIN experiment_fulfilments f ON f.id = ev.fulfilment_id
+         WHERE ev.founder_id = ? AND ev.provider IN ('stripe','etsy') AND ev.kind = 'charge'
+           AND datetime(ev.occurred_at) >= datetime(?) AND datetime(ev.occurred_at) < datetime(?, '+1 month')) x
+       LEFT JOIN venture_experiments e ON e.id = x.exp
+       LEFT JOIN venture_opportunities o ON o.id = e.opportunity_id`,
+    [founderId, from, from, founderId, from, from])).rows as Array<Record<string, unknown>>) {
+    const theme = themeOfWords(`${String(r.headline ?? '')} ${String(r.what_we_do ?? '')}`);
+    if (!theme) continue;
+    const k = `${theme}|${String(r.mode)}`;
+    themed.set(k, (themed.get(k) ?? 0) + 1);
+  }
+  for (const [k, n] of themed) {
+    const [theme, mode] = k.split('|') as [string, string];
+    const r = await query(
+      `INSERT INTO demand_signals (id, founder_id, month, signal, theme, channel, value, source, evidence_mode)
+       VALUES (?,?,?,'sales',?,'',?,?,?) ON CONFLICT(founder_id, month, signal, theme, channel, evidence_mode) DO NOTHING`,
+      [nanoid(), founderId, month, theme, n, `counted from both ledgers: sales in ${month} of tests whose own words name the ${theme} theme`, mode]);
+    recorded += Number(r.rowsAffected ?? 0);
+  }
   for (const [k, l] of lines) {
     const [channel, mode] = k.split('|') as [string, string];
     const src = channel === 'workshop' || channel === 'etsy' ? 'the economic ledger' : 'channel_sales';
@@ -121,4 +156,86 @@ export function launchTiming(theme: string, today: Date): { peakMonth: number; l
     listBy: `${String(listBy.getUTCFullYear())}-${String(listBy.getUTCMonth() + 1).padStart(2, '0')}`,
     because: `the ${theme} prior peaks in month ${String(peakIdx + 1)} (an assumption: ${p.source.why}), and search takes about ${String(LEAD_DAYS)} days to send anybody (an assumption)`,
   };
+}
+
+// ─── The forge consults the seasons (F3; residue of F2) ──────────────────────
+//
+// A launch is timed against the season of what it sells. The theme is read
+// from the candidate's own words (never asked of a model), and its shape is
+// FOUNDRY'S OWN YEAR once twelve months of that theme's real sales are
+// recorded; until then it is the prior, which is an assumption and says so.
+// Nothing here holds a launch back: the order in which sealed designs are let
+// in is the only thing it moves, so a design whose window is open now takes a
+// free place in flight before one whose peak is most of a year away.
+
+/** The words that put a candidate under a seasonal theme. First match wins, in this order. */
+export const THEME_WORDS: ReadonlyArray<[keyof typeof SEASONAL_PRIORS, RegExp]> = [
+  ['tax', /\b(tax|taxes|receipts?|deductions?|1099|w-?2)\b/i],
+  ['holiday', /\b(holiday|christmas|thanksgiving|gift lists?|advent|hanukkah)\b/i],
+  ['school', /\b(school|homework|teachers?|classroom|students?|semester)\b/i],
+  ['planner', /\b(planner|planners|organi[sz]er|calendar|new year|goals?|weekly plan)\b/i],
+  ['home', /\b(home maintenance|house|household|appliances?|chores?|cleaning|upkeep)\b/i],
+];
+
+/** The seasonal theme a text is about, or null. */
+export function themeOfWords(text: string): keyof typeof SEASONAL_PRIORS | null {
+  for (const [theme, re] of THEME_WORDS) if (re.test(text)) return theme;
+  return null;
+}
+
+export interface Season {
+  theme: string; peakMonth: number; listBy: string;
+  /** 'own': Foundry's recorded year. 'assumption': the prior, until that year exists. */
+  source: 'own' | 'assumption';
+  because: string;
+}
+
+/** Twelve recorded months of a theme's real sales replace its prior. */
+export const OWN_YEAR_MONTHS = 12;
+
+/** The season of what a text sells, from Foundry's own year when it has one, else the labelled prior. */
+export async function seasonFor(founderId: string, text: string, today: Date): Promise<Season | null> {
+  const theme = themeOfWords(text);
+  if (!theme) return null;
+  const rows = (await query(
+    `SELECT month, SUM(value) AS n FROM demand_signals
+      WHERE founder_id = ? AND theme = ? AND signal = 'sales' AND evidence_mode = 'real'
+      GROUP BY month ORDER BY month DESC LIMIT ?`, [founderId, theme, OWN_YEAR_MONTHS])).rows as Array<Record<string, unknown>>;
+  if (rows.length >= OWN_YEAR_MONTHS && rows.some((r) => Number(r.n) > 0)) {
+    const byMonth = Array.from({ length: 12 }, () => 0);
+    for (const r of rows) byMonth[Number(String(r.month).slice(5, 7)) - 1] += Number(r.n);
+    const t = timingOf(byMonth, today);
+    return { theme, ...t, source: 'own', because: `Foundry's own ${theme} sales peaked in month ${String(t.peakMonth)} over the last ${String(OWN_YEAR_MONTHS)} recorded months, and search takes about ${String(LEAD_DAYS)} days to send anybody (an assumption)` };
+  }
+  const t = launchTiming(theme, today)!;
+  return { theme, peakMonth: t.peakMonth, listBy: t.listBy, source: 'assumption', because: t.because };
+}
+
+function timingOf(byMonth: readonly number[], today: Date): { peakMonth: number; listBy: string } {
+  const peakIdx = byMonth.indexOf(Math.max(...byMonth));
+  let peak = new Date(Date.UTC(today.getUTCFullYear(), peakIdx, 1));
+  if (peak.getTime() - LEAD_DAYS * 86_400_000 < today.getTime()) peak = new Date(Date.UTC(today.getUTCFullYear() + 1, peakIdx, 1));
+  const listBy = new Date(peak.getTime() - LEAD_DAYS * 86_400_000);
+  return { peakMonth: peakIdx + 1, listBy: `${String(listBy.getUTCFullYear())}-${String(listBy.getUTCMonth() + 1).padStart(2, '0')}` };
+}
+
+/** A launch whose list-by month is this close is in its window: let in first. An assumption. */
+export const WINDOW_DAYS = 60;
+
+/**
+ * THE ORDER THE FORGE LETS SEALED DESIGNS IN: those whose season's window is
+ * open now (list-by within WINDOW_DAYS), soonest first; then everything else
+ * in the order it was sealed. Each carries the sentence of what was read.
+ */
+export async function launchOrder(founderId: string, designs: ReadonlyArray<{ id: string; text: string }>, today: Date): Promise<Array<{ id: string; season: Season | null; sentence: string }>> {
+  const read = await Promise.all(designs.map(async (d, i) => {
+    const season = await seasonFor(founderId, d.text, today);
+    const listBy = season ? Date.parse(`${season.listBy}-01T00:00:00Z`) : NaN;
+    const days = Number.isFinite(listBy) ? (listBy - today.getTime()) / 86_400_000 : Infinity;
+    const open = days <= WINDOW_DAYS;
+    return { id: d.id, season, i, key: open ? days : Infinity,
+      sentence: season === null ? 'no season read from its words; let in in the order it was sealed'
+        : `${season.theme}: list by ${season.listBy} for its peak in month ${String(season.peakMonth)} (${season.source === 'own' ? 'Foundry\'s own year' : 'a prior, an assumption'})${open ? '; its window is open, so it goes first' : ''}` };
+  }));
+  return read.sort((a, b) => a.key - b.key || a.i - b.i).map(({ id, season, sentence }) => ({ id, season, sentence }));
 }

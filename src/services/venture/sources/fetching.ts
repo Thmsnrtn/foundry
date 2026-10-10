@@ -11,8 +11,21 @@ import { safeFetch } from '../../outbound/ssrf.js';
 /** Who is asking. Public APIs ask for this, and it is the honest thing to send. */
 export const RESEARCH_USER_AGENT = 'FoundryResearch/1.0 (+https://apexmicro.ai; research@apexmicro.ai)';
 
+/**
+ * THE ONE DOOR EVERY EYE READS THROUGH (F3): the source's terms first
+ * (`terms.ts` — a site with no named terms, a forbidden one, or an unknown one
+ * he has not confirmed is refused, with the reason), then the SSRF door. The
+ * census test holds every fetch under `sources/` to this function.
+ */
+export async function sourceFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const { mayRead, SourceRefused } = await import('./terms.js');
+  const may = await mayRead(url);
+  if (!may.may) throw new SourceRefused(may.because);
+  return safeFetch(url, init);
+}
+
 export async function readJson<T>(url: string, headers: Record<string, string> = {}): Promise<T> {
-  const res = await safeFetch(url, {
+  const res = await sourceFetch(url, {
     headers: { 'user-agent': RESEARCH_USER_AGENT, accept: 'application/json', ...headers },
     signal: AbortSignal.timeout(15_000),
   });

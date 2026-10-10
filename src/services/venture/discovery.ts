@@ -103,6 +103,34 @@ export const BASE_TERMS = [
   'have to check every week',
 ] as const;
 
+/**
+ * ROTATING TERMS (F3), two a day, so a month of mornings asks about the work
+ * in many people's words rather than the same five phrasings. Still about
+ * effort and situation, never a product form: a search for a category returns
+ * the category.
+ */
+export const ROTATING_TERMS = [
+  'I always forget when',
+  'lost track of',
+  'on scraps of paper',
+  'nobody knows where',
+  'write it all down',
+  'I end up redoing',
+  'every year I have to',
+  'keep a list of',
+  'by hand every time',
+  'I wish there was a simple',
+  'kept in my head',
+  'took me hours to find',
+] as const;
+
+/** The rotating terms for a day: two, in a cycle the whole pool walks through. */
+export function rotatingTermsFor(day: Date): string[] {
+  const d = Math.floor(day.getTime() / 86_400_000);
+  const n = ROTATING_TERMS.length;
+  return [ROTATING_TERMS[(2 * d) % n]!, ROTATING_TERMS[(2 * d + 1) % n]!];
+}
+
 async function termsFrom(
   concentratedOn: string[], shape: string | null,
   guidance: Array<{ kind: string; subject: string | null; dimension: string | null; statement: string }>,
@@ -114,6 +142,9 @@ async function termsFrom(
   // portfolio's terms; a phrase that is his own steering is not narrowed,
   // because "runs itself without me saas" is nobody's sentence.
   const narrowed = (t: string): string => shape === null ? t : `${t} ${shape.replace(/_/g, ' ')}`;
+  for (const t of rotatingTermsFor(new Date())) {
+    base.push(t as typeof base[number]);
+  }
   for (const t of base) {
     terms.push(narrowed(t));
     from.push((concentratedOn.length === 0 ? 'the portfolio: nothing concentrated'
@@ -301,6 +332,7 @@ export async function discover(input: {
     return { brief, ...empty, passedOver };
   }
 
+  const { askersFor } = await import('./sources/askers.js');
   const already = await openSeeds(input.founderId, 200);
   const sown: Sown[] = [];
   let looked = 0;
@@ -319,7 +351,7 @@ export async function discover(input: {
     // answered nothing found it on day two.
     let talk: Awaited<ReturnType<typeof whatPeopleSaid>>;
     try {
-      talk = await whatPeopleSaid(terms, 10);
+      talk = await whatPeopleSaid(terms, 10, { newest: true });
     } catch (err) {
       passedOver.push({ what: `what people said about "${terms}"`,
         because: `the forum did not answer: ${err instanceof Error ? err.message : String(err)}` });
@@ -330,7 +362,6 @@ export async function discover(input: {
     // and the same reader sows from them. An eye that does not answer is
     // passed over out loud rather than allowed to end the whole pass: one
     // rate-limited tracker must not blind the forum beside it.
-    const { askersFor } = await import('./sources/askers.js');
     if ((await askersFor(['problem_pain'], input.world)).some((a) => a.provider === 'github_issues')) {
       const { whatIsReportedBroken } = await import('./sources/issue-trackers.js');
       try {
@@ -339,6 +370,20 @@ export async function discover(input: {
         talk.total += issues.total;
       } catch (err) {
         passedOver.push({ what: `public issue trackers for "${terms}"`,
+          because: `did not answer: ${err instanceof Error ? err.message.slice(0, 120) : 'unknown'}` });
+      }
+    }
+    // A THIRD ROOM, NEWEST FIRST (F3): Stack Exchange's question sites, one a
+    // day, where people ask about everyday work; passed over out loud if it
+    // does not answer, and not asked at all where its terms do not allow it.
+    if ((await askersFor(['problem_pain'], input.world)).some((a) => a.provider === 'stack_exchange')) {
+      const { whatPeopleAsked, siteFor } = await import('./sources/stack-exchange.js');
+      try {
+        const asked = await whatPeopleAsked(terms, siteFor(new Date()), 5);
+        talk.found.push(...asked.found);
+        talk.total += asked.total;
+      } catch (err) {
+        passedOver.push({ what: `Stack Exchange for "${terms}"`,
           because: `did not answer: ${err instanceof Error ? err.message.slice(0, 120) : 'unknown'}` });
       }
     }

@@ -17,7 +17,7 @@ export const GUMROAD_FIXTURE = {
     file_url: 'https://files.gumroad.example/attachments/fixture-seller/abc/original/log-v1.pdf',
     parts: [{ part_number: 1, presigned_url: 'https://s3.fixture.example/upload?part=1' }] },
   complete: { success: true, file_url: 'https://files.gumroad.example/attachments/fixture-seller/abc/original/log-v1.pdf' },
-  created: { success: true, product: { id: 'fixture_product_1', name: 'The Home Maintenance Log', published: false } },
+  created: { success: true, product: { id: 'fixture_product_1', name: 'The Home Maintenance Log', published: false, short_url: 'https://fixture-seller.gumroad.com/l/fixture' } },
   enabled: { success: true, product: { id: 'fixture_product_1', published: true } },
   /** Two sales of ours (one refunded), one partly refunded, and one of a product Foundry never listed. */
   sales: { success: true, sales: [

@@ -362,9 +362,11 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
         <label for="cl-exp">Test id</label>
         <input id="cl-exp" name="experiment_id" type="text" />
         <label for="cl-ch">Channel</label>
-        <select id="cl-ch" name="channel"><option value="lemonsqueezy">Lemon Squeezy</option><option value="gumroad">Gumroad</option></select>
+        <select id="cl-ch" name="channel"><option value="lemonsqueezy">Lemon Squeezy</option><option value="gumroad">Gumroad</option><option value="etsy">Etsy</option></select>
         <label for="cl-ref">Its product id there</label>
         <input id="cl-ref" name="external_ref" type="text" />
+        <label for="cl-url">The address a buyer opens (https, on that site)</label>
+        <input id="cl-url" name="url" type="url" />
         <label for="cl-ver">Version</label>
         <input id="cl-ver" name="version" type="text" inputmode="numeric" />
         <button class="btn" type="submit">Record the listing I made</button>
@@ -572,7 +574,7 @@ moneyRoutes.post('/foundry/money/channel-listing', requireInstitutionOwner(), as
   if (!founderId) return back(c, '', 'No owner on this request.');
   const form = await c.req.parseBody();
   const channel = String(form.channel ?? '');
-  if (channel !== 'lemonsqueezy' && channel !== 'gumroad') return back(c, '', 'That is not a channel a listing can be recorded for.');
+  if (channel !== 'lemonsqueezy' && channel !== 'gumroad' && channel !== 'etsy') return back(c, '', 'That is not a channel a listing can be recorded for.');
   const experimentId = String(form.experiment_id ?? '').trim();
   const version = Number(String(form.version ?? '').trim());
   const { canonicalListing } = await import('../../services/venture/storefront/canonical.js');
@@ -580,7 +582,7 @@ moneyRoutes.post('/foundry/money/channel-listing', requireInstitutionOwner(), as
   if ('refused' in l) return back(c, '', l.refused);
   const { recordOwnerListing } = await import('../../services/venture/storefront/reconcile.js');
   const r = await recordOwnerListing({ founderId, experimentId, channel, externalRef: String(form.external_ref ?? '').trim().slice(0, 80),
-    version, priceCents: l.priceCents, by: `founder:${founderId}` });
+    version, priceCents: l.priceCents, url: String(form.url ?? '').trim() || null, by: `founder:${founderId}` });
   return back(c, 'refused' in r ? '' : 'Recorded: its sales will be read into the product\'s line.', 'refused' in r ? r.refused : '');
 });
 

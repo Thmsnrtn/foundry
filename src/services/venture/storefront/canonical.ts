@@ -79,7 +79,9 @@ export async function canonicalListing(founderId: string, experimentId: string):
     `${file.title} — version ${String(file.version)}`,
     shape.spec?.subtitle ? shape.spec.subtitle : null,
     shape.shape?.sells ? shape.shape.sells : null,
-    `A ${String(file.pages)}-page PDF${what ? ` (${what})` : ''}, to print at home or fill in on screen.`,
+    // WHAT THE FILE IS, FROM ITS BYTES (F3 audit of F2): "fill in on screen" only
+    // of a file that has fields; this said it of every file.
+    `A ${String(file.pages)}-page PDF${what ? ` (${what})` : ''}, to print at home${fillable ? ' or fill in on screen' : ''}.`,
     aiMade.sentence,
   ].filter((x): x is string => !!x && x.trim() !== '').join('\n\n');
 

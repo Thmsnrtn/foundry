@@ -69,6 +69,10 @@ export interface DayRecord {
   violations: number;
   jobDefects: string[];
   modelCalls: number;
+  /** Sentences somebody wrote that discovery recorded today for the first time, by address (F3): zero is an idle day. */
+  newObservations: number;
+  /** Items the public world showed the eyes today that it had never shown before (F3): the twin's own count of freshness. */
+  newItemsShown: number;
 }
 
 export interface WorldResult {
@@ -92,6 +96,14 @@ export interface WorldResult {
   breaches: number;
   forgeIdleAtEnd: boolean;
   forgeIdleDays: number;
+  /** Days on which the eyes recorded nothing new (F3). */
+  eyesIdleDays: number;
+  /** The evidence each deliberated test's reviewers were given, at the end of the run, and how much was left out as off-topic (F3). */
+  reviewerEvidence: Array<{ experimentId: string; subject: string; theme: string | null; leftOut: number; rows: Array<{ saw: string; source: string; sourceType: string }> }>;
+  /** Of the items shown to the eyes, which theme each was about (null: chatter): the judges' ground truth, keyed by item id (F3). */
+  truth: Record<string, string | null>;
+  /** Requests per public host over the run (F3). */
+  hosts: Record<string, number>;
   designs: number; made: number;
   modelCalls: Record<string, number>;
   unhandledModelCalls: Record<string, number>;
@@ -198,7 +210,16 @@ export async function runWorld(o: WorldOptions): Promise<WorldResult> {
   await standUpWorkshop(OWNER, worldFetch as unknown as typeof fetch);
   try { await world.giveTheWorkshopEars(OWNER); } catch { await world.theReplyRouteHasBeenProven(OWNER); }
   const { supersedeOriginationPolicy } = await import('../../../src/services/venture/legal-surface.js');
-  for (const [requirement, treatment, value] of [['front_loaded_attention', 'prefer', null], ['make_printable_pdf', 'policy', 'yes']] as const) {
+  // THE SOURCES WHOSE TERMS ARE HIS TO CONFIRM (PENDING 49), confirmed in this
+  // world as a counterfactual so the eyes it measures are the widest he could
+  // allow; and the Etsy application key the marketplace eye reads with.
+  {
+    const { encrypt } = await import('../../../src/services/encryption.js');
+    await (await import('../../../src/db/client.js')).query(`INSERT INTO app_credentials (provider, secret_json, provider_account_ref, verified_at, set_by) VALUES (?,?,?,?,?)`,
+      ['etsy', encrypt(JSON.stringify({ keystring: 'twinkeystring', sharedSecret: 'twinsecret' })), 'twin-app', new Date().toISOString(), `founder:${OWNER}`]);
+  }
+  for (const [requirement, treatment, value] of [['front_loaded_attention', 'prefer', null], ['make_printable_pdf', 'policy', 'yes'],
+    ['source_terms:duckduckgo_autocomplete', 'policy', 'confirmed'], ['source_terms:etsy_marketplace_search', 'policy', 'confirmed']] as const) {
     const r = await supersedeOriginationPolicy({ founderId: OWNER, requirement, treatment, value, why: `the owner's act this world assumes (${requirement})`, by: `founder:${OWNER}` });
     if ('refused' in r) throw new Error(r.refused);
   }
@@ -309,6 +330,7 @@ export async function runWorld(o: WorldOptions): Promise<WorldResult> {
     || [...state.charges.values()].reduce((s, c) => s + c.amount_refunded, 0);
 
   let lastDesigns = 0; let lastMade = 0; let idleRun = 0; let idleDays = 0;
+  let lastObservations = 0; let lastShown = 0; let eyesIdleDays = 0;
   for (let d = 1; d <= o.days; d++) {
     today = d;
     brain.setDay(d);
@@ -362,17 +384,42 @@ export async function runWorld(o: WorldOptions): Promise<WorldResult> {
     verdicts.push(...today_.filter((v) => v.violations.length > 0));
     const designs = await n(`SELECT COUNT(*) AS n FROM probe_designs d JOIN venture_experiments e ON e.id = d.experiment_id WHERE e.founder_id = ? AND d.designed_by = 'forge'`, [OWNER]);
     const made = await n(`SELECT COUNT(DISTINCT experiment_id) AS n FROM experiment_materials WHERE founder_id = ? AND kind = 'deliverable' AND experiment_id NOT IN (${seededExperiments.map(() => '?').join(',') || "''"})`, [OWNER, ...seededExperiments]);
+    // NEW SIGNALS, NOT NEW ROWS (F3 gate, found by mutating freshness away): an
+    // asker files a fresh summary row every time it is asked, so a count of rows
+    // never idles even when the eyes re-read the same posts all week. What counts
+    // is a sentence somebody wrote that discovery had never recorded before:
+    // distinct addresses of the observations discovery files ("somebody wrote").
+    const observations = await n(`SELECT COUNT(DISTINCT o.source) AS n FROM market_observations o JOIN market_claims c ON c.id = o.claim_id
+      WHERE o.founder_id = ? AND o.evidence_mode = 'real' AND c.claim LIKE 'somebody wrote:%'`, [OWNER]);
+    const newObservations = observations - lastObservations; lastObservations = observations;
+    const newItemsShown = pub.truth.size - lastShown; lastShown = pub.truth.size;
+    if (newObservations <= 0) eyesIdleDays += 1;
     const active = designs > lastDesigns || made > lastMade;
     idleRun = active ? 0 : idleRun + 1; if (!active) idleDays += 1;
     lastDesigns = designs; lastMade = made;
     const rec: DayRecord = { day: d, live: live.length, designs, made, purchases: purchasesToday, revenueCents: grossCents, refundsCents: refundsCents(), feesCents,
       ownerMinutes: ownerDay.minutes, needsYou: ownerDay.items, newItems: ownerDay.newItems, ownerActs: ownerDay.acts,
-      violations: today_.reduce((s, v) => s + v.violations.length, 0), jobDefects: defects, modelCalls: modelCalls.n - callsBefore };
+      violations: today_.reduce((s, v) => s + v.violations.length, 0), jobDefects: defects, modelCalls: modelCalls.n - callsBefore, newObservations, newItemsShown };
     timeline.push(rec);
     o.onDay?.(`seed ${String(o.seed)} ${o.brain} day ${String(d).padStart(3)} | designs ${String(designs)} made ${String(made)} live ${String(live.length)} | visits ${String(md.visits)} sales ${String(purchasesToday)} | $${(grossCents / 100).toFixed(0)} | needs-you ${String(ownerDay.items)} min ${ownerDay.minutes.toFixed(1)} | viol ${String(rec.violations)} | calls ${String(rec.modelCalls)} | ms adv ${String(msAdvance)} jobs ${String(msJobs)} inv ${String(msInvariants)}${defects.length ? ` | DEFECT ${defects[0]!}` : ''}`);
   }
 
   if (o.afterTheRun) await o.afterTheRun({ founderId: OWNER, monitor: iw, query: iw.query, providers: state });
+
+  // ── What the reviewers were given (F3): every test the forge's lenses read ──
+  const reviewerEvidence: WorldResult['reviewerEvidence'] = [];
+  {
+    const { theRecordOf } = await import('../../../src/services/venture/forge-deliberation.js');
+    const { themeOf } = await import('./segments.js');
+    const reviewed = (await query(`SELECT DISTINCT experiment_id FROM probe_lens_findings WHERE founder_id = ?`, [OWNER])).rows as unknown as Array<{ experiment_id: string }>;
+    for (const r of reviewed) {
+      const rec = await theRecordOf(String(r.experiment_id));
+      if (!rec) continue;
+      const subject = `${rec.candidate.headline} ${rec.candidate.whoHasIt} ${rec.candidate.theProblem}`;
+      reviewerEvidence.push({ experimentId: rec.experiment.id, subject, theme: themeOf(subject), leftOut: rec.evidenceLeftOut,
+        rows: rec.evidence.map((e) => ({ saw: e.saw, source: e.source, sourceType: e.sourceType })) });
+    }
+  }
 
   // ── What was refused, and why, in the institution's own words ────────────
   const refusals = (await query(`SELECT r.because FROM forge_refusals r JOIN venture_experiments e ON e.id = r.experiment_id WHERE e.founder_id = ?`, [OWNER])).rows as unknown as Array<{ because: string }>;
@@ -440,6 +487,7 @@ export async function runWorld(o: WorldOptions): Promise<WorldResult> {
     fabricationRefusals, refusalsByKind,
     violations: [...byId.values()], breaches: verdicts.reduce((s, v) => s + v.violations.length, 0),
     forgeIdleAtEnd: idleRun >= 14, forgeIdleDays: idleDays,
+    eyesIdleDays, reviewerEvidence, truth: Object.fromEntries(pub.truth), hosts: { ...pub.calls },
     designs: lastDesigns, made: lastMade,
     modelCalls: brain.calls as Record<string, number>, unhandledModelCalls: brain.unhandled,
     attempts, jobDefects, jobMs, market: market.totals, listings: [...listingDays.values()], timeline, wallMs: Date.now() - t0,

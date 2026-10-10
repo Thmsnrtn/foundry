@@ -61,8 +61,10 @@ describe('the week, through the real queue', () => {
     await query(`UPDATE founders SET created_at = datetime('now', '-16 days') WHERE id = ?`, [OWNER]);
     const w = await Q.theWeeksBatch(OWNER);
     expect(w.today).toBe(false);
-    // Five days to the next one.
-    expect(Math.round((Date.parse(w.next) - Date.now()) / 86_400_000)).toBe(5);
+    // Five calendar days to the next one. (Counted in days, not hours: the next
+    // batch begins at the start of its day, so a round of the hours read 4 late
+    // in the day and 5 early in it — found failing in the afternoon of 10 October.)
+    expect(Math.floor(Date.parse(w.next) / 86_400_000) - Math.floor(Date.now() / 86_400_000)).toBe(5);
   });
 
   it('off the batch day an item that may wait is put off until the batch, and a decision is not', () => {

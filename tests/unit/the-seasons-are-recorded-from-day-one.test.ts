@@ -63,10 +63,13 @@ describe('Foundry\'s own demand, month by month', () => {
     expect(SZ.VISITS_NOT_RECORDED).toMatch(/no tracking/);
   });
 
-  it('the monthly pass records the month that just ended, and only once it has ended', () => {
-    expect(SZ.monthToRecord(new Date('2026-10-01T03:00:00Z'))).toBe('2026-09');
+  // THE MONTH IS RECORDED ONCE ITS LATE REPORTS ARE IN (F3 audit of F2): it was
+  // recorded the morning it ended, so a channel unread that morning left it short.
+  it('the monthly pass records a month only once it has ended and settled', () => {
+    expect(SZ.monthToRecord(new Date('2026-10-01T03:00:00Z'))).toBe('2026-08');
+    expect(SZ.monthToRecord(new Date('2026-10-04T03:00:00Z'))).toBe('2026-09');
     expect(SZ.monthToRecord(new Date('2026-10-15T03:00:00Z'))).toBe('2026-09');
-    expect(SZ.monthToRecord(new Date('2027-01-02T03:00:00Z'))).toBe('2026-12');
+    expect(SZ.monthToRecord(new Date('2027-01-05T03:00:00Z'))).toBe('2026-12');
   });
 });
 

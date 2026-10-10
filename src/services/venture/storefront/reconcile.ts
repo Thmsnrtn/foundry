@@ -39,20 +39,49 @@ type Row = Record<string, unknown>;
 /** Record a listing he made himself in a channel's dashboard (Lemon Squeezy has no create API). His act. */
 export async function recordOwnerListing(input: {
   founderId: string; experimentId: string; channel: MarketChannel; externalRef: string; version: number; priceCents: number; by: string;
+  /** Where a buyer reaches it: https on the channel's own host. Optional; without it no buyer is sent there. */
+  url?: string | null;
 }): Promise<{ id: string } | { refused: string }> {
   if (!input.by.startsWith('founder:')) return { refused: 'a listing he made himself is recorded by him' };
   if (!input.externalRef.trim()) return { refused: 'say the product\'s id on the channel, so its sales can be tied to it' };
+  const { buyerUrlOn, CHANNEL_NAMES } = await import('./channels.js');
+  const url = input.url == null || input.url.trim() === '' ? null : buyerUrlOn(input.channel, input.url);
+  if (input.url != null && input.url.trim() !== '' && url === null) {
+    return { refused: `that is not an https address on ${CHANNEL_NAMES[input.channel]}'s own site, so no buyer is sent to it` };
+  }
   const { canonicalListing } = await import('./canonical.js');
   const l = await canonicalListing(input.founderId, input.experimentId);
   if ('refused' in l) return l;
   if (l.version !== input.version) return { refused: `the canonical product is version ${String(l.version)}, not ${String(input.version)}` };
   const id = nanoid();
   await query(
-    `INSERT INTO channel_listings (id, founder_id, experiment_id, version, channel, external_ref, price_cents, ai_disclosure, evidence_mode)
-     VALUES (?,?,?,?,?,?,?,?,?)`,
-    [id, input.founderId, input.experimentId, input.version, input.channel, input.externalRef, input.priceCents,
+    `INSERT INTO channel_listings (id, founder_id, experiment_id, version, channel, external_ref, url, price_cents, ai_disclosure, evidence_mode)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    [id, input.founderId, input.experimentId, input.version, input.channel, input.externalRef, url, input.priceCents,
       'made by the owner in the channel\'s dashboard from the canonical listing, whose description carries the disclosure', l.evidenceMode]);
   return { id };
+}
+
+/**
+ * WHERE ELSE A BUYER CAN GET THIS VERSION: every listing with a buyer-facing
+ * address, on a channel he still has open. The one reader of
+ * `channel_listings.url`; the Workshop's projection shows these, and the EU
+ * routing rule picks the merchant of record among them.
+ */
+export async function buyerFacingListings(experimentId: string, version: number): Promise<Array<{ channel: MarketChannel; venueName: string; url: string; merchantOfRecord: boolean }>> {
+  const { channelGrant, CHANNEL_NAMES, buyerUrlOn } = await import('./channels.js');
+  const { FEE_CARDS } = await import('../fee-floor.js');
+  const out: Array<{ channel: MarketChannel; venueName: string; url: string; merchantOfRecord: boolean }> = [];
+  for (const l of (await query(`SELECT channel, url, founder_id FROM channel_listings WHERE experiment_id = ? AND version = ? AND url IS NOT NULL ORDER BY channel, rowid`,
+    [experimentId, version])).rows as Row[]) {
+    const ch = String(l.channel) as MarketChannel;
+    // Re-read at the boundary: a row is shown only while it is still an address on the channel's own host.
+    const url = buyerUrlOn(ch, l.url);
+    if (!url || out.some((o) => o.channel === ch)) continue;
+    if (!(await channelGrant(String(l.founder_id), ch)).granted) continue;
+    out.push({ channel: ch, venueName: CHANNEL_NAMES[ch], url, merchantOfRecord: FEE_CARDS[ch].merchantOfRecord });
+  }
+  return out;
 }
 
 /**
@@ -65,9 +94,17 @@ export async function recordChannelSales(founderId: string, sales: ChannelSale[]
     `SELECT channel, external_ref, experiment_id, version FROM channel_listings WHERE founder_id = ?`, [founderId])).rows as Row[];
   const byRef = new Map(listings.map((r) => [`${String(r.channel)}:${String(r.external_ref)}`, r]));
   let recorded = 0; let repeated = 0; let notOurs = 0;
+  const { exposureOf } = await import('../outcome.js');
   for (const s of sales) {
     const l = byRef.get(`${s.channel}:${s.productRef}`);
     if (!l) { notOurs += 1; continue; }
+    // NEVER TWICE (F3): an Etsy listing that is its test's own exposure reaches
+    // the ledger through that exposure; recording it here as well would count
+    // each sale in two places of one line.
+    if (s.channel === 'etsy') {
+      const x = await exposureOf(String(l.experiment_id));
+      if (x && x.provider === 'etsy' && /\/listing\/(\d+)/.exec(x.exposureRef)?.[1] === s.productRef) { repeated += 1; continue; }
+    }
     const r = await query(
       `INSERT INTO channel_sales (id, founder_id, experiment_id, version, channel, kind, provider_ref, gross_cents, fee_cents, tax_cents, currency, occurred_at, evidence_mode)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(channel, provider_ref, kind) DO NOTHING`,
@@ -191,4 +228,20 @@ export async function channelListingsOf(founderId: string): Promise<Array<{ expe
     `SELECT experiment_id, channel, version, external_ref, ai_disclosure, listed_at FROM channel_listings WHERE founder_id = ? ORDER BY listed_at DESC, rowid DESC`,
     [founderId])).rows as Row[]).map((r) => ({ experimentId: String(r.experiment_id), channel: String(r.channel), version: Number(r.version),
     externalRef: String(r.external_ref), aiDisclosure: String(r.ai_disclosure), listedAt: String(r.listed_at).slice(0, 10) }));
+}
+
+/**
+ * WHAT A TEST'S PRODUCT SOLD ON OTHER CHANNELS (F3; residue of F2): evidence
+ * read beside the settlement, never into it. The sealed prediction settles on
+ * its one exposure; these are sales the same product made elsewhere, in the
+ * test's own world, each channel counted as that channel stated it.
+ */
+export async function soldElsewhere(experimentId: string): Promise<Array<{ channel: MarketChannel; sales: number; refunds: number; grossCents: number; refundedCents: number }>> {
+  return ((await query(
+    `SELECT s.channel, SUM(CASE WHEN s.kind = 'sale' THEN 1 ELSE 0 END) AS sales, SUM(CASE WHEN s.kind = 'refund' THEN 1 ELSE 0 END) AS refunds,
+            SUM(CASE WHEN s.kind = 'sale' THEN s.gross_cents ELSE 0 END) AS gross, SUM(CASE WHEN s.kind = 'refund' THEN s.gross_cents ELSE 0 END) AS refunded
+       FROM channel_sales s JOIN venture_experiments e ON e.id = s.experiment_id AND e.evidence_mode = s.evidence_mode
+      WHERE s.experiment_id = ? GROUP BY s.channel ORDER BY s.channel`, [experimentId])).rows as Row[]).map((r) => ({
+    channel: String(r.channel) as MarketChannel, sales: Number(r.sales), refunds: Number(r.refunds), grossCents: Number(r.gross), refundedCents: Number(r.refunded),
+  }));
 }
