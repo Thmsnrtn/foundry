@@ -3596,6 +3596,14 @@ relevance floor moved the 30-day share only from 88.7% to 89.0%: in the twin the
 askers already search with the candidate's words, so the floor is a guard for
 the real world's noise that the twin barely exercises. CI runs 60 days.
 
+**Found on the way, by the full suite.** The twin's adversary went unquoted:
+a refusal quoted forty characters after an invented statistic, so the owner
+read half the claim; it now quotes to the end of the sentence (never less than
+before). A week's-batch test rounded hours and failed in the afternoon; it now
+counts calendar days. The URL-safety census now knows the eyes' terms door, and
+the eyes' own suite confirms DuckDuckGo's terms as the owner's act it assumes.
+`npm run check` and `npm run build` exit 0 on the finished tree.
+
 **Proof debt.** No source verdict re-read live; no Etsy or Stack Exchange
 request answered; the twin's vocabulary bounds the freshness it can measure;
 the judges are scripted, not a model; own traffic is unrecorded.

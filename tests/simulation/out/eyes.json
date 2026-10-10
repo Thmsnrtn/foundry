@@ -1,5 +1,5 @@
 {
- "writtenAt": "2026-10-10T15:02:07.811Z",
+ "writtenAt": "2026-10-10T16:09:26.163Z",
  "days": 60,
  "seeds": [
   {
@@ -25,7 +25,7 @@
      "verdicts": "no/no/yes"
     },
     {
-     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nobody in the archive has discussed \"plain printable household bills\" — 3 things came back and none ",
+     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nobody in the archive has discussed \"plain printable household bills\" — 6 things came back and none ",
      "verdicts": "no/no/yes"
     },
     {
@@ -71,7 +71,7 @@
   }
  ],
  "kappa": {
-  "fleiss": 0.6556675832569481,
+  "fleiss": 0.6556675832569643,
   "pairs": [
    {
     "pair": "ground-truth~theme-words",
