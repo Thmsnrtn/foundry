@@ -215,10 +215,21 @@ merchant-of-record channel (PENDING 43), set the floor (PENDING 44), say whether
 an allowed test may list on his channels (PENDING 47); then a real pilot he
 watches. The optional ad test is not built.
 
-**F3 — wider, fresher eyes:** marketplace search signals, autocomplete and
-trends, forums, rotating newest-first terms, Foundry's own sales as the
-strongest signal, a relevance check on evidence. Gate: a 90-day run never
-idles and at least 80% of evidence is on-topic.
+**F3 — wider, fresher eyes: done in code on `claude/foundry-f3-eyes`**, not
+deployed, after an independent audit of FQ and F2 (six defects fixed, see
+`IMPLEMENTATION_STATE.md`, "F3"). Every source an eye reads is named with its
+terms behind one door (seven read, four never, two wait for him); a
+marketplace eye (Etsy's listing search: price, buyers' reviews) and a second
+forum (Stack Exchange, rooms rotating); discovery reads newest first in
+rotating words; only evidence rows about the candidate reach the forge's
+reviewers, with Foundry's own sales first. The forge lets sealed designs in
+season-first, and a product's sales on every channel reach its line and its
+lessons beside its one settlement. Gate: a 90-day twin run never idles and
+reviewers' evidence is on topic well above 80% (numbers in the state file).
+**Next, his:** read and confirm (or not) the two sources whose terms are not
+settled (PENDING 49); PENDING 43/44/47 as before. Trends: no source with an
+API for it exists, so it is not built; Wikipedia pageviews remain the trend
+proxy.
 
 **F4 and later:** the portfolio manager, quiet operations and more product
 kinds, gated by real sales.

@@ -2509,6 +2509,47 @@ an assumption). It acts on nothing; it says so on Economics.
 
 ---
 
+## PENDING 49 — May the eyes read the two sources whose terms are not settled: **OWNER** (2026-10-09)
+
+**What is true (F3).** Every public site an eye reads is now named with the
+permission it rests on (`services/venture/sources/terms.ts`), and the one door
+every eye reads through refuses the rest. Seven publish an API for exactly this
+read and are read. Four are never read: Reddit (its Data API terms bar
+commercial use without an agreement), Google Trends (no API; automated queries
+are against Google's terms), Etsy's website pages (scraping is forbidden; its
+API is the only door) and Amazon. Two answer but no published term says a
+program may use them this way, and they now WAIT for you:
+- **DuckDuckGo's search suggestions** (the "search_evidence" eye, used since
+  September): its suggestion endpoint is what its own search box calls; no term
+  licenses a program to call it. *This eye stopped reading on this branch until
+  you confirm.*
+- **Etsy's listing search, for research** (the new marketplace eye: what sells,
+  at what price, with how many buyers' reviews): Etsy documents the endpoints
+  for an application key; whether its API terms let a seller's app read other
+  shops' listings for research is not settled here.
+None of these verdicts was re-read live: this build could not reach a live site.
+
+**Your choice, per source.** Confirm (your row `source_terms:<id>` = `confirmed`,
+after reading its terms, or counsel's); or leave it unread.
+
+**Recommendation.** Read both sets of terms yourself before confirming; the
+marketplace eye is the one source that sees purchases, so it is worth the read.
+
+---
+
+## Updates of 9 October 2026 (F3), against earlier items
+
+- **PENDING 47 (listing an allowed test):** the door's listing act
+  (`placeOnChannel`) still has no caller, deliberately: any caller would answer
+  this item for you. It now keeps the address Gumroad answers with, so once you
+  answer, the EU line can send buyers there.
+- **PENDING 35 (tax):** the EU/UK line was unreachable: nothing wrote the
+  address a buyer reaches a merchant-of-record listing at. Your own record of a
+  listing (Economics → "Record the listing I made") now takes that address, on
+  the channel's own https host only.
+
+---
+
 ## Updates of 9 October 2026 (F2), against earlier items
 
 - **PENDING 35 (tax):** turning Stripe Tax on is now one act of yours — your
