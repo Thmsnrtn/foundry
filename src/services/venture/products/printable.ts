@@ -188,8 +188,10 @@ export function specProblems(spec: PrintableSpec): string[] {
 const quoteAround = (text: string, index: number, length: number): string => {
   const from = Math.max(0, index - 40);
   const rest = text.slice(index + length, index + length + 200);
-  const stop = rest.search(/[.!?\n]/);
-  const to = index + length + (stop === -1 ? Math.min(rest.length, 40) : stop);
+  // A sentence ends at a stop followed by a capital or the end, not at "Dana R." —
+  // and the quote is never shorter than the forty characters it always gave.
+  const stop = rest.search(/[.!?](?=\s+[A-Z]|\s*$)|\n/);
+  const to = index + length + Math.max(Math.min(rest.length, 40), stop === -1 ? 0 : stop + 1);
   return text.slice(from, to).replace(/\s+/g, ' ').trim();
 };
 
