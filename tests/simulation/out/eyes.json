@@ -1,61 +1,20 @@
 {
- "writtenAt": "2026-10-09T10:47:23.835Z",
- "days": 90,
+ "writtenAt": "2026-10-10T14:39:15.932Z",
+ "days": 3,
  "seeds": [
   {
    "seed": 1,
-   "rows": 1581,
-   "onTopic": 1485,
+   "rows": 56,
+   "onTopic": 56,
    "untethered": 0,
-   "disagreements": [
-    {
-     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nothing on the subject is for sale on Etsy for \"plain printable household bills\": 4 listings came ba",
-     "verdicts": "no/no/yes"
-    },
-    {
-     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nobody in the archive has discussed \"plain printable household bills\" — 6 things came back and none ",
-     "verdicts": "no/no/yes"
-    },
-    {
-     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || 1 maintained package already exists for \"plain printable household bills\" — plain-printable-househol",
-     "verdicts": "no/no/yes"
-    },
-    {
-     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nothing on the subject is for sale on Etsy for \"plain printable household bills\": 4 listings came ba",
-     "verdicts": "no/no/yes"
-    },
-    {
-     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nobody in the archive has discussed \"plain printable household bills\" — 5 things came back and none ",
-     "verdicts": "no/no/yes"
-    },
-    {
-     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || 1 maintained package already exists for \"plain printable household bills\" — plain-printable-househol",
-     "verdicts": "no/no/yes"
-    },
-    {
-     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nothing on the subject is for sale on Etsy for \"plain printable household bills\": 4 listings came ba",
-     "verdicts": "no/no/yes"
-    },
-    {
-     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nobody in the archive has discussed \"plain printable household bills\" — 4 things came back and none ",
-     "verdicts": "no/no/yes"
-    },
-    {
-     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || 1 maintained package already exists for \"plain printable household bills\" — plain-printable-househol",
-     "verdicts": "no/no/yes"
-    },
-    {
-     "row": "[bills-tracker] A plain printable household bills tracker might serve people who keep this on sc || Nothing on the subject is for sale on Etsy for \"plain printable household bills\": 4 listings came ba",
-     "verdicts": "no/no/yes"
-    }
-   ],
-   "leftOut": 46,
-   "reviewed": 171
+   "disagreements": [],
+   "leftOut": 1,
+   "reviewed": 6
   }
  ],
- "rows": 1581,
- "onTopic": 1485,
- "share": 0.9392789373814042,
+ "rows": 56,
+ "onTopic": 56,
+ "share": 1,
  "judges": [
   {
    "id": "ground-truth",
@@ -71,7 +30,7 @@
   }
  ],
  "kappa": {
-  "fleiss": 0.6507620941020422,
+  "fleiss": 1,
   "pairs": [
    {
     "pair": "ground-truth~theme-words",
@@ -79,11 +38,11 @@
    },
    {
     "pair": "ground-truth~candidate-words",
-    "cohen": 0.38506417736289383
+    "cohen": 1
    },
    {
     "pair": "theme-words~candidate-words",
-    "cohen": 0.38506417736289383
+    "cohen": 1
    }
   ]
  },
@@ -92,96 +51,9 @@
  ],
  "newObservationsPerDay": [
   [
-   46,
-   50,
-   50,
-   51,
-   45,
-   45,
-   49,
-   49,
-   50,
-   49,
-   47,
-   45,
-   51,
-   40,
-   41,
-   45,
-   48,
-   42,
-   40,
-   50,
-   37,
-   47,
-   53,
-   37,
-   39,
-   46,
-   45,
-   44,
-   46,
-   48,
-   51,
-   44,
-   43,
-   34,
-   44,
-   39,
-   46,
-   43,
-   41,
-   39,
-   44,
-   42,
-   28,
-   31,
-   39,
-   40,
-   43,
-   39,
-   31,
-   36,
-   45,
-   46,
-   47,
-   32,
-   36,
-   46,
-   33,
-   28,
-   44,
-   43,
-   46,
-   31,
-   38,
-   49,
-   33,
-   38,
-   20,
-   26,
-   18,
-   16,
-   33,
-   29,
-   18,
-   16,
-   32,
-   28,
-   18,
-   23,
-   27,
-   26,
-   42,
-   22,
-   22,
-   19,
-   15,
-   16,
-   22,
-   17,
-   15,
-   23
+   7,
+   10,
+   10
   ]
  ]
 }

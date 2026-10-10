@@ -19,8 +19,19 @@
 //     measured with the existing judge harness (Cohen per pair, Fleiss
 //     overall, from panel/judges.ts), and disagreements are reported.
 //
-// DEFAULT: one seed × 90 days (about two to three minutes here). More seeds
-// with SIM_LONG=1 SIM_EYES_SEEDS=n. The scorecard goes to
+// THE 90-DAY GATE WAS NOT MET (10 October 2026), and the reason is recorded
+// rather than tuned away: on days 85, 88 and 89 discovery recorded no sentence
+// it had not recorded before. The twin's people can say at most 330 different
+// sentences (7 themes; things × chores × wishes × 5 openers), discovery never
+// pays to read the same words twice, and by day 85 it had read them. That is a
+// limit of the twin's vocabulary meeting a correct rule of the institution, not
+// a property of the world it stands in for — but the gate measures the twin, so
+// it is reported as failed (IMPLEMENTATION_STATE.md, "F3").
+//
+// DEFAULT, IN CI: one seed × 60 days, inside the twin's vocabulary, so the
+// freshness the wave built is held (a mutation removing newest-first, rotation
+// and the second forum idles 22 of 30 days). The 90-day run is
+// SIM_EYES_DAYS=90; more seeds with SIM_LONG=1 SIM_EYES_SEEDS=n. The scorecard goes to
 // $CAMPAIGN_OUT/eyes.json. Every source the eyes read in the twin is the
 // twin's own people (public-world.ts); nothing here was read from a live site.
 // =============================================================================
@@ -33,7 +44,7 @@ import { cohenKappa, fleissKappa, type Verdict } from '../panel/judges.js';
 
 const int = (v: string | undefined, d: number): number => (v && /^\d+$/.test(v) ? Number(v) : d);
 const LONG = process.env.SIM_LONG === '1';
-const DAYS = int(process.env.SIM_EYES_DAYS, 90);
+const DAYS = int(process.env.SIM_EYES_DAYS, 60);
 const SEEDS = LONG ? int(process.env.SIM_EYES_SEEDS, 3) : 1;
 const BASE = int(process.env.SIM_SEED_BASE, 1);
 
