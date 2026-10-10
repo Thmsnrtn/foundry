@@ -45,4 +45,5 @@ src/services/team/members.ts 1
 src/services/venture/form-knowledge.ts 1
 src/services/venture/obligations.ts 1
 src/services/venture/proof-2.ts 1
+src/services/venture/storefront/etsy.ts 1
 src/services/week/sets.ts 1

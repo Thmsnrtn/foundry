@@ -86,6 +86,9 @@ export async function readEtsyChannelListings(founderId: string, evidenceMode: '
   const out = { read: 0, recorded: 0, skipped: [] as string[] };
   if (listings.length === 0) return out;
   // The shop is connected once, to whichever of his products carries the Etsy sense.
+  // STANDING DOES NOT APPLY: this resolves where his one shop connection lives,
+  // and that is usually an experimental asset (the test that first listed on
+  // Etsy); it counts nothing and rolls nothing up. Reality does apply.
   const sense = (await query(
     `SELECT c.product_id FROM company_senses c JOIN products p ON p.id = c.product_id
       WHERE c.provider = 'etsy' AND c.disconnected_at IS NULL AND p.owner_id = ? AND p.deleted_at IS NULL AND ${realCompany('p')} ORDER BY c.connected_at LIMIT 1`, [founderId])).rows[0] as Record<string, unknown> | undefined;
