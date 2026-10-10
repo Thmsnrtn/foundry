@@ -199,3 +199,12 @@ describe('one per-stream line, read by both the channel view and cost to serve',
     expect(cts.revenue.cents).toBe(gross);
   });
 });
+
+describe('a refusal quotes the whole claim it refused (found by the twin\'s adversary, F3)', () => {
+  it('the quote runs to the end of the sentence, not a fixed window', async () => {
+    const { fabricationScan } = await import('../../src/services/venture/products/printable.js');
+    const found = fabricationScan('Kept by the boiler where it is needed. 87% of households lose a document they need (marker-xyz). For a retiree it is plain.');
+    expect(found.join(' ')).toContain('marker-xyz');
+    expect(found.join(' ')).not.toContain('For a retiree');
+  });
+});

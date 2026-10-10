@@ -131,6 +131,15 @@ const FOUNDRY_CHOSEN: Record<string, string> = {
   'src/services/public-workshop/mail-worker-source.ts': 'the edge program\'s own source text; its only destination is the INTAKE_URL binding Foundry sets when it deploys it',
 };
 
+/**
+ * THE GUARDED FORMS. `safeFetch` is the guard. Under the eyes' directory,
+ * `sourceFetch` (sources/fetching.ts, F3) is the terms check followed by
+ * `safeFetch` and nothing else, so a source calling it is guarded too; that
+ * file itself still has to call `safeFetch`, which keeps the chain honest.
+ */
+const GUARDED_CALL = (rel: string): RegExp => (rel.startsWith('src/services/venture/sources/') && rel !== 'src/services/venture/sources/fetching.ts'
+  ? /(assertUrlSafe|safeFetch|sourceFetch)\s*\(/ : /(assertUrlSafe|safeFetch)\s*\(/);
+
 describe('posting to a URL somebody else chose', () => {
   it('is done by exactly the modules we think, and every one checks the URL', () => {
     const senders = dynamicUrlSenders();
@@ -140,7 +149,7 @@ describe('posting to a URL somebody else chose', () => {
       .filter((rel) => !(rel in FOUNDRY_CHOSEN))
       // Either form counts: `safeFetch` IS the guard, and it does strictly
       // more than `assertUrlSafe` — it re-screens every redirect hop too.
-      .filter((rel) => !/(assertUrlSafe|safeFetch)\s*\(/.test(executable(resolve(ROOT, rel))));
+      .filter((rel) => !GUARDED_CALL(rel).test(executable(resolve(ROOT, rel))));
     expect(unguarded,
       'This module fetches a URL it did not choose and never checks it. Call '
       + 'assertUrlSafe first, or record here why the destination is not '
@@ -194,7 +203,7 @@ describe('posting to a URL somebody else chose', () => {
       // host it could have claimed an exemption for, going through the guarded
       // path anyway.
       'src/services/venture/sources/community.ts',
-      // Every later eye reads through this one door, which reads through the guard.
+      // Every eye reads through this one door: its terms (F3), then the guard.
       'src/services/venture/sources/fetching.ts',
       'src/services/venture/sources/npm-registry.ts',
       // THE STOREFRONT'S HTTP SEAM (F2). Its hosts are compiled into each
@@ -223,7 +232,7 @@ describe('posting to a URL somebody else chose', () => {
     for (const rel of dynamicUrlSenders()) {
       if (rel in FOUNDRY_CHOSEN || rel === 'src/services/outbound/ssrf.ts') continue;
       const source = executable(resolve(ROOT, rel));
-      if (/safeFetch\(/.test(source)) continue;
+      if (GUARDED_CALL(rel).test(source)) continue;
       expect(SPLIT_FORM[rel],
         `${rel} calls assertUrlSafe and fetch separately, so it does not revalidate `
         + 'redirects. Use safeFetch, or record why it cannot.').toBeTruthy();
@@ -237,7 +246,7 @@ describe('posting to a URL somebody else chose', () => {
       const source = executable(resolve(ROOT, rel));
       // `safeFetch` guards and fetches in one call, so ordering is structural
       // rather than textual for those; only the split form needs the check.
-      if (/safeFetch\s*\(/.test(source)) continue;
+      if (GUARDED_CALL(rel).test(source)) continue;
       const guardAt = source.indexOf('assertUrlSafe(');
       const fetchAt = source.search(/fetch\(\s*(?!['"`])[\w.]*\b(url|endpoint|webhook_url|target)\b/i);
       expect(guardAt, `${rel} must assert URL safety`).toBeGreaterThan(-1);
